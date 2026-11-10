@@ -1,4 +1,4 @@
-import { clampRatio, hasPane, paneIds, removePane, splitPane } from './layout'
+import { clampRatio, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
   Group,
@@ -212,6 +212,30 @@ export function tabLabel(task: Task, tab: Tab): string {
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd
   return cwd.slice(cwd.lastIndexOf('/') + 1)
+}
+
+/** pane 을 활성으로: 그 pane 이 든 탭을 활성 탭으로, 그 탭의 활성 pane 으로. */
+export function focusPane(task: Task, paneId: Id): Task {
+  const tab = task.tabs.find((t) => hasPane(t.layout, paneId))
+  if (!tab || (task.activeTabId === tab.id && tab.activePaneId === paneId)) return task
+  return {
+    ...task,
+    activeTabId: tab.id,
+    tabs: task.tabs.map((t) => (t === tab ? { ...tab, activePaneId: paneId } : t)),
+  }
+}
+
+export function setTabRatio(task: Task, tabId: Id, path: SplitPath, ratio: number): Task {
+  const tab = task.tabs.find((t) => t.id === tabId)
+  if (!tab) return task
+  const layout = setRatioAt(tab.layout, path, ratio)
+  // 같은 비율이면 setRatioAt 이 새 노드를 만들어도 바뀐 것이 없다
+  if (layout === tab.layout || JSON.stringify(layout) === JSON.stringify(tab.layout)) return task
+  return { ...task, tabs: task.tabs.map((t) => (t === tab ? { ...tab, layout } : t)) }
+}
+
+export function findPaneTask(state: AppState, paneId: Id): Id | null {
+  return state.tasks.find((t) => Object.hasOwn(t.panes, paneId))?.id ?? null
 }
 
 export function splitActivePane(task: Task, dir: SplitDir, newId: NewId): Task {

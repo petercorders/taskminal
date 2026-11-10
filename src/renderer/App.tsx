@@ -8,7 +8,7 @@ import { NewTaskDialog } from './NewTaskDialog'
 import { Sidebar } from './Sidebar'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
-import { TerminalPane } from './TerminalPane'
+import { SplitView } from './SplitView'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
 
@@ -55,6 +55,8 @@ export function App() {
   const loadedRef = useRef<LoadedState['state'] | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
+  // 셸이 스스로 끝나면(exit) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 우리가 끝낸 셸은 main 이 알리지 않는다.
+  useEffect(() => window.taskminal.pty.onExit((paneId) => dispatch({ type: 'pane/exited', paneId })), [])
 
   useEffect(() => {
     let alive = true
@@ -163,11 +165,10 @@ export function App() {
                   onClose={(tabId) => closeTab(task, tabId)}
                   onRename={(tabId, title) => dispatch({ type: 'tab/rename', taskId: task.id, tabId, title })}
                   onDone={refocus}
+                  onSplit={(dir) => dispatch({ type: 'pane/split', taskId: task.id, dir, paneId: newId() })}
                 />
                 {task.tabs.map((tab) => {
                   const tabActive = tab.id === task.activeTabId
-                  // 분할은 7단계 — 지금은 탭마다 활성 pane 하나
-                  const pane = task.panes[tab.activePaneId]
                   const mounted = (taskActive && tabActive) || seenTabs.has(tab.id)
                   return (
                     <div
@@ -180,8 +181,15 @@ export function App() {
                       data-testid="tab-view"
                       data-tab-id={tab.id}
                     >
-                      {pane && mounted && (
-                        <TerminalPane paneId={pane.id} cwd={pane.cwd} active={taskActive && tabActive} focusSignal={focusSignal} />
+                      {mounted && (
+                        <SplitView
+                          tab={tab}
+                          panes={task.panes}
+                          visible={taskActive && tabActive}
+                          focusSignal={focusSignal}
+                          onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
+                          onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
+                        />
                       )}
                     </div>
                   )

@@ -1,6 +1,17 @@
 // 화면 상태의 주인. 순수 reducer — 새 id · 시각은 부르는 쪽이 만들어 넘긴다.
-import { addTab, closeTab, renameTab, selectTab } from '../shared/model'
-import type { AppState, Id, Task } from '../shared/types'
+import type { SplitPath } from '../shared/layout'
+import {
+  addTab,
+  closePane,
+  closeTab,
+  findPaneTask,
+  focusPane,
+  renameTab,
+  selectTab,
+  setTabRatio,
+  splitActivePane,
+} from '../shared/model'
+import type { AppState, Id, SplitDir, Task } from '../shared/types'
 
 export type Action =
   | { type: 'loaded'; state: AppState }
@@ -11,6 +22,11 @@ export type Action =
   | { type: 'tab/select'; taskId: Id; tabId: Id }
   | { type: 'tab/close'; taskId: Id; tabId: Id }
   | { type: 'tab/rename'; taskId: Id; tabId: Id; title: string }
+  | { type: 'pane/split'; taskId: Id; dir: SplitDir; paneId: Id }
+  | { type: 'pane/focus'; taskId: Id; paneId: Id }
+  | { type: 'pane/ratio'; taskId: Id; tabId: Id; path: SplitPath; ratio: number }
+  /** 셸이 스스로 끝났다 → 그 pane 을 닫는다 (마지막 pane 이면 탭도). 우리가 끝낸 셸은 main 이 알리지 않는다. */
+  | { type: 'pane/exited'; paneId: Id }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
 function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
@@ -57,5 +73,15 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateTask(state, action.taskId, (t) => closeTab(t, action.tabId))
     case 'tab/rename':
       return updateTask(state, action.taskId, (t) => renameTab(t, action.tabId, action.title))
+    case 'pane/split':
+      return updateTask(state, action.taskId, (t) => splitActivePane(t, action.dir, () => action.paneId))
+    case 'pane/focus':
+      return updateTask(state, action.taskId, (t) => focusPane(t, action.paneId))
+    case 'pane/ratio':
+      return updateTask(state, action.taskId, (t) => setTabRatio(t, action.tabId, action.path, action.ratio))
+    case 'pane/exited': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => closePane(t, action.paneId)) : state
+    }
   }
 }

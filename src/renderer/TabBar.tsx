@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { tabLabel } from '../shared/model'
-import type { Id, Task } from '../shared/types'
+import type { Id, SplitDir, Task } from '../shared/types'
 
 interface Props {
   task: Task
@@ -12,6 +12,8 @@ interface Props {
   onRename(tabId: Id, title: string): void
   /** 이름 바꾸기를 끝내거나 취소했다 — 터미널이 포커스를 다시 가져가게 */
   onDone(): void
+  /** 활성 pane 을 나눈다 (단축키 ⌘D · ⇧⌘D 는 8단계) */
+  onSplit(dir: SplitDir): void
 }
 
 export const tabElementId = (tabId: Id) => `tab-${tabId}`
@@ -19,7 +21,7 @@ export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, visible, onSelect, onAdd, onClose, onRename, onDone }: Props) {
+export function TabBar({ task, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -93,6 +95,24 @@ export function TabBar({ task, visible, onSelect, onAdd, onClose, onRename, onDo
       <button type="button" className="tab-add" aria-label="새 탭" title="새 탭" onClick={onAdd}>
         +
       </button>
+      <div className="tab-actions">
+        {(['right', 'down'] as const).map((dir) => (
+          <button
+            key={dir}
+            type="button"
+            className="tab-action"
+            aria-label={dir === 'right' ? '오른쪽으로 나누기' : '아래로 나누기'}
+            title={dir === 'right' ? '오른쪽으로 나누기' : '아래로 나누기'}
+            disabled={task.tabs.length === 0}
+            onClick={() => onSplit(dir)}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" />
+              {dir === 'right' ? <line x1="7" y1="2" x2="7" y2="12" stroke="currentColor" /> : <line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" />}
+            </svg>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

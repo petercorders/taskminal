@@ -7,6 +7,8 @@ import {
   createTask,
   defaultSettings,
   emptyState,
+  findPaneTask,
+  focusPane,
   markCommandSent,
   normalizeState,
   removeGroup,
@@ -14,6 +16,7 @@ import {
   renameTab,
   resolveCwd,
   selectTab,
+  setTabRatio,
   splitActivePane,
   tabLabel,
   taskToTemplate,
@@ -509,5 +512,41 @@ describe('normalizeState', () => {
     raw.tasks[0].tabs = 'broken'
     const out = normalizeState(raw, gen())
     expect(out.tasks[0]).toMatchObject({ name: 'A', tabs: [], activeTabId: null, panes: {} })
+  })
+})
+
+describe('focusPane · setTabRatio · findPaneTask', () => {
+  test('focusPane: 그 pane 이 든 탭을 활성 탭으로, 그 탭의 활성 pane 으로', () => {
+    const t = flutterTask() // 개발(p1 · p2 · p3) · 로그(p4), 활성 = 개발의 p1
+    const [, p2] = paneIds(t.tabs[0].layout)
+    const [log] = paneIds(t.tabs[1].layout)
+    const a = focusPane(t, p2)
+    expect(a.tabs[0].activePaneId).toBe(p2)
+    expect(a.activeTabId).toBe(t.tabs[0].id)
+    const b = focusPane(t, log)
+    expect(b.activeTabId).toBe(t.tabs[1].id)
+    expect(b.tabs[0].activePaneId).toBe(t.tabs[0].activePaneId) // 다른 탭의 활성 pane 은 그대로
+  })
+
+  test('focusPane: 이미 활성이면 · 없는 pane 이면 같은 객체', () => {
+    const t = flutterTask()
+    expect(focusPane(t, t.tabs[0].activePaneId)).toBe(t)
+    expect(focusPane(t, 'ghost')).toBe(t)
+  })
+
+  test('setTabRatio: 그 탭의 분할 노드 비율만, 0.1~0.9, 틀린 탭 · 같은 값이면 같은 객체', () => {
+    const t = flutterTask() // 개발: right 0.6 [p1 | down [p2 / p3]]
+    const out = setTabRatio(t, t.tabs[0].id, ['b'], 0.25)
+    expect(out.tabs[0].layout).toMatchObject({ ratio: 0.6, b: { ratio: 0.25 } })
+    expect(setTabRatio(t, t.tabs[0].id, [], 2).tabs[0].layout).toMatchObject({ ratio: 0.9 })
+    expect(setTabRatio(t, 'zz', [], 0.3)).toBe(t)
+    expect(setTabRatio(t, t.tabs[0].id, [], 0.6)).toBe(t)
+  })
+
+  test('findPaneTask: pane 이 든 일감 id, 없으면 null', () => {
+    const s = { ...emptyState(), tasks: [flutterTask()] }
+    const pid = s.tasks[0].tabs[1].activePaneId
+    expect(findPaneTask(s, pid)).toBe(s.tasks[0].id)
+    expect(findPaneTask(s, 'ghost')).toBeNull()
   })
 })

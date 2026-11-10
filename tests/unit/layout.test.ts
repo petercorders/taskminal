@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane } from '../../src/shared/layout'
+import { clampRatio, cyclePane, hasPane, layoutRects, paneIds, removePane, setRatioAt, splitPane } from '../../src/shared/layout'
 import type { Layout } from '../../src/shared/types'
 
 const pane = (paneId: string): Layout => ({ type: 'pane', paneId })
@@ -76,5 +76,34 @@ describe('cyclePane', () => {
 
   test('모르는 id 면 첫 pane', () => {
     expect(cyclePane(three, 'zz', 1)).toBe('p1')
+  })
+})
+
+describe('layoutRects', () => {
+  const r = (x: number, y: number, w: number, h: number) => ({ x, y, w, h })
+
+  test('pane 하나는 전체, 분할선 없음', () => {
+    expect(layoutRects(pane('p1'))).toEqual({ panes: [{ paneId: 'p1', ...r(0, 0, 1, 1) }], dividers: [] })
+  })
+
+  test('[p1 | [p2 / p3]] 0.6: 사각형은 비율대로, 분할선은 a 와 b 의 경계 · 경로 · 부모 사각형', () => {
+    const out = layoutRects(three)
+    const round = (o: object) =>
+      Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * 1000) / 1000 : v]))
+    expect(out.panes.map(round)).toEqual([
+      { paneId: 'p1', ...r(0, 0, 0.6, 1) },
+      { paneId: 'p2', ...r(0.6, 0, 0.4, 0.5) },
+      { paneId: 'p3', ...r(0.6, 0.5, 0.4, 0.5) },
+    ])
+    expect(out.dividers.map((d) => ({ ...d, parent: round(d.parent) }))).toEqual([
+      { path: [], dir: 'right', at: 0.6, parent: r(0, 0, 1, 1) },
+      { path: ['b'], dir: 'down', at: 0.5, parent: { x: 0.6, y: 0, w: 0.4, h: 1 } },
+    ])
+  })
+
+  test('비율은 0.1~0.9 로 막아 그린다 (손상된 값이 pane 을 0 으로 만들지 않게)', () => {
+    const out = layoutRects(split('down', pane('a'), pane('b'), 0.99))
+    expect(out.panes[0]!.h).toBeCloseTo(0.9)
+    expect(out.dividers[0]!.at).toBeCloseTo(0.9)
   })
 })

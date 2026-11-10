@@ -108,3 +108,42 @@ describe('reducer — 탭', () => {
     expect(reducer(s, { type: 'tab/rename', taskId: a, tabId: 't2', title: ' ' })).toBe(s)
   })
 })
+
+describe('reducer — 분할', () => {
+  const one = () => {
+    const s = withTasks('a', 'b')
+    const task = s.tasks[0]!
+    return { s, a: task.id, tab: task.tabs[0]!.id, p1: task.tabs[0]!.activePaneId }
+  }
+  const tabOf = (s: AppState) => s.tasks[0]!.tabs[0]!
+
+  it('pane/split: 활성 pane 옆에 넘긴 id 의 pane, 새 pane 이 활성 · 같은 폴더', () => {
+    const { s, a, p1 } = one()
+    const out = reducer(s, { type: 'pane/split', taskId: a, dir: 'right', paneId: 'n1' })
+    expect(tabOf(out).layout).toEqual({ type: 'split', dir: 'right', ratio: 0.5, a: { type: 'pane', paneId: p1 }, b: { type: 'pane', paneId: 'n1' } })
+    expect(tabOf(out).activePaneId).toBe('n1')
+    expect(out.tasks[0]!.panes['n1']).toEqual({ id: 'n1', cwd: '~' })
+    expect(reducer(s, { type: 'pane/split', taskId: 'nope', dir: 'right', paneId: 'n1' })).toBe(s)
+  })
+
+  it('pane/exited: 형제가 자리를 차지하고, 마지막 pane 이면 탭이 닫힌다, 모르는 pane 은 같은 상태', () => {
+    const { s, a, p1 } = one()
+    const two = reducer(s, { type: 'pane/split', taskId: a, dir: 'down', paneId: 'n1' })
+    const back = reducer(two, { type: 'pane/exited', paneId: 'n1' })
+    expect(tabOf(back).layout).toEqual({ type: 'pane', paneId: p1 })
+    expect(tabOf(back).activePaneId).toBe(p1)
+    expect(back.tasks[0]!.panes['n1']).toBeUndefined()
+    const gone = reducer(back, { type: 'pane/exited', paneId: p1 })
+    expect(gone.tasks[0]!.tabs).toEqual([])
+    expect(gone.tasks[1]!.tabs).toHaveLength(1) // 다른 일감은 그대로
+    expect(reducer(s, { type: 'pane/exited', paneId: 'ghost' })).toBe(s)
+  })
+
+  it('pane/focus · pane/ratio', () => {
+    const { s, a, tab, p1 } = one()
+    const two = reducer(s, { type: 'pane/split', taskId: a, dir: 'right', paneId: 'n1' })
+    expect(tabOf(reducer(two, { type: 'pane/focus', taskId: a, paneId: p1 })).activePaneId).toBe(p1)
+    expect(reducer(two, { type: 'pane/focus', taskId: a, paneId: 'n1' })).toBe(two)
+    expect(tabOf(reducer(two, { type: 'pane/ratio', taskId: a, tabId: tab, path: [], ratio: 0.3 })).layout).toMatchObject({ ratio: 0.3 })
+  })
+})

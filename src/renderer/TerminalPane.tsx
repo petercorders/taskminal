@@ -8,7 +8,7 @@ import { splitForWrite } from '../shared/pty'
 interface Props {
   paneId: string
   cwd: string
-  /** 보이는 pane — 숨겨진 일감의 pane 도 마운트된 채(셸 · 화면 유지) display:none 으로 남는다 */
+  /** 보이는 활성 pane — 숨겨진 일감 · 탭의 pane 도 마운트된 채(셸 · 화면 유지) display:none 으로 남는다 */
   active: boolean
   /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
   focusSignal: number
@@ -49,12 +49,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
     const offData = pty.onData((id, data) => {
       if (id === paneId) term.write(data)
     })
-    const offExit = pty.onExit((id, exit) => {
-      if (id !== paneId) return
-      // 다시 띄우기 · pane 닫기는 7단계(셸 exit 시 pane 닫힘)에서.
-      const how = exit.signal ? `신호 ${exit.signal}` : `exit ${exit.exitCode}`
-      term.write(`\r\n\x1b[2m[셸이 끝났습니다 — ${how} · 창을 새로 고치면 새 셸이 뜹니다]\x1b[0m\r\n`)
-    })
+    // 셸이 스스로 끝나면 App 이 pane 을 닫는다(pane/exited) — 여기서는 따로 할 일이 없다.
     // 큰 붙여넣기는 main 의 입력 상한(1MB) 이하로 나눠 보낸다 — 넘으면 main 이 통째로 버린다.
     const input = term.onData((data) => {
       for (const part of splitForWrite(data)) pty.write(paneId, part)
@@ -83,7 +78,6 @@ export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
       cancelAnimationFrame(frame)
       input.dispose()
       offData()
-      offExit()
       termRef.current = null
       term.dispose()
     }

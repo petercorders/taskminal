@@ -45,6 +45,52 @@ export function setRatioAt(layout: Layout, path: SplitPath, ratio: number): Layo
   return child === layout[head] ? layout : { ...layout, [head]: child }
 }
 
+/** 창 안의 비율 사각형 (0~1) */
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PaneRect extends Rect {
+  paneId: Id
+}
+
+/** 분할선: path 의 분할 노드에서 a 와 b 의 경계. at = 그 노드(parent) 안의 비율. */
+export interface Divider {
+  path: SplitPath
+  dir: SplitDir
+  at: number
+  parent: Rect
+}
+
+/**
+ * 트리를 pane 마다 사각형으로 편다. 화면은 이 목록을 paneId 로 평평하게 그린다 —
+ * 트리를 재귀로 그리면 분할할 때 pane 이 다른 부모 밑으로 옮겨져 다시 마운트되고 터미널 화면이 사라진다.
+ */
+export function layoutRects(layout: Layout): { panes: PaneRect[]; dividers: Divider[] } {
+  const panes: PaneRect[] = []
+  const dividers: Divider[] = []
+  const walk = (node: Layout, rect: Rect, path: SplitPath) => {
+    if (node.type === 'pane') {
+      panes.push({ paneId: node.paneId, ...rect })
+      return
+    }
+    const at = clampRatio(node.ratio)
+    dividers.push({ path, dir: node.dir, at, parent: rect })
+    if (node.dir === 'right') {
+      walk(node.a, { ...rect, w: rect.w * at }, [...path, 'a'])
+      walk(node.b, { ...rect, x: rect.x + rect.w * at, w: rect.w * (1 - at) }, [...path, 'b'])
+    } else {
+      walk(node.a, { ...rect, h: rect.h * at }, [...path, 'a'])
+      walk(node.b, { ...rect, y: rect.y + rect.h * at, h: rect.h * (1 - at) }, [...path, 'b'])
+    }
+  }
+  walk(layout, { x: 0, y: 0, w: 1, h: 1 }, [])
+  return { panes, dividers }
+}
+
 /** 화면 순서(왼→오, 위→아래)대로 다음/이전 pane. 끝에서는 처음으로 돈다. */
 export function cyclePane(layout: Layout, current: Id, step: 1 | -1): Id {
   const ids = paneIds(layout)

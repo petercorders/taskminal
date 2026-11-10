@@ -209,6 +209,69 @@ select {
   min-height: 0;
 }
 
+/* ─── 분할 ─── */
+.split-view {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-slot {
+  position: absolute;
+  display: flex;
+  box-sizing: border-box;
+}
+/* 어느 pane 에 칠지 보이게 (흐리기 · pane 머리는 9단계) */
+.pane-slot.focused {
+  box-shadow: inset 0 0 0 1px var(--accent-soft), inset 0 2px 0 var(--accent);
+}
+
+.divider {
+  position: absolute;
+  z-index: 1;
+  outline: none;
+}
+.divider.vertical {
+  width: 6px;
+  cursor: col-resize;
+}
+.divider.horizontal {
+  height: 6px;
+  cursor: row-resize;
+}
+.divider::after {
+  content: '';
+  position: absolute;
+  background: var(--line);
+}
+.divider.vertical::after {
+  left: 2.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.divider.horizontal::after {
+  top: 2.5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.divider:hover::after,
+.divider:focus-visible::after {
+  background: var(--accent);
+}
+.divider.vertical:hover::after,
+.divider.vertical:focus-visible::after {
+  left: 1.5px;
+  width: 3px;
+}
+.divider.horizontal:hover::after,
+.divider.horizontal:focus-visible::after {
+  top: 1.5px;
+  height: 3px;
+}
+
 /* ─── 탭 줄 ─── */
 .tab-bar {
   flex: none;
@@ -314,6 +377,31 @@ select {
 .tab-add:hover {
   background: var(--raised);
   color: var(--fg);
+}
+
+.tab-actions {
+  display: flex;
+  margin-left: auto;
+  padding-right: 4px;
+}
+.tab-action {
+  width: 30px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+.tab-action:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--raised);
+}
+.tab-action:disabled {
+  opacity: 0.35;
+}
+.tab-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .terminal-pane {
