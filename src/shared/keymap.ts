@@ -10,6 +10,7 @@ export const SHORTCUTS = [
   { command: 'split-down', accel: 'Shift+Command+D', label: '아래로 나누기' },
   { command: 'close-pane', accel: 'Command+W', label: 'pane 닫기' },
   { command: 'clear', accel: 'Command+K', label: '화면 지우기' },
+  { command: 'find', accel: 'Command+F', label: '찾기' },
   { command: 'font-bigger', accel: 'Command+=', label: '글자 크게' },
   { command: 'font-smaller', accel: 'Command+-', label: '글자 작게' },
   { command: 'font-reset', accel: 'Command+0', label: '기본 글자 크기' },

@@ -1,4 +1,5 @@
 import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -39,6 +40,17 @@ interface Props {
 export const START_FALLBACK_MS = 4000
 // 시작 명령을 보낸 pane — 개발 모드 StrictMode 의 두 번 마운트 · 다시 마운트가 두 번 보내지 않게 (상태는 dispatch 뒤에야 바뀐다)
 const sentStarts = new Set<string>()
+
+/** ⌘F (15d): 대소문자 무시 · 맞은 곳 칠하기(결과 수 이벤트는 decorations 가 있어야 온다). 색은 #RRGGBB 만 — '입력 기다림' 노랑 계열 */
+const FIND_OPTIONS = {
+  caseSensitive: false,
+  decorations: {
+    matchBackground: '#4a3f1f',
+    activeMatchBackground: '#a8741a',
+    matchOverviewRuler: '#e5a54b',
+    activeMatchColorOverviewRuler: '#f0b866',
+  },
+} as const
 
 /** 터미널 링크(글 속 주소 · OSC 8): ⌘+클릭 · http(s) 만 main 에 넘긴다 (main 도 다시 거른다) */
 const openLink = (event: MouseEvent, uri: string): void => {
@@ -103,6 +115,8 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     term.loadAddon(fit)
     term.loadAddon(new Unicode11Addon())
     term.loadAddon(new WebLinksAddon(openLink))
+    const searcher = new SearchAddon()
+    term.loadAddon(searcher)
     const serializer = new SerializeAddon()
     term.loadAddon(serializer)
     term.unicode.activeVersion = '11'
@@ -253,6 +267,18 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
         const row = best.line + Math.floor(best.at / term.cols)
         term.scrollToLine(Math.max(0, row - Math.floor(term.rows / 2)))
         term.select(best.at % term.cols, row, query.length)
+      },
+      find: {
+        next: (query, incremental = false) => void searcher.findNext(query, { ...FIND_OPTIONS, incremental }),
+        prev: (query) => void searcher.findPrevious(query, FIND_OPTIONS),
+        clear: () => {
+          searcher.clearDecorations()
+          term.clearSelection()
+        },
+        onResults: (listener) => {
+          const d = searcher.onDidChangeResults((e) => listener(e.resultIndex, e.resultCount))
+          return () => d.dispose()
+        },
       },
     })
 

@@ -20,6 +20,7 @@ describe('commandForKey', () => {
     expect(commandForKey(key('KeyD'))).toBe('split-right')
     expect(commandForKey(key('KeyD', { shiftKey: true }))).toBe('split-down')
     expect(commandForKey(key('KeyK'))).toBe('clear')
+    expect(commandForKey(key('KeyF'))).toBe('find') // 15d — 설정 디자인 '터미널 · 찾기 ⌘F'
   })
 
   it('⌘1~8 은 n번째 탭, ⌘9 는 마지막 탭', () => {

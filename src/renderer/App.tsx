@@ -115,6 +115,8 @@ export function App() {
   const [load, setLoad] = useState<LoadStatus>({ phase: 'loading' })
   const [saveError, setSaveError] = useState<string | null>(null)
   const [branches, setBranches] = useState<Branches>({})
+  // ⌘F 찾기 막대가 열린 pane (15d) — signal 은 다시 누를 때 입력칸으로 가게
+  const [finding, setFinding] = useState<{ paneId: string | null; signal: number }>({ paneId: null, signal: 0 })
   // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -279,6 +281,14 @@ export function App() {
       window.removeEventListener('beforeunload', flush)
     }
   }, [scrollReady, restoreOn])
+  const findProps = {
+    paneId: finding.paneId,
+    signal: finding.signal,
+    onClose: () => {
+      setFinding((f) => ({ ...f, paneId: null }))
+      refocus()
+    },
+  }
   // 사이드바 둘째 줄의 git 브랜치 (15c) — 일감 폴더가 바뀔 때 · 창이 포커스를 받을 때 읽고, 포커스가 있는 동안만 5초마다.
   // 앞 요청이 안 끝났으면 건너뛴다(끊긴 NAS 같은 느린 폴더에서 요청이 쌓이지 않게). 정리 뒤 온 옛 응답은 버리고, 같으면 다시 그리지 않는다.
   const dirsKey = taskDirs(state.tasks.map((t) => t.cwd)).join('\n')
@@ -518,6 +528,10 @@ export function App() {
       case 'clear':
         terminals.get(tab.activePaneId)?.clear()
         return refocus()
+      case 'find':
+        // 보고 있는 pane 에 막대 — 이미 열려 있으면 입력칸으로 (15d)
+        setFinding((f) => ({ paneId: tab.activePaneId, signal: f.signal + 1 }))
+        return
     }
   }
   // 팔레트에서 고른 것을 실행한다 — 팔레트는 먼저 닫는다
@@ -671,6 +685,7 @@ export function App() {
                           onStartSent={(paneId) => dispatch({ type: 'pane/command-sent', paneId })}
                           onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd: cwdLike(cwd, task.cwd, runtime.home) })}
                           onDragEnd={refocus}
+                          find={findProps}
                         />
                       )}
                     </div>

@@ -8,6 +8,15 @@ export interface TerminalHandle {
   search(query: string, limit: number): Array<{ line: number; text: string }>
   /** 그 줄로 스크롤하고 찾기 글자를 선택한다 */
   reveal(line: number, query: string): void
+  /** ⌘F 찾기 막대 (15d) — 대소문자 무시, 맞은 곳을 칠한다 */
+  find: {
+    next(query: string, incremental?: boolean): void
+    prev(query: string): void
+    /** 칠한 것 · 선택 지우기 */
+    clear(): void
+    /** 결과 수가 바뀔 때 (index -1 = 위치 모름) — 끊는 함수를 돌려준다 */
+    onResults(listener: (index: number, count: number) => void): () => void
+  }
 }
 
 export const terminals = new Map<string, TerminalHandle>()

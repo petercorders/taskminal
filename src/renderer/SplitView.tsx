@@ -5,6 +5,7 @@ import type { Id, Pane, Tab } from '../shared/types'
 import { PaneHead } from './activity-ui'
 import { shortPath } from './sidebar-model'
 import type { TermSettings } from './term-settings'
+import { FindBar } from './FindBar'
 import { TerminalPane } from './TerminalPane'
 
 interface Props {
@@ -19,6 +20,8 @@ interface Props {
   onActivity(paneId: Id, event: ActivityEvent): void
   onFocusPane(paneId: Id): void
   onRatio(path: SplitPath, ratio: number): void
+  /** ⌘F 찾기 막대가 열린 pane (15d) · 다시 누른 횟수 · 닫기 */
+  find: { paneId: Id | null; signal: number; onClose(): void }
   /** 깨끗하지 않게 끝난 셸을 본 뒤 키를 눌렀다 */
   onClosePane(paneId: Id): void
   /** 템플릿 시작 명령을 보냈다 */
@@ -36,7 +39,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCwd, onDragEnd }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCwd, onDragEnd, find }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -138,6 +141,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onCwd={(path) => onCwd(pane.id, path)}
               />
             )}
+            {pane && find.paneId === pane.id && <FindBar paneId={pane.id} signal={find.signal} onClose={find.onClose} />}
           </div>
         )
       })}

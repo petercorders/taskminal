@@ -66,6 +66,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { role: 'selectAll', label: '모두 선택' },
         { type: 'separator' },
         item('clear'),
+        item('find'),
       ],
     },
     {
