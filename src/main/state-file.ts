@@ -1,4 +1,4 @@
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs'
+import { closeSync, copyFileSync, fchmodSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import { emptyState, type NewId } from '../shared/model'
 import { readStateText } from '../shared/persist'
@@ -38,28 +38,50 @@ export class StateFile {
         renameSync(this.path, `${this.path}.${stamp()}.bak`)
         this.writable = true
         const state = emptyState()
-        this.save(state)
+        this.trySave(state) // 실패해도 다음 저장이 다시 쓴다
         return { state, readOnly: false, notice: 'corrupt' }
       }
       case 'ok':
+        // 검증이 무언가를 버렸으면 다음 저장이 그것을 지우므로, 원본을 먼저 복사해 둔다.
+        if (r.lossy) copyFileSync(this.path, `${this.path}.${stamp()}.bak`)
         this.writable = true
-        return { state: r.state, readOnly: false, notice: null }
+        return { state: r.state, readOnly: false, notice: r.lossy ? 'repaired' : null }
     }
   }
 
-  /** 원자적 저장: 임시 파일에 쓰고 fsync 한 뒤 rename — 도중에 꺼져도 옛 파일이나 새 파일 둘 중 하나가 온전히 남는다. */
-  save(state: AppState): void {
-    if (!this.writable) return
-    mkdirSync(this.dir, { recursive: true })
+  /**
+   * 원자적 저장: 임시 파일에 쓰고 fsync 한 뒤 rename, 폴더도 fsync — 도중에 꺼져도 옛 파일이나 새 파일 둘 중
+   * 하나가 온전히 남는다. 실패(디스크 가득 · 권한)는 예외 대신 돌려주고 임시 파일을 지운다.
+   */
+  trySave(state: AppState): Error | null {
+    if (!this.writable) return null
     const tmp = `${this.path}.tmp`
-    const fd = openSync(tmp, 'w', 0o600)
     try {
-      writeSync(fd, JSON.stringify(state, null, 2))
-      fsyncSync(fd)
-    } finally {
-      closeSync(fd)
+      mkdirSync(this.dir, { recursive: true })
+      const fd = openSync(tmp, 'w', 0o600)
+      try {
+        fchmodSync(fd, 0o600) // 남아 있던 임시 파일은 생성 권한이 적용되지 않는다
+        writeSync(fd, JSON.stringify(state, null, 2))
+        fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+      renameSync(tmp, this.path)
+      const dirFd = openSync(this.dir, 'r')
+      try {
+        fsyncSync(dirFd)
+      } finally {
+        closeSync(dirFd)
+      }
+      return null
+    } catch (e) {
+      try {
+        rmSync(tmp, { force: true })
+      } catch {
+        // 지우지도 못하면 다음 저장이 같은 이름으로 덮는다
+      }
+      return e instanceof Error ? e : new Error(String(e))
     }
-    renameSync(tmp, this.path)
   }
 }
 

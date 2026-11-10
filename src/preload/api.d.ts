@@ -17,6 +17,8 @@ export interface StateApi {
   load(): Promise<LoadedState>
   /** main 이 300ms 디바운스해 원자적으로 쓴다. 읽기 전용 파일이면 무시된다. */
   save(state: AppState): void
+  /** 저장 실패(디스크 가득 · 권한) 알림. 구독 해제 함수를 돌려준다. */
+  onError(listener: (message: string) => void): () => void
 }
 
 export interface TaskminalApi {

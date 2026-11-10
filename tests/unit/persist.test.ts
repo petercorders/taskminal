@@ -23,17 +23,28 @@ describe('readStateText', () => {
     expect(readStateText('{"version":1.5}', newId)).toEqual({ kind: 'newer', version: 1.5 })
   })
 
-  it('version 이 1 이거나 없거나 수가 아니면 정규화해서 ok', () => {
-    for (const text of ['{"version":1}', '{}', '{"version":"2"}']) {
-      const r = readStateText(text, newId)
-      expect(r.kind).toBe('ok')
-    }
+  it('version 이 1 이거나 없으면 ok', () => {
+    for (const text of ['{"version":1}', '{}']) expect(readStateText(text, newId).kind).toBe('ok')
   })
 
-  it('정상 파일은 normalizeState 를 거친 상태', () => {
-    const saved = { ...emptyState(), unknownField: 1 }
-    const r = readStateText(JSON.stringify(saved), newId)
-    expect(r).toEqual({ kind: 'ok', state: emptyState() })
+  it('version 이 1 이 아닌 다른 값(문자열 · 객체)이면 모르는 형식 — newer 로 보고 덮어쓰지 않는다', () => {
+    expect(readStateText('{"version":"2"}', newId)).toEqual({ kind: 'newer', version: '2' })
+    expect(readStateText('{"version":{"major":2}}', newId).kind).toBe('newer')
+  })
+
+  it('저장한 그대로의 파일은 lossy 가 아니다 (키 순서 · 들여쓰기는 상관없음)', () => {
+    const s = emptyState()
+    const pretty = JSON.stringify(s, null, 2)
+    expect(readStateText(pretty, newId)).toEqual({ kind: 'ok', state: s, lossy: false })
+    const reordered = JSON.stringify({ settings: s.settings, activeTaskId: null, tasks: [], version: 1 })
+    expect(readStateText(reordered, newId)).toMatchObject({ lossy: false })
+  })
+
+  it('정규화가 무언가를 버렸으면 lossy — 첫 저장 전에 원본을 백업해야 한다', () => {
+    const unknownField = { ...emptyState(), unknownField: 1 }
+    expect(readStateText(JSON.stringify(unknownField), newId)).toEqual({ kind: 'ok', state: emptyState(), lossy: true })
+    const tasksNotArray = { ...emptyState(), tasks: { a: { id: 'a' } } }
+    expect(readStateText(JSON.stringify(tasksNotArray), newId)).toMatchObject({ kind: 'ok', lossy: true })
   })
 })
 

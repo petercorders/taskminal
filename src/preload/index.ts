@@ -23,6 +23,7 @@ const api: TaskminalApi = {
   state: {
     load: () => ipcRenderer.invoke(IPC.stateLoad) as Promise<LoadedState>,
     save: (state) => ipcRenderer.send(IPC.stateSave, state),
+    onError: (listener) => subscribe<[string]>(IPC.stateError, listener),
   },
 }
 

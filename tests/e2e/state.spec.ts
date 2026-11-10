@@ -102,3 +102,19 @@ test('새로 고침해도 저장된 일감이 빈 상태로 덮이지 않는다'
   const loaded = await win.evaluate(() => (globalThis as unknown as Api).taskminal.state.load())
   expect(loaded.state.settings.fontSize).toBe(19)
 })
+
+test('아무것도 바꾸지 않으면 시작할 때 저장 파일을 다시 쓰지 않는다', async () => {
+  // 앱이 쓰는 모양(들여쓰기 2칸)과 다른 한 줄 JSON — 다시 쓰면 바이트가 달라진다.
+  const first = await launch()
+  const compact = await first.win.evaluate(async () =>
+    JSON.stringify((await (globalThis as unknown as Api).taskminal.state.load()).state),
+  )
+  await quit(first.app)
+  writeFileSync(statePath(), compact)
+
+  const { app, win } = await launch()
+  await expect(win.locator('.xterm-rows')).toBeVisible()
+  await win.waitForTimeout(700) // 디바운스(300ms)보다 길게
+  await quit(app)
+  expect(readFileSync(statePath(), 'utf8')).toBe(compact)
+})

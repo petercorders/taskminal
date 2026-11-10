@@ -11,6 +11,7 @@ export const IPC = {
   ptyExit: 'pty:exit', // main → renderer
   stateLoad: 'state:load', // invoke
   stateSave: 'state:save', // send (main 이 디바운스)
+  stateError: 'state:error', // main → renderer: 저장 실패
 } as const
 
 export interface AppInfo {
@@ -33,5 +34,6 @@ export interface LoadedState {
   state: AppState
   /** 더 새 버전 앱이 만든 파일 — 이 앱은 그 파일을 절대 쓰지 않는다 */
   readOnly: boolean
-  notice: null | 'corrupt' | 'newer'
+  /** corrupt: JSON 이 아니라 옮겨 둠 · repaired: 검증이 일부를 버려 원본을 복사해 둠 · newer: 모르는 형식이라 읽기 전용 */
+  notice: null | 'corrupt' | 'repaired' | 'newer'
 }

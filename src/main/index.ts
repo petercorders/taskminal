@@ -23,7 +23,13 @@ const MAX_STATE_BYTES = 5 * 1024 * 1024
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
 // 디바운스가 main 에 있어서 창 닫기 · 새로 고침 · 렌더러 충돌 뒤에도 이미 받은 값은 타이머가 쓴다.
 const stateWriter = new Debouncer<AppState>(
-  (state) => stateFile?.save(state),
+  (state) => {
+    const error = stateFile?.trySave(state) ?? null
+    if (!error) return
+    // 디스크 가득 · 권한: main 을 죽이지 않고 알린다. 다음 변경이 전체 상태를 다시 보내므로 그때 다시 시도된다.
+    console.error('상태를 저장하지 못함', error)
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.stateError, error.message)
+  },
   (fn, ms) => {
     const t = setTimeout(fn, ms)
     return () => clearTimeout(t)
@@ -157,27 +163,32 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.stateLoad, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     stateWriter.flush() // 새로 고침 직전에 받은 값을 먼저 쓰고 읽는다
-    stateFile = new StateFile(app.getPath('userData'), randomUUID)
-    return stateFile.load()
+    const file = new StateFile(app.getPath('userData'), randomUUID)
+    const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
+    stateFile = file
+    return loaded
   })
   // renderer 를 믿지 않는다: 크기 상한 · normalizeState 로 다시 검증한 값만 쓴다.
   ipcMain.on(IPC.stateSave, (event, raw: unknown) => {
     if (!fromOurWindow(event)) return
-    let size = 0
+    let bytes = 0
     try {
-      size = JSON.stringify(raw).length
+      bytes = Buffer.byteLength(JSON.stringify(raw)) // 한글은 글자당 3바이트 — 글자 수가 아니라 바이트로 센다
     } catch {
       return
     }
-    if (size > MAX_STATE_BYTES) return
+    if (bytes > MAX_STATE_BYTES) return
     stateWriter.push(normalizeState(raw, randomUUID))
   })
 
   // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다
   // (변이 확인으로 확인: e2e ① 은 이 줄 없이도 통과). 13단계의 종료 전 저장이 이 순서에 붙는다.
   app.on('will-quit', () => {
-    stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
-    ptys.killAll()
+    try {
+      stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
+    } finally {
+      ptys.killAll() // 저장이 실패해도 셸 정리는 한다
+    }
   })
 
   void app.whenReady().then(() => {
