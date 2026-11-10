@@ -9,9 +9,11 @@ describe('findCountLabel', () => {
     expect(findCountLabel('abc', 0, 3)).toBe('1/3')
     expect(findCountLabel('abc', 2, 3)).toBe('3/3')
   })
-  it('지금 위치를 모르면(-1) 수만, 상한을 넘으면 +', () => {
+  it('지금 위치를 모르면(-1) 수만, 상한에 닿으면 + — addon 은 상한에서 세기를 멈춘다 (15d 리뷰)', () => {
     expect(findCountLabel('a', -1, 5)).toBe('5')
-    expect(findCountLabel('a', 4, FIND_LIMIT + 1)).toBe(`5/${FIND_LIMIT}+`)
+    expect(findCountLabel('a', 4, FIND_LIMIT)).toBe(`5/${FIND_LIMIT}+`)
+    expect(findCountLabel('a', -1, FIND_LIMIT)).toBe(`${FIND_LIMIT}+`) // 1000번째 뒤로 간 위치
+    expect(findCountLabel('a', 4, FIND_LIMIT - 1)).toBe(`5/${FIND_LIMIT - 1}`)
   })
 })
 

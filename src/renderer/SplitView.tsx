@@ -5,6 +5,7 @@ import type { Id, Pane, Tab } from '../shared/types'
 import { PaneHead } from './activity-ui'
 import { shortPath } from './sidebar-model'
 import type { TermSettings } from './term-settings'
+import type { Shortcut } from '../shared/keymap'
 import { FindBar } from './FindBar'
 import { TerminalPane } from './TerminalPane'
 
@@ -21,7 +22,7 @@ interface Props {
   onFocusPane(paneId: Id): void
   onRatio(path: SplitPath, ratio: number): void
   /** ⌘F 찾기 막대가 열린 pane (15d) · 다시 누른 횟수 · 닫기 */
-  find: { paneId: Id | null; signal: number; onClose(): void }
+  find: { paneId: Id | null; signal: number; onClose(): void; shortcuts: readonly Shortcut[] }
   /** 깨끗하지 않게 끝난 셸을 본 뒤 키를 눌렀다 */
   onClosePane(paneId: Id): void
   /** 템플릿 시작 명령을 보냈다 */
@@ -142,7 +143,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onCwd={(path) => onCwd(pane.id, path)}
               />
             )}
-            {pane && find.paneId === pane.id && <FindBar paneId={pane.id} signal={find.signal} onClose={find.onClose} />}
+            {pane && find.paneId === pane.id && <FindBar paneId={pane.id} signal={find.signal} onClose={find.onClose} shortcuts={find.shortcuts} />}
           </div>
         )
       })}

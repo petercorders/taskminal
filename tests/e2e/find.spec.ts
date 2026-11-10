@@ -57,3 +57,19 @@ test('없는 말은 없음, 열린 채 ⌘F 는 입력칸 전체 선택', async 
   await win.keyboard.type('abc') // 전체 선택돼 있어 바뀐다
   await expect(bar().getByRole('textbox')).toHaveValue('abc')
 })
+
+test('입력칸에 포커스가 있는 채 ⌘F 도 전체 선택 · 다른 탭으로 가면 막대가 닫힌다 (15d 리뷰)', async () => {
+  await win.getByTestId('pane-p1').click()
+  await win.keyboard.press('Meta+f')
+  await win.keyboard.type('first')
+  await win.keyboard.press('Meta+f') // 포커스가 입력칸에 있는 채
+  await win.keyboard.type('second')
+  await expect(bar().getByRole('textbox')).toHaveValue('second')
+  await win.keyboard.press('Escape')
+  await win.getByTestId('pane-p1').click()
+  await win.keyboard.press('Meta+f')
+  await expect(bar()).toBeVisible()
+  await win.keyboard.press('Meta+t') // 새 탭 — 막대의 pane 이 숨는다
+  await expect(win.getByTestId('tab')).toHaveCount(2)
+  await expect(bar()).toHaveCount(0)
+})

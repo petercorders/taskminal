@@ -195,6 +195,11 @@ export function App() {
   const activeTabNow = state.tasks.find((t) => t.id === state.activeTaskId)?.tabs.find((t) => t.id === shownTabId)
   const viewedPane = windowFocused && activeTabNow ? activeTabNow.activePaneId : null
   const viewedRef = useRef(viewedPane)
+  // ⌘F 막대는 보이는 탭의 pane 에만 — 탭 · 일감을 옮기거나 pane 이 닫히면 닫는다(숨은 pane 이 출력마다 다시 찾지 않게, 15d 리뷰)
+  const shownPanesKey = activeTabNow ? paneIds(activeTabNow.layout).join(' ') : ''
+  useEffect(() => {
+    setFinding((f) => (f.paneId && !shownPanesKey.split(' ').includes(f.paneId) ? { ...f, paneId: null } : f))
+  }, [shownPanesKey])
   viewedRef.current = viewedPane
 
   // 활동의 원본은 ref — 사건 하나에서 이전 · 다음을 함께 보고 알릴지 정한다(setState 갱신 함수 안에서 알림을 보내지 않게)
@@ -282,14 +287,6 @@ export function App() {
       window.removeEventListener('beforeunload', flush)
     }
   }, [scrollReady, restoreOn])
-  const findProps = {
-    paneId: finding.paneId,
-    signal: finding.signal,
-    onClose: () => {
-      setFinding((f) => ({ ...f, paneId: null }))
-      refocus()
-    },
-  }
   // 사이드바 둘째 줄의 git 브랜치 (15c) — 일감 폴더가 바뀔 때 · 창이 포커스를 받을 때 읽고, 포커스가 있는 동안만 5초마다.
   // 앞 요청이 안 끝났으면 건너뛴다(끊긴 NAS 같은 느린 폴더에서 요청이 쌓이지 않게). 정리 뒤 온 옛 응답은 버리고, 같으면 다시 그리지 않는다.
   const dirsKey = taskDirs(state.tasks.map((t) => t.cwd)).join('\n')
@@ -368,6 +365,15 @@ export function App() {
   useEffect(() => window.taskminal.setBadge(settings.dockBadge ? attentionTasks : 0), [settings.dockBadge, attentionTasks])
   // 바꾼 단축키: renderer 가 처리하는 표 · 앱 메뉴의 표시
   const shortcuts = useMemo(() => shortcutTable(settings.keys), [settings.keys])
+  const findProps = {
+    paneId: finding.paneId,
+    signal: finding.signal,
+    onClose: () => {
+      setFinding((f) => ({ ...f, paneId: null }))
+      refocus()
+    },
+    shortcuts,
+  }
   const shortcutsRef = useRef(shortcuts)
   shortcutsRef.current = shortcuts
   useEffect(() => {

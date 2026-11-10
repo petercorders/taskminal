@@ -21,3 +21,6 @@ export const osc7Panes = new Set<string>()
 export const dirtyPanes = new Set<string>()
 /** 이번 실행에서 이전 출력을 이미 되살린 pane — 다시 마운트 · StrictMode 두 번 마운트에도 한 번만 */
 export const restoredPanes = new Set<string>()
+
+/** ⌘F 찾기 막대가 열린 pane — 찾기가 만드는 선택은 '선택하면 복사' 로 클립보드에 넣지 않는다 (15d) */
+export const findingPanes = new Set<string>()

@@ -14,7 +14,7 @@ import { cleanExit, splitForWrite } from '../shared/pty'
 import { wantWebgl } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
-import { dirtyPanes, osc7Panes, restoredPanes, runtime, webgl } from './runtime'
+import { dirtyPanes, findingPanes, osc7Panes, restoredPanes, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -190,7 +190,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     // 큰 붙여넣기는 main 의 입력 상한(1MB) 이하로 나눠 보낸다 — 넘으면 main 이 통째로 버린다.
     // 선택하면 바로 복사 (설정) — 끄면 ⌘C
     const selection = term.onSelectionChange(() => {
-      if (settingsRef.current.copyOnSelect && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+      if (settingsRef.current.copyOnSelect && !findingPanes.has(paneId) && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
     })
     // 키를 친 것만 센다 — onData 는 터미널 질의에 xterm 이 스스로 내는 답에도 불린다
     const keys = term.onKey(() => (typed = true))
@@ -276,6 +276,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         next: (query, incremental = false) => void searcher.findNext(query, { ...FIND_OPTIONS, incremental }),
         prev: (query) => void searcher.findPrevious(query, FIND_OPTIONS),
         clear: () => {
+          if (disposed) return // pane 이 먼저 닫혔다(정리 순서) — 지울 것도 없다
           searcher.clearDecorations()
           term.clearSelection()
         },
@@ -374,7 +375,8 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.
   useEffect(() => {
-    if (active) termRef.current?.focus()
+    // 찾기 막대 입력칸을 눌러 이 pane 이 활성이 된 경우엔 입력칸에 둔다 (15d 리뷰)
+    if (active && !(document.activeElement instanceof Element && document.activeElement.closest('.find-bar'))) termRef.current?.focus()
   }, [active, focusSignal])
 
   return <div className="terminal-pane" ref={hostRef} data-testid={`pane-${paneId}`} />

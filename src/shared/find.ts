@@ -1,13 +1,13 @@
 // 15d: ⌘F 찾기 막대 — 숫자 표시와 키 판정 (화면은 FindBar.tsx)
 
-/** @xterm/addon-search 가 세는 상한 — 넘으면 resultCount 가 이 값보다 크게 온다 */
+/** @xterm/addon-search 가 세는 상한 — 넘어도 resultCount 는 이 값에서 멈추고, 상한 밖 위치는 index -1 로 온다 */
 export const FIND_LIMIT = 1000
 
 /** '3/12' · '없음' · 빈 입력이면 '' (숨김). 지금 위치를 모르면(-1) 수만 */
 export function findCountLabel(query: string, index: number, count: number): string {
   if (query === '') return ''
   if (count <= 0) return '없음'
-  const total = count > FIND_LIMIT ? `${FIND_LIMIT}+` : String(count)
+  const total = count >= FIND_LIMIT ? `${FIND_LIMIT}+` : String(count) // 정확히 1000 인지 넘는지 모른다
   return index < 0 ? total : `${index + 1}/${total}`
 }
 

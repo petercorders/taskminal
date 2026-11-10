@@ -1,6 +1,8 @@
 // 15d: ⌘F 찾기 막대 — 보고 있는 pane 오른쪽 위. 디자인이 없어 팔레트 보드의 말(판 · 선 · 돋보기 · esc 칩)을 빌렸다.
 import { useEffect, useRef, useState } from 'react'
 import { findCountLabel, findKeyAction } from '../shared/find'
+import { commandForKey, type Shortcut } from '../shared/keymap'
+import { findingPanes } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -8,9 +10,11 @@ interface Props {
   /** ⌘F 를 다시 누름 — 입력칸으로 포커스 · 전체 선택 */
   signal: number
   onClose(): void
+  /** 단축키 표 (설정에서 바꾼 키 포함) */
+  shortcuts: readonly Shortcut[]
 }
 
-export function FindBar({ paneId, signal, onClose }: Props) {
+export function FindBar({ paneId, signal, onClose, shortcuts }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [result, setResult] = useState({ index: -1, count: 0 })
@@ -22,12 +26,13 @@ export function FindBar({ paneId, signal, onClose }: Props) {
 
   // 결과 수를 받고, 막대가 닫히거나 다른 pane 으로 옮기면 칠한 것을 지운다
   useEffect(() => {
+    findingPanes.add(paneId)
     const find = terminals.get(paneId)?.find
-    if (!find) return
-    const off = find.onResults((index, count) => setResult({ index, count }))
+    const off = find?.onResults((index, count) => setResult({ index, count }))
     return () => {
-      off()
-      find.clear()
+      findingPanes.delete(paneId)
+      off?.()
+      find?.clear()
     }
   }, [paneId])
 
@@ -63,6 +68,12 @@ export function FindBar({ paneId, signal, onClose }: Props) {
         spellCheck={false}
         onChange={(e) => search(e.currentTarget.value)}
         onKeyDown={(e) => {
+          // 앱 단축키 처리는 입력칸의 키를 건너뛴다 — 열린 채 ⌘F(바꾼 키 포함)는 여기서 전체 선택 (15d 리뷰)
+          if (commandForKey(e.nativeEvent, shortcuts) === 'find') {
+            e.preventDefault()
+            e.currentTarget.select()
+            return
+          }
           const action = findKeyAction(e.key, e.shiftKey, e.nativeEvent.isComposing)
           if (!action) return
           e.preventDefault()
