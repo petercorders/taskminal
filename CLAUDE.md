@@ -2,6 +2,8 @@
 
 일감별로 터미널 세션을 묶는 macOS 터미널 (Electron + xterm.js + node-pty). 단계 계획 · 결정: `docs/plan.md`
 
+**이어서 개발할 때는 먼저 `docs/development.md` 를 읽는다** — 지금 어디까지 · 단계 하나의 순서 · 명령 · 지킬 것 · 단계별 메모 · 겪은 함정. 단계별 상세 계획은 `docs/stages/`.
+
 ## 진행
 - 단계는 `/harness-run electron N단계` 로 진행하고 끝나면 `/harness-gc electron retro`.
 - 전역 electron 하네스가 편집 · 종료 시 경계 · tsc · 관련 vitest 를 검사한다 (레퍼런스 `~/.claude/skills/harness-engineering/stacks/electron/references/`).
