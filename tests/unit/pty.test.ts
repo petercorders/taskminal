@@ -160,6 +160,12 @@ describe('shellEnv', () => {
   it('LANG 이 없으면 UTF-8 을 넣는다 (Finder 실행)', () => {
     expect(shellEnv({}).LANG).toBe('en_US.UTF-8')
   })
+  it('Finder 처럼 최소 환경(PATH=/usr/bin:/bin, LANG 없음)이면 LANG 만 넣고 PATH 는 그대로 — 로그인 셸(-l)이 사용자 PATH 를 만든다 (14단계)', () => {
+    const env = shellEnv({ PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: '/Users/x', SHELL: '/bin/zsh' })
+    expect(env.LANG).toBe('en_US.UTF-8')
+    expect(env.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin')
+    expect(env.HOME).toBe('/Users/x')
+  })
   it('UTF-8 이 아닌 LC_ALL · LC_CTYPE · LANG 은 UTF-8 로 바로잡는다', () => {
     const env = shellEnv({ LANG: 'C', LC_ALL: 'C', LC_CTYPE: 'POSIX', LC_TIME: 'C' })
     expect(env.LANG).toBe('en_US.UTF-8')

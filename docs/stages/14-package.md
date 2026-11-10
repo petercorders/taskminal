@@ -43,3 +43,36 @@ plan-check: 서버 없음 — 로컬 파일만 만드는 패키징 단계
 
 ## 하지 않는 것
 - 서명 · 공증 · dmg · 자동 업데이트 · x64/universal · `/Applications` 설치(사용자 확인) · 설치본 실행(사용자 지시)
+
+## 결과 (2026-11-10) — 패키지 정적 검사까지 · 실행 미확인
+
+`npm run package` → `dist/mac-arm64/Taskminal.app`(262MB, arm64, ad-hoc 서명 `Identifier=io.peterbong.taskminal` · `codesign --verify --deep --strict` 통과) → `check-package` 통과. 단위: check-package 12 · pty +1 (전체 285) · 변이 5/5 + 리뷰 반영 5/5.
+
+**돌려야 할 목록 (사용자 지시 "지금 실제 테스트는 하지마" 로 미실행 · /Applications 설치는 사용자 확인 대상)**
+1. `TASKMINAL_USER_DATA=$(mktemp -d) open -n dist/mac-arm64/Taskminal.app --env …` 또는 `dist/mac-arm64/Taskminal.app/Contents/MacOS/Taskminal` 를 임시 데이터 폴더로 → 셸이 뜸(spawn-helper) · `which node` · `echo 한글` · 셸 통합(pane 머리의 명령 표시 · OSC 7 폴더) · Dock 아이콘
+2. 네이티브 모듈 Electron ABI: `ELECTRON_RUN_AS_NODE=1 dist/mac-arm64/Taskminal.app/Contents/MacOS/Taskminal -e "require('<앱>/Contents/Resources/app.asar.unpacked/node_modules/node-pty').spawn('/bin/zsh',[],{}).kill()"`
+3. Finder 에서 더블클릭(환경 변수 없음 — 실제 데이터 폴더를 쓰므로 사용자 확인 뒤) → PATH(`which node`) · 한글
+4. `/Applications` 복사(사용자 확인 뒤): `ditto dist/mac-arm64/Taskminal.app /Applications/Taskminal.app`. ad-hoc 서명(개발자 인증서 없음) — 직접 빌드한 것은 격리 표시가 없어 그냥 열리고, 다른 Mac 으로 옮기면 우클릭 › 열기
+5. hardened runtime 을 끈 ad-hoc 서명으로 실제로 뜨는지(1 과 함께)
+
+계획과 다르게 한 것:
+- 아이콘 출력은 `build/` 가 아니라 `resources/icon/` 에 두고 커밋 — 개발 Dock 아이콘이 빌드 없이 보이게.
+- Finder 최소 환경 시험은 처음에 '기존 시험이 봄' 으로 건너뛰었다가 리뷰 지적으로 추가(PATH 그대로 · LANG 넣음). PATH 자체는 로그인 셸(-l)이 만든다(실행 확인 목록 1 · 3).
+- 정적 검사 ⑥ 의 arm64 확인은 `file` 대신 `lipo -archs`(출력이 아키텍처 이름만이라 판정이 단순). ④ 는 `prebuilds/darwin-arm64` 고정이 아니라 node-pty 가 찾는 순서(build/Release → build/Debug → prebuilds)의 첫 곳. 계획에 없던 ⑦ 셸 폴더의 목록 밖 파일 · ⑧ `codesign --verify` 를 더했다.
+- 서명: 계획은 '서명 안 함(identity null)' 이었으나 리뷰가 번들 서명이 깨진 채(`Identifier=Electron`) 남는 것을 짚어 ad-hoc(`identity: "-"`) + `hardenedRuntime: false`(ad-hoc 에 켜면 라이브러리 확인으로 안 뜰 수 있다는 electron-builder 경고).
+- extraResources 에 점 파일 거르기(`**/.*`)를 넣었다가 변이로 필요 없음을 확인하고 뺐다(electron-builder 기본이 점 파일을 포함). 대신 리뷰 반영으로 `.zsh_history` · `.zcompdump*` · `.zsh_sessions` 를 빼는 거르기를 넣었다 — 심어 둔 `.zsh_history` 가 .app 에 안 들어감을 실제 빌드로 확인.
+- afterPack 의 spawn-helper 0755 는 postinstall 이 이미 고친 권한을 다시 주는 방어 — `npm ci --ignore-scripts` 같은 경우를 위해 남김(지금 빌드에서는 없어도 통과).
+- `@electron/asar` 를 직접 devDependency 로(check-package 가 씀).
+- npm audit: electron-builder 의 빌드 도구 의존성(minimatch)에 moderate 6건 — 앱에 들어가지 않음, 강제 업그레이드 안 함.
+
+## 리뷰 (/code-review medium, 2026-11-10) — 8건 중 7건 반영
+| 지적 | 처리 |
+|---|---|
+| `identity: null` → 번들 서명 깨짐 · `Identifier=Electron` | ad-hoc 서명 + hardenedRuntime 끔, check-package 에 `codesign --verify` |
+| `resources/shell` 의 `.zsh_history` 가 .app 에 실릴 수 있음 | extraResources 거르기 + check-package 가 목록 밖 파일을 문제로 |
+| afterPack 이 build/Release 의 spawn-helper 를 안 고침 | build/Release · build/Debug · prebuilds 모두 0755 |
+| check-package 가 prebuilds 고정 | node-pty 찾는 순서를 따름(통과 못 할 앱 · 잘못 통과할 앱 둘 다 시험) |
+| CFBundleIconFile 없으면 icon.icns 로 통과 | 키가 없으면 문제 |
+| 계획의 이름 확인 · `file` 과 다름 | CFBundleName 확인 추가, lipo 는 '계획과 다르게 한 것' 에 |
+| Finder 최소 환경 시험 약속만 | 시험 추가 |
+| asarUnpack 이 node-pty 전체(약 1.1MB) | **반영 안 함** — node-pty 의 로드 경로가 바뀌는 변경이라 앱을 띄워 확인해야 하는데 지금은 실행 금지. 262MB 중 1.1MB. 실행 확인 때 같이 볼 후보 |
