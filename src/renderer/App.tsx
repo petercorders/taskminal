@@ -5,6 +5,7 @@ import { commandForKey, isAppCommand, repeatable, shortcutTable, stepFontSize, t
 import { notifyKind } from '../shared/notify'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
+import { cwdLike } from '../shared/cwd'
 import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
@@ -37,24 +38,33 @@ const loadState = () =>
   (loadOnce ??= window.taskminal.appInfo().then(
     (info) => {
       runtime.host = info.host
+      runtime.home = info.home
       runtime.cwdPollMs = info.cwdPollMs
       return window.taskminal.state.load()
     },
     () => window.taskminal.state.load(),
   ))
 
-/** 스크롤 저장할 글: all 이면 마운트된 모든 pane, 아니면 마지막 저장 뒤 출력이 온 pane 만 */
-function collectScrollback(all: boolean): Record<string, string> {
+/**
+ * 스크롤 저장할 글 — 마지막 저장 뒤 출력이 온 pane 만(나머지는 이미 파일에 있다). 글을 만든 pane 만 '바뀜' 을 지우고,
+ * 만들다 실패한 pane 은 남겨 다음 주기가 다시 본다. 닫혀 터미널이 없는 pane 은 지운다(파일은 main 이 live 로 정리).
+ * 되살리는 중인 pane 은 셸을 아직 띄우지 않아 출력이 없으니 여기 오지 않는다 — 빈 화면이 저장된 글을 덮지 않는다.
+ */
+function collectScrollback(): Record<string, string> {
   const panes: Record<string, string> = {}
-  for (const [paneId, handle] of terminals) {
-    if (!all && !dirtyPanes.has(paneId)) continue
+  for (const paneId of [...dirtyPanes]) {
+    const handle = terminals.get(paneId)
+    if (!handle) {
+      dirtyPanes.delete(paneId)
+      continue
+    }
     try {
       panes[paneId] = handle.serialize()
+      dirtyPanes.delete(paneId)
     } catch {
-      // 그 pane 만 건너뛴다 — 다음 주기가 다시 본다
+      // 다음 주기가 다시 본다
     }
   }
-  dirtyPanes.clear()
   return panes
 }
 
@@ -256,10 +266,10 @@ export function App() {
       return
     }
     const timer = setInterval(() => {
-      if (dirtyPanes.size > 0) window.taskminal.scrollback.save({ live: live(), panes: collectScrollback(false) })
+      if (dirtyPanes.size > 0) window.taskminal.scrollback.save({ live: live(), panes: collectScrollback() })
     }, SCROLLBACK_SAVE_MS)
-    // 앱 종료 · 창 닫기 · 새로 고침: 페이지가 내려가기 전에 동기로 — main 이 다 쓴 뒤에 페이지가 사라진다
-    const flush = () => window.taskminal.scrollback.saveNow({ live: live(), panes: collectScrollback(true) })
+    // 앱 종료 · 창 닫기 · 새로 고침: 페이지가 내려가기 전에 동기로 — main 이 다 쓴 뒤에 페이지가 사라진다. 바뀐 pane 만(창이 크면 다 보내면 끄기가 멈칫한다)
+    const flush = () => window.taskminal.scrollback.saveNow({ live: live(), panes: collectScrollback() })
     window.addEventListener('beforeunload', flush)
     return () => {
       clearInterval(timer)
@@ -276,7 +286,12 @@ export function App() {
       void window.taskminal.pty.cwds(ids).then(
         (found) => {
           if (!alive) return
-          for (const [paneId, cwd] of Object.entries(found)) if (!osc7Panes.has(paneId)) dispatch({ type: 'pane/cwd', paneId, cwd })
+          for (const [paneId, cwd] of Object.entries(found)) {
+            if (osc7Panes.has(paneId)) continue
+            const s = stateRef.current
+            const task = s.tasks.find((t) => t.id === findPaneTask(s, paneId))
+            if (task) dispatch({ type: 'pane/cwd', paneId, cwd: cwdLike(cwd, task.cwd, runtime.home) })
+          }
         },
         () => {},
       )
@@ -621,7 +636,7 @@ export function App() {
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
                           onStartSent={(paneId) => dispatch({ type: 'pane/command-sent', paneId })}
-                          onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd })}
+                          onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd: cwdLike(cwd, task.cwd, runtime.home) })}
                           onDragEnd={refocus}
                         />
                       )}

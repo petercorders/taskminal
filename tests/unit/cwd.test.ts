@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLsofCwd, parseOsc7 } from '../../src/shared/cwd'
+import { cwdLike, parseLsofCwd, parseOsc7 } from '../../src/shared/cwd'
 
 describe('parseOsc7 — 셸 통합이 알려 주는 작업 폴더', () => {
   it('퍼센트 인코딩(한글 · 공백)을 푼다', () => {
@@ -34,5 +34,22 @@ describe('parseLsofCwd — `lsof -a -d cwd -Fpn -p …` 출력', () => {
   it('n 줄이 없는 pid · 모르는 줄 · 상대 경로는 건너뛴다', () => {
     expect(parseLsofCwd('p1\nfcwd\np2\nx?\nnrel\np3\nn/ok\n')).toEqual({ 3: '/ok' })
     expect(parseLsofCwd('')).toEqual({})
+  })
+})
+
+describe('cwdLike — 셸이 알려 준 절대 경로를 일감 폴더와 같은 모양으로 (13단계 리뷰)', () => {
+  const home = '/Users/x'
+  it('일감 폴더가 ~ 로 쓰였으면 홈 아래 경로를 ~ 로', () => {
+    expect(cwdLike('/Users/x/proj', '~/proj', home)).toBe('~/proj')
+    expect(cwdLike('/Users/x', '~', home)).toBe('~')
+    expect(cwdLike('/Users/x/proj/한글 폴더', '~/proj', home)).toBe('~/proj/한글 폴더')
+  })
+  it('홈 밖 · 이름만 비슷한 폴더(/Users/xy) · 절대 경로로 쓴 일감은 그대로', () => {
+    expect(cwdLike('/tmp/a', '~/proj', home)).toBe('/tmp/a')
+    expect(cwdLike('/Users/xy/a', '~', home)).toBe('/Users/xy/a')
+    expect(cwdLike('/Users/x/proj', '/Users/x/proj', home)).toBe('/Users/x/proj')
+  })
+  it('홈을 모르면 그대로', () => {
+    expect(cwdLike('/Users/x/proj', '~/proj', '')).toBe('/Users/x/proj')
   })
 })

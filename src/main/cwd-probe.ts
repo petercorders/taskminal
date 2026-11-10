@@ -12,7 +12,9 @@ export function lsofCwds(pids: readonly number[]): Promise<Record<number, string
   const list = pids.filter((p) => Number.isInteger(p) && p > 0)
   if (list.length === 0) return Promise.resolve({})
   return new Promise((resolve) => {
-    execFile(LSOF, ['-a', '-d', 'cwd', '-Fpn', '-p', list.join(',')], { timeout: TIMEOUT_MS }, (_error, stdout) => {
+    // 로캘이 UTF-8 이 아니면(Finder 로 띄운 앱 · LANG 없음) lsof 가 한글 경로 바이트를 `\xNN` 글자로 찍는다(13단계 리뷰에서 재현)
+    const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
+    execFile(LSOF, ['-a', '-d', 'cwd', '-Fpn', '-p', list.join(',')], { timeout: TIMEOUT_MS, env }, (_error, stdout) => {
       resolve(parseLsofCwd(typeof stdout === 'string' ? stdout : ''))
     })
   })

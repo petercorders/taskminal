@@ -33,3 +33,13 @@ export function parseLsofCwd(out: string): Record<number, string> {
   }
   return found
 }
+
+/**
+ * 셸이 알려 준 절대 경로(OSC 7 · lsof)를 일감 폴더와 같은 모양으로 — 일감 폴더가 `~` 로 쓰였으면 홈 아래 경로를 `~/…` 로.
+ * 모양이 다르면 cd 하지 않은 pane 도 폴더가 바뀐 것으로 보이고(저장), 템플릿으로 저장할 때 일감 기준 상대 경로를 못 만든다(13단계 리뷰).
+ */
+export function cwdLike(path: string, taskCwd: string, home: string): string {
+  if (!home || !(taskCwd === '~' || taskCwd.startsWith('~/'))) return path
+  if (path === home) return '~'
+  return path.startsWith(home + '/') ? '~' + path.slice(home.length) : path
+}

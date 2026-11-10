@@ -31,6 +31,8 @@ export interface AppInfo {
   shells: string[]
   /** 이 Mac 이름 — OSC 7 의 호스트가 이것 · localhost · 빈 값일 때만 폴더로 받는다 */
   host: string
+  /** 홈 폴더 — 셸이 알려 준 폴더를 일감 폴더 모양(~)으로 맞출 때 */
+  home: string
   /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 (시험은 TASKMINAL_CWD_POLL_MS 로 줄인다) */
   cwdPollMs: number
 }

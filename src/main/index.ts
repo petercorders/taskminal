@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { hostname } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
@@ -213,7 +213,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), cwdPollMs }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs }
   })
 
   ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {
@@ -269,18 +269,22 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     return scrollback().load(paneId)
   })
-  const saveScrollback = (raw: unknown): void => {
+  // 덤이라 실패해도 알림은 띄우지 않는다 — 다음 주기가 다시 쓴다
+  const logError = (error: Error | null) => error && console.error('스크롤을 저장하지 못함', error)
+  const liveOf = (raw: unknown): { live: unknown[]; panes: unknown } | null => {
     const r = (raw ?? {}) as Record<string, unknown>
-    if (!Array.isArray(r['live']) || r['live'].length > MAX_LIVE_PANES) return
-    const error = scrollback().save({ live: r['live'], panes: r['panes'] })
-    if (error) console.error('스크롤을 저장하지 못함', error) // 덤이라 알림은 띄우지 않는다 — 다음 주기가 다시 쓴다
+    return Array.isArray(r['live']) && r['live'].length <= MAX_LIVE_PANES ? { live: r['live'], panes: r['panes'] } : null
   }
+  // 저장이 겹치지 않게 한 줄로 — 주기 저장(비동기)이 도는 중에 다음 저장이 와도 차례로
+  let saving: Promise<unknown> = Promise.resolve()
   ipcMain.on(IPC.scrollbackSave, (event, raw: unknown) => {
-    if (fromOurWindow(event)) saveScrollback(raw)
+    const req = fromOurWindow(event) ? liveOf(raw) : null
+    if (req) saving = saving.then(() => scrollback().save(req.live, req.panes)).then(logError, logError)
   })
   ipcMain.on(IPC.scrollbackSaveSync, (event, raw: unknown) => {
     try {
-      if (fromOurWindow(event)) saveScrollback(raw)
+      const req = fromOurWindow(event) ? liveOf(raw) : null
+      if (req) logError(scrollback().saveSync(req.live, req.panes))
     } finally {
       event.returnValue = true // 돌려주지 않으면 renderer 가 멈춘다
     }

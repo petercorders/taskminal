@@ -3,6 +3,8 @@
 export const runtime = {
   /** 이 Mac 이름 — OSC 7 의 호스트 비교 */
   host: '',
+  /** 홈 폴더 — cwdLike */
+  home: '',
   /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 */
   cwdPollMs: 15_000,
 }
