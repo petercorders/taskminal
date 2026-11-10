@@ -39,7 +39,8 @@ const dialog = () => win.getByRole('dialog')
 const tasks = () => JSON.parse(readFileSync(join(userData, 'state.json'), 'utf8')).tasks as Array<{ name: string; cwd: string }>
 
 async function openNew(folder: string, name: string): Promise<void> {
-  await win.keyboard.press('Meta+n')
+  await win.getByTestId('pane-p1').click() // 화면이 다 뜬 뒤에 — 바로 누르면 키를 받을 renderer 가 아직 없다
+  await win.keyboard.press('Meta+KeyN')
   await dialog().getByPlaceholder('예: 찍계부 서버').fill(name)
   await dialog().locator('#new-task-cwd').fill(folder)
 }

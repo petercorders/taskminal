@@ -124,7 +124,7 @@ test('닫은 탭의 파일은 지우고, 이번에 안 본 탭의 파일은 남�
   await launch()
   await run('pa', 'echo AAA$((1+1))')
   await expect(screen('pa')).toContainText('AAA2')
-  await win.getByTestId('tab').nth(1).click()
+  await win.getByTestId('tab').nth(1).getByRole('tab').click()
   await run('pb', 'echo BBB$((1+1))')
   await expect(screen('pb')).toContainText('BBB2')
   await quit()

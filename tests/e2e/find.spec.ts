@@ -69,7 +69,8 @@ test('입력칸에 포커스가 있는 채 ⌘F 도 전체 선택 · 다른 탭�
   await win.getByTestId('pane-p1').click()
   await win.keyboard.press('Meta+f')
   await expect(bar()).toBeVisible()
-  await win.keyboard.press('Meta+t') // 새 탭 — 막대의 pane 이 숨는다
+  // 새 탭 — 막대의 pane 이 숨는다. 입력칸에 포커스가 있으면 renderer 가 ⌘ 키를 칸에 맡기므로(App.tsx onKey) 탭 막대의 + 로
+  await win.getByRole('button', { name: '새 탭' }).click()
   await expect(win.getByTestId('tab')).toHaveCount(2)
   await expect(bar()).toHaveCount(0)
 })
