@@ -28,6 +28,7 @@ export function buildAppMenu(dev: boolean): Menu {
       submenu: [
         item('new-task'),
         item('new-tab'),
+        item('palette'),
         { type: 'separator' },
         item('split-right'),
         item('split-down'),

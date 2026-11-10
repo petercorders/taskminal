@@ -20,6 +20,7 @@ export const SHORTCUTS = [
   { command: 'next-task', accel: 'Alt+Command+Down', label: '다음 일감' },
   { command: 'prev-task', accel: 'Alt+Command+Up', label: '이전 일감' },
   { command: 'next-attention', accel: 'Shift+Command+A', label: '다음 확인 필요' },
+  { command: 'palette', accel: 'Command+P', label: '명령 팔레트' },
   ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((n) => ({ command: `tab-${n}` as const, accel: `Command+${n}`, label: `${n}번째 탭` })),
   { command: 'last-tab', accel: 'Command+9', label: '마지막 탭' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
@@ -60,8 +61,16 @@ export function commandForKey(ev: KeyLike): AppCommand | null {
 }
 
 // 누르고 있으면(키 반복) 되풀이해도 되는 명령은 옮기기 · 글꼴뿐 — 만들거나 지우는 명령은 한 번만(셸이 여럿 뜨거나 닫히지 않게)
-const ONCE: ReadonlySet<AppCommand> = new Set(['new-task', 'new-tab', 'split-right', 'split-down', 'close-pane', 'clear'])
+const ONCE: ReadonlySet<AppCommand> = new Set(['new-task', 'new-tab', 'split-right', 'split-down', 'close-pane', 'clear', 'palette'])
 export const repeatable = (command: AppCommand): boolean => !ONCE.has(command)
+
+const SYMBOL: Record<string, string> = { Shift: '⇧', Command: '⌘', Alt: '⌥', Control: '⌃', Up: '↑', Down: '↓', '-': '−' }
+/** 'Shift+Command+D' → '⇧⌘D' (팔레트 · 화면 표시용) */
+export const accelLabel = (accel: string): string =>
+  accel
+    .split('+')
+    .map((p) => SYMBOL[p] ?? p)
+    .join('')
 
 export const FONT_MIN = 8
 export const FONT_MAX = 32

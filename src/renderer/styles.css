@@ -666,3 +666,123 @@ select {
   gap: 8px;
   margin-top: 4px;
 }
+
+/* ─── 명령 팔레트 ─── */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 10vh;
+  background: #00000066;
+  z-index: 10;
+}
+.palette {
+  width: 620px;
+  max-width: calc(100vw - 32px);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px #00000080;
+  overflow: hidden;
+}
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.palette-input-row input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  outline: none;
+}
+.palette-scope {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.palette-help {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+.palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: default;
+  min-width: 0;
+}
+.palette-item.selected {
+  background: var(--accent-soft);
+}
+.palette-kind {
+  flex: none;
+  width: 42px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.palette-kind.output,
+.palette-item[data-kind='output'] .palette-label {
+  font-family: Menlo, monospace;
+}
+.palette-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.palette-label mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+.palette-detail {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--muted);
+}
+.palette-hint {
+  margin-left: auto;
+  flex: none;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--muted);
+}
+.palette-detail + .palette-hint,
+.palette-hint + .palette-hint {
+  margin-left: 0;
+}
+.palette-item .palette-detail {
+  margin-left: auto;
+}
+.palette-empty {
+  padding: 10px;
+  color: var(--muted);
+}

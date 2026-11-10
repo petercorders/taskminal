@@ -2,12 +2,14 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { applyActivity, type ActivityEvent, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
 import { commandForKey, isAppCommand, repeatable, stepFontSize, type AppCommand } from '../shared/keymap'
+import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { createTask, emptyState, findPaneTask } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, Task } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
-import { NewTaskDialog } from './NewTaskDialog'
+import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
+import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
 import { adjacentTask, nextAttention } from './sidebar-model'
 import { reducer } from './store'
@@ -49,7 +51,9 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, undefined, emptyState)
   const [load, setLoad] = useState<LoadStatus>({ phase: 'loading' })
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
+  // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
+  const [creating, setCreating] = useState<NewTaskInitial | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [removing, setRemoving] = useState<Task | null>(null)
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
   // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
@@ -164,14 +168,15 @@ export function App() {
 
   const create = (input: NewTaskInput) => {
     dispatch({ type: 'task/create', task: createTask(input, state.settings, newId, Date.now()) })
-    setCreating(false)
+    setCreating(null)
     refocus()
   }
 
   const closeDialogs = () => {
-    setCreating(false)
+    setCreating(null)
     setRemoving(null)
     setConfirming(null)
+    setPaletteOpen(false)
     refocus()
   }
 
@@ -183,7 +188,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating || removing !== null || confirming !== null
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || paletteOpen
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
@@ -196,17 +201,20 @@ export function App() {
   }
 
   // 앱 명령 하나 — 단축키(아래 keydown)와 앱 메뉴(main → onCommand)가 같은 길로 온다.
-  const runCommand = (command: AppCommand) => {
+  // fromPalette: 팔레트에서 고른 명령 — 팔레트가 닫히는 중이라 '대화상자 열림' 규칙에 막히지 않게 한다
+  const runCommand = (command: AppCommand, fromPalette = false) => {
     // 대화상자가 열려 있으면 뒤의 화면을 바꾸지 않는다 (⌘T 가 대화상자 뒤에서 탭을 만들지 않게)
     // 읽기가 끝나기 전에는 상태가 비어 있어 받지 않는다. 읽기에 실패한 실행(저장만 안 함)에서는 된다.
-    if (dialogOpen || load.phase === 'loading') return
+    if ((dialogOpen && !fromPalette) || load.phase === 'loading') return
     const task = activeTask
     const tab = task?.tabs.find((t) => t.id === task.activeTabId)
     const font = (how: 'bigger' | 'smaller' | 'reset') =>
       dispatch({ type: 'settings/font', size: stepFontSize(state.settings.fontSize, how) })
     switch (command) {
       case 'new-task':
-        return setCreating(true)
+        return setCreating({})
+      case 'palette':
+        return setPaletteOpen(true)
       case 'font-bigger':
         return font('bigger')
       case 'font-smaller':
@@ -261,6 +269,33 @@ export function App() {
         return refocus()
     }
   }
+  // 팔레트에서 고른 것을 실행한다 — 팔레트는 먼저 닫는다
+  const runPaletteItem = (item: PaletteItem, query: string, newTab: boolean) => {
+    setPaletteOpen(false)
+    switch (item.kind) {
+      case 'task':
+        dispatch({ type: 'task/select', id: item.id })
+        if (newTab) addTab(item.id)
+        return refocus()
+      case 'command':
+        if (isAppCommand(item.id)) runCommand(item.id, true)
+        return refocus()
+      case 'template':
+        return setCreating({ templateId: item.id })
+      case 'create':
+        return setCreating({ name: item.label })
+      case 'output': {
+        const paneId = item.paneId!
+        const taskId = findPaneTask(state, paneId)
+        if (!taskId) return refocus()
+        dispatch({ type: 'task/select', id: taskId })
+        dispatch({ type: 'pane/focus', taskId, paneId })
+        terminals.get(paneId)?.reveal(item.line!, query)
+        return refocus()
+      }
+    }
+  }
+
   const runCommandRef = useRef(runCommand)
   runCommandRef.current = runCommand
 
@@ -308,7 +343,7 @@ export function App() {
           activity={activity}
           loading={load.phase === 'loading'}
           onSelect={(id) => dispatch({ type: 'task/select', id })}
-          onNew={() => setCreating(true)}
+          onNew={() => setCreating({})}
           onRemove={setRemoving}
         />
         <main className="workspace">
@@ -377,14 +412,15 @@ export function App() {
             <div className="empty" data-testid="empty-view">
               <h1>Taskminal</h1>
               <p className="hint">일감이 없습니다</p>
-              <button type="button" className="button primary" onClick={() => setCreating(true)}>
+              <button type="button" className="button primary" onClick={() => setCreating({})}>
                 새 일감
               </button>
             </div>
           )}
         </main>
       </div>
-      {creating && <NewTaskDialog settings={state.settings} onCreate={create} onCancel={closeDialogs} />}
+      {creating && <NewTaskDialog settings={state.settings} initial={creating} onCreate={create} onCancel={closeDialogs} />}
+      {paletteOpen && <Palette state={state} onRun={runPaletteItem} onClose={closeDialogs} />}
       {removing && (
         <ConfirmDialog
           title="일감 지우기"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { commandForKey, isAppCommand, repeatable, SHORTCUTS, stepFontSize, type KeyLike } from '../../src/shared/keymap'
+import { accelLabel, commandForKey, isAppCommand, repeatable, SHORTCUTS, stepFontSize, type KeyLike } from '../../src/shared/keymap'
 
 const key = (code: string, mods: Partial<KeyLike> = {}, k = ''): KeyLike => ({
   key: k,
@@ -38,6 +38,7 @@ describe('commandForKey', () => {
     expect(commandForKey(key('ArrowUp'))).toBeNull() // ⌥ 없이는 셸 몫
     expect(commandForKey(key('KeyA', { shiftKey: true }))).toBe('next-attention')
     expect(commandForKey(key('KeyA'))).toBeNull() // ⌘A 모두 선택은 네이티브
+    expect(commandForKey(key('KeyP'))).toBe('palette')
   })
 
   it('글꼴: ⌘= 와 ⌘+(⇧⌘=) 둘 다 크게, ⌘− 작게, ⌘0 기본', () => {
@@ -97,8 +98,17 @@ describe('SHORTCUTS', () => {
 
 describe('repeatable', () => {
   it('만들거나 지우는 명령은 키 반복으로 되풀이하지 않는다, 옮기기 · 글꼴은 된다', () => {
-    for (const c of ['new-tab', 'new-task', 'split-right', 'split-down', 'close-pane'] as const) expect(repeatable(c), c).toBe(false)
+    for (const c of ['new-tab', 'new-task', 'split-right', 'split-down', 'close-pane', 'palette'] as const) expect(repeatable(c), c).toBe(false)
     for (const c of ['next-pane', 'next-tab', 'font-bigger', 'next-task'] as const) expect(repeatable(c), c).toBe(true)
+  })
+})
+
+describe('accelLabel', () => {
+  it('맥 기호로', () => {
+    expect(accelLabel('Shift+Command+D')).toBe('⇧⌘D')
+    expect(accelLabel('Alt+Command+Down')).toBe('⌥⌘↓')
+    expect(accelLabel('Command+-')).toBe('⌘−')
+    expect(accelLabel('Command+P')).toBe('⌘P')
   })
 })
 

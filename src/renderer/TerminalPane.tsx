@@ -117,7 +117,25 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
     observer.observe(host)
     termRef.current = term
     refitRef.current = refit
-    terminals.set(paneId, { clear: () => term.clear() })
+    terminals.set(paneId, {
+      clear: () => term.clear(),
+      search: (query, limit) => {
+        const q = query.toLowerCase()
+        const buf = term.buffer.active
+        const found: Array<{ line: number; text: string }> = []
+        for (let i = buf.length - 1; i >= 0 && found.length < limit; i--) {
+          const text = buf.getLine(i)?.translateToString(true) ?? ''
+          if (text.toLowerCase().includes(q)) found.push({ line: i, text })
+        }
+        return found
+      },
+      reveal: (line, query) => {
+        const text = term.buffer.active.getLine(line)?.translateToString(true) ?? ''
+        const at = text.toLowerCase().indexOf(query.toLowerCase())
+        term.scrollToLine(Math.max(0, line - Math.floor(term.rows / 2)))
+        if (at >= 0) term.select(at, line, query.length)
+      },
+    })
 
     return () => {
       observer.disconnect()
