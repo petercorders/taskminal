@@ -31,8 +31,14 @@ test.beforeEach(async ({}, info) => {
   userData = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-e2e-')))
   marks = join(userData, 'marks.txt')
   seedState(userData, [{ id: 'task-a', name: 'A 일감', paneId: 'pane-a', cwd: '/tmp' }], [], {
-    templates: [{ id: 'tpl-basic', name: '기본', tabs: [{ layout: { pane: {} } }] }, marksTemplate(marks)],
+    templates: [
+      { id: 'tpl-basic', name: '기본', tabs: [{ layout: { pane: {} } }] },
+      marksTemplate(marks),
+      ...(info.title.includes('bash') ? [{ id: 'tpl-one', name: '표시 하나', tabs: [{ layout: { pane: { command: `echo one >> '${marks}'` } } }] }] : []),
+    ],
     ...(info.title.includes('셸 통합을 끄면') ? { shellIntegration: false } : {}),
+    // bash 에는 셸 통합이 없다 → 프롬프트 신호 없이 START_FALLBACK_MS 를 기다리는 길
+    ...(info.title.includes('bash') ? { shell: '/bin/bash' } : {}),
   })
   launched = undefined
   await launch()
@@ -86,6 +92,32 @@ test('템플릿 일감: pane 마다 시작 명령이 한 번 — 오가고 껐�
 test('셸 통합을 끄면 프롬프트 신호 없이도 시작 명령이 돈다', async () => {
   await createFromTemplate('표시 일감', '표시 둘')
   await expect.poll(lines, { timeout: 15_000 }).toEqual(['a', 'b'])
+})
+
+test('프롬프트 신호가 없는 bash 에서 기다리는 동안 키를 치면 시작 명령을 그 뒤에 붙이지 않고 남겨 둔다', async () => {
+  await createFromTemplate('하나 일감', '표시 하나')
+  await win.keyboard.type('echo hi')
+  // 대체 경로(4초)가 지나도 보내지 않는다
+  await win.waitForTimeout(5_500)
+  expect(lines()).toEqual([])
+  expect(Object.values(savedState().tasks[1].panes).map((p: any) => p.pendingCommand)).toEqual([`echo one >> '${marks}'`])
+})
+
+test('저장 대화상자가 열린 동안 그 탭이 닫혀도 연 때의 탭을 저장 · 예약어 이름은 막는다', async () => {
+  await expect(view('A 일감').locator('.xterm-rows')).toContainText('%', { timeout: 15_000 })
+  await openTemplateMenu('A 일감')
+  await win.getByRole('menuitem', { name: '이 탭을 템플릿으로 저장…' }).click()
+  const dialog = win.getByRole('dialog', { name: '탭을 템플릿으로 저장' })
+  await dialog.getByTestId('template-name').fill('constructor')
+  await expect(dialog.getByTestId('template-name-error')).toContainText('쓸 수 없')
+  await expect(dialog.getByTestId('template-name-save')).toBeDisabled()
+
+  await win.evaluate(() => (globalThis as any).taskminal.pty.write('pane-a', 'exit\r'))
+  await expect(view('A 일감').getByTestId('tab')).toHaveCount(0)
+  await expect(dialog).toBeVisible() // 제목도 '탭' 그대로
+  await dialog.getByTestId('template-name').fill('닫힌 탭')
+  await dialog.getByTestId('template-name-save').click()
+  await expect.poll(() => savedState().settings.templates.find((t: any) => t.name === '닫힌 탭')?.tabs.length).toBe(1)
 })
 
 test('탭 줄 ▾: 템플릿의 탭을 이 일감에 붙이고 그 탭의 시작 명령이 돈다 · Esc 로 닫힘', async () => {

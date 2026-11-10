@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { paneIds } from '../../src/shared/layout'
-import { addTemplate, addTemplateTabs, createTask, defaultSettings, emptyState, replaceTemplate, tabToTemplate, templateIdCount } from '../../src/shared/model'
+import { addTemplate, addTemplateTabs, createTask, defaultSettings, emptyState, renameTemplate, replaceTemplate, tabToTemplate, taskToTemplate, templateIdCount, templateNameError } from '../../src/shared/model'
 import type { AppState, Task, Template } from '../../src/shared/types'
 
 function ids(prefix = 'id') {
@@ -54,6 +54,22 @@ describe('tabToTemplate (이 탭을 템플릿으로)', () => {
     const t = task()
     expect(tabToTemplate(t, 'nope', 'x', () => 'id')).toBeNull()
     expect(tabToTemplate(t, t.tabs[0]!.id, '  ', () => 'id')!.name).toBe('새 템플릿')
+  })
+})
+
+describe('템플릿 이름 — 저장 파일이 버리는 이름은 어느 길로도 들어가지 않는다', () => {
+  it('templateNameError: 빈 이름 · 예약어(앞뒤 공백 포함)', () => {
+    expect(templateNameError('A')).toBeNull()
+    expect(templateNameError('  ')).toContain('비어')
+    for (const n of ['constructor', ' prototype ', '__proto__']) expect(templateNameError(n)).toContain('쓸 수 없')
+  })
+
+  it('탭 · 일감 저장 · 이름 바꾸기도 같은 검사', () => {
+    const t = task()
+    expect(taskToTemplate(t, 'constructor', () => 'id').name).toBe('새 템플릿')
+    expect(tabToTemplate(t, t.tabs[0]!.id, '__proto__', () => 'id')!.name).toBe('새 템플릿')
+    const s = addTemplate(emptyState(), tpl)
+    expect(renameTemplate(s, 'tpl-x', 'prototype')).toBe(s)
   })
 })
 

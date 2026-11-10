@@ -1,6 +1,7 @@
 // 템플릿 JSON 편집기의 검증. 오류마다 줄 번호를 알려 주려고 위치를 기억하는 작은 JSON 파서를 둔다
 // (JSON.parse 는 문법 오류의 위치만, 그것도 엔진마다 다른 글로 알려 주고 모양 오류의 위치는 모른다).
 import type { LayoutSpec, PaneSpec, Template, TemplateTab } from './types'
+import { templateNameError } from './model'
 
 export interface TemplateJsonError {
   /** 1부터 */
@@ -159,8 +160,6 @@ function parse(text: string): Node {
 
 // ─── 모양 검사 ────────────────────────────────────────────
 
-const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
-
 function check(root: Node): TemplateJsonResult {
   const errors: TemplateJsonError[] = []
   const err = (line: number, message: string) => {
@@ -187,12 +186,14 @@ function check(root: Node): TemplateJsonResult {
     if (node.kind !== 'object') return err(line, '"pane" 은 { } 객체여야 합니다 — 예: { "command": "claude" }')
     const f = fields(node, ['command', 'cwd'])
     const spec: PaneSpec = {}
+    let bad = false
+    // 틀린 칸이 있어도 나머지 칸까지 보고 오류를 한 번에 모은다
     for (const key of ['command', 'cwd'] as const) {
       const v = optString(f.get(key), key)
-      if (v === null) return null
-      if (v !== undefined) spec[key] = v
+      if (v === null) bad = true
+      else if (v !== undefined) spec[key] = v
     }
-    return spec
+    return bad ? null : spec
   }
 
   const layout = (node: Node, line: number): LayoutSpec | null => {
@@ -242,7 +243,7 @@ function check(root: Node): TemplateJsonResult {
   let name: string | null = null
   if (!n) err(root.line, '"name" (템플릿 이름)이 없습니다')
   else if (n.value.kind !== 'string' || !n.value.value.trim()) err(n.line, '"name" 은 비어 있지 않은 "글자"여야 합니다')
-  else if (RESERVED.has(n.value.value.trim())) err(n.line, `"${n.value.value.trim()}" 는 이름으로 쓸 수 없습니다`)
+  else if (templateNameError(n.value.value)) err(n.line, templateNameError(n.value.value)!)
   else name = n.value.value.trim()
   const t = f.get('tabs')
   const tabs: TemplateTab[] = []

@@ -612,6 +612,13 @@ select {
   color: var(--muted);
   line-height: 1.5;
 }
+/* 칸 아래 오류 한 줄 — 비어 있어도 자리를 지켜 버튼이 들썩이지 않게 */
+.field-error {
+  margin: -6px 0 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--danger);
+}
 
 .field {
   display: flex;

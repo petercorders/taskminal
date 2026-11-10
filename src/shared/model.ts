@@ -163,15 +163,24 @@ function tabToSpec(tab: Tab, task: Task): TemplateTab {
 }
 
 /** 지금 일감의 탭 · 분할 · 시작 명령을 템플릿으로. 폴더는 일감 폴더 기준 상대 경로. */
+/** 템플릿 이름 검사 — 저장 파일 검증(isId)이 버리는 이름(빈 이름 · 예약어)이면 그 이유. 이름 대화상자 · JSON 편집기 · 이름 바꾸기가 함께 쓴다. */
+export function templateNameError(name: string): string | null {
+  const n = name.trim()
+  if (!n) return '이름이 비어 있습니다'
+  if (RESERVED.has(n)) return `"${n}" 는 이름으로 쓸 수 없습니다`
+  return null
+}
+const safeTemplateName = (name: string) => (templateNameError(name) ? '새 템플릿' : name.trim())
+
 export function taskToTemplate(task: Task, name: string, newId: NewId): Template {
-  // 빈 이름 템플릿은 저장 파일 검증에서 버려진다
-  return { id: newId(), name: name.trim() || '새 템플릿', tabs: task.tabs.map((tab) => tabToSpec(tab, task)) }
+  // 저장 파일 검증이 버리는 이름이면 '새 템플릿'
+  return { id: newId(), name: safeTemplateName(name), tabs: task.tabs.map((tab) => tabToSpec(tab, task)) }
 }
 
 /** 탭 하나를 템플릿으로 ("+ ▾" › 이 탭을 템플릿으로 저장). 없는 탭이면 null. */
 export function tabToTemplate(task: Task, tabId: Id, name: string, newId: NewId): Template | null {
   const tab = task.tabs.find((t) => t.id === tabId)
-  return tab ? { id: newId(), name: name.trim() || '새 템플릿', tabs: [tabToSpec(tab, task)] } : null
+  return tab ? { id: newId(), name: safeTemplateName(name), tabs: [tabToSpec(tab, task)] } : null
 }
 
 /** addTemplateTabs 가 만드는 새 id 수 (탭 + pane) — reducer 에 id 를 미리 만들어 넘길 때 */
@@ -416,7 +425,7 @@ export function toggleGroup(state: AppState, id: Id): AppState {
 export function renameTemplate(state: AppState, id: Id, name: string): AppState {
   const n = name.trim()
   const cur = state.settings.templates.find((t) => t.id === id)
-  if (!cur || !n || n === cur.name) return state
+  if (!cur || templateNameError(n) || n === cur.name) return state
   return withSettings(state, { templates: state.settings.templates.map((t) => (t === cur ? { ...t, name: n } : t)) })
 }
 

@@ -43,6 +43,8 @@ describe('parseTemplateJson — 모양 오류도 그 줄', () => {
     expect(errorsOf('{ "tabs": [{ "layout": { "pane": {} } }] }')[0]!.message).toContain('name')
     expect(errorsOf('[1]')[0]!.message).toContain('객체')
     expect(errorsOf(ok('{ "pane": { "command": 3 } }'))[0]).toEqual({ line: 4, message: expect.stringContaining('command') })
+    // 한 pane 의 틀린 칸은 모두 한 번에
+    expect(errorsOf(ok('{ "pane": { "command": 3, "cwd": 4 } }')).map((e) => e.message)).toEqual([expect.stringContaining('command'), expect.stringContaining('cwd')])
   })
 
   it('분할: 방향 · 비율 · a/b · pane 과 split 을 함께', () => {

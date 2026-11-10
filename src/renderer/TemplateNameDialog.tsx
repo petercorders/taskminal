@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { templateNameError } from '../shared/model'
 import { Modal } from './Modal'
 
 interface Props {
@@ -19,8 +20,10 @@ export function TemplateNameDialog({ what, initialName, onSave, onCancel }: Prop
     inputRef.current?.select()
   }, [])
 
+  // 빈 이름 · 예약어(저장 파일 검증이 버린다)는 저장을 막고 이유를 보인다 — 빈 칸은 이미 알 만하니 이유를 띄우지 않는다
+  const error = templateNameError(name)
   const save = () => {
-    if (done.current || !name.trim()) return
+    if (done.current || error) return
     done.current = true
     onSave(name)
   }
@@ -38,13 +41,25 @@ export function TemplateNameDialog({ what, initialName, onSave, onCancel }: Prop
         <p className="dialog-message">탭 · 분할 · 시작 명령 · 폴더(일감 폴더 기준)를 저장해요. 새 일감이나 탭 줄의 ▾ 에서 고를 수 있어요.</p>
         <label className="field">
           <span>템플릿 이름</span>
-          <input ref={inputRef} value={name} maxLength={60} spellCheck={false} onChange={(e) => setName(e.target.value)} data-testid="template-name" />
+          <input
+            ref={inputRef}
+            value={name}
+            maxLength={60}
+            spellCheck={false}
+            aria-invalid={!!error && !!name.trim()}
+            aria-describedby="template-name-error"
+            onChange={(e) => setName(e.target.value)}
+            data-testid="template-name"
+          />
         </label>
+        <p id="template-name-error" className="field-error" role="alert" data-testid="template-name-error">
+          {name.trim() ? error : null}
+        </p>
         <footer className="dialog-actions">
           <button type="button" className="button" onClick={onCancel}>
             취소
           </button>
-          <button type="submit" className="button primary" disabled={!name.trim()} data-testid="template-name-save">
+          <button type="submit" className="button primary" disabled={!!error} data-testid="template-name-save">
             저장
           </button>
         </footer>

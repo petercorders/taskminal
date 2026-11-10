@@ -71,7 +71,8 @@ export type Action =
   | { type: 'template/add'; template: Template }
   | { type: 'template/replace'; id: Id; name: string; tabs: Template['tabs'] }
   /** 탭 "+ ▾" — 템플릿의 탭을 붙인다. ids 는 부르는 쪽이 templateIdCount 개 만들어 넘긴다 */
-  | { type: 'tab/add-template'; taskId: Id; templateId: Id; ids: Id[] }
+  /** 템플릿은 id 를 만든 쪽이 본 그대로 싣는다 — 그 사이 편집기로 바뀐 템플릿을 다시 찾으면 id 수가 어긋난다 */
+  | { type: 'tab/add-template'; taskId: Id; template: Template; ids: Id[] }
   /** 템플릿 시작 명령을 셸에 보냈다 → 다시 돌지 않게 */
   | { type: 'pane/command-sent'; paneId: Id }
   | { type: 'task/edit'; id: Id; patch: TaskEdit }
@@ -173,11 +174,9 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'template/replace':
       return replaceTemplate(state, action.id, { name: action.name, tabs: action.tabs })
     case 'tab/add-template': {
-      const template = state.settings.templates.find((t) => t.id === action.templateId)
-      if (!template) return state
       const ids = [...action.ids]
       return updateTask(state, action.taskId, (t) =>
-        addTemplateTabs(t, template, () => {
+        addTemplateTabs(t, action.template, () => {
           const id = ids.shift()
           if (id === undefined) throw new Error('tab/add-template: id 가 모자랍니다 (templateIdCount)')
           return id

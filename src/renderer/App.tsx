@@ -7,7 +7,7 @@ import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
-import type { NewTaskInput, NotifyKind, Task } from '../shared/types'
+import type { NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
@@ -82,7 +82,8 @@ export function App() {
   const [pendingReveal, setPendingReveal] = useState<{ paneId: string; line: number; query: string } | null>(null)
   const [removing, setRemoving] = useState<Task | null>(null)
   // 이 일감(tabId null) · 탭을 템플릿으로 저장 — 이름을 묻는 중
-  const [savingTemplate, setSavingTemplate] = useState<{ taskId: string; tabId: string | null } | null>(null)
+  // 연 순간의 탭/일감을 템플릿으로 떠 둔다 — 대화상자가 열린 동안 그 탭이 닫혀도 본 것을 저장하고 제목도 바뀌지 않게
+  const [savingTemplate, setSavingTemplate] = useState<{ what: string; initialName: string; template: Template } | null>(null)
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
   // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
   const [confirming, setConfirming] = useState<
@@ -266,14 +267,18 @@ export function App() {
   const addTemplateTab = (taskId: string, templateId: string) => {
     const template = state.settings.templates.find((t) => t.id === templateId)
     if (!template) return
-    dispatch({ type: 'tab/add-template', taskId, templateId, ids: Array.from({ length: templateIdCount(template) }, newId) })
+    dispatch({ type: 'tab/add-template', taskId, template, ids: Array.from({ length: templateIdCount(template) }, newId) })
     refocus()
   }
+  const openSaveTemplate = (task: Task, tabId: string | null) => {
+    const tab = tabId ? task.tabs.find((t) => t.id === tabId) : undefined
+    if (tabId && !tab) return
+    const template = tab ? tabToTemplate(task, tab.id, '', newId)! : taskToTemplate(task, '', newId)
+    setSavingTemplate({ what: tab ? '탭' : '일감', initialName: tab ? tabLabel(task, tab) : task.name, template })
+  }
   const saveTemplate = (name: string) => {
-    const target = savingTemplate
-    const task = state.tasks.find((t) => t.id === target?.taskId)
-    const template = task && (target!.tabId ? tabToTemplate(task, target!.tabId, name, newId) : taskToTemplate(task, name, newId))
-    if (template) dispatch({ type: 'template/add', template })
+    // 이름은 대화상자가 templateNameError 로 막는다
+    if (savingTemplate) dispatch({ type: 'template/add', template: { ...savingTemplate.template, name: name.trim() } })
     closeDialogs()
   }
 
@@ -487,7 +492,7 @@ export function App() {
           onEdit={(id, patch) => dispatch({ type: 'task/edit', id, patch })}
           onToggleGroup={(id) => dispatch({ type: 'group/toggle', id })}
           onSettings={() => runCommand('settings')}
-          onSaveTemplate={(task) => setSavingTemplate({ taskId: task.id, tabId: null })}
+          onSaveTemplate={(task) => openSaveTemplate(task, null)}
           onMenuClosed={refocus}
         />
         <main className="workspace">
@@ -515,7 +520,7 @@ export function App() {
                   onSplit={(dir) => dispatch({ type: 'pane/split', taskId: task.id, dir, paneId: newId() })}
                   templates={state.settings.templates}
                   onAddTemplate={(id) => addTemplateTab(task.id, id)}
-                  onSaveTemplate={(tabId) => setSavingTemplate({ taskId: task.id, tabId })}
+                  onSaveTemplate={(tabId) => openSaveTemplate(task, tabId)}
                 />
                 {task.tabs.map((tab) => {
                   const tabActive = tab.id === task.activeTabId
@@ -587,20 +592,9 @@ export function App() {
       )}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
       {paletteOpen && <Palette state={state} shortcuts={shortcuts} onRun={runPaletteItem} onClose={closeDialogs} />}
-      {savingTemplate &&
-        (() => {
-          const task = state.tasks.find((t) => t.id === savingTemplate.taskId)
-          const tab = task?.tabs.find((t) => t.id === savingTemplate.tabId)
-          if (!task) return null
-          return (
-            <TemplateNameDialog
-              what={tab ? '탭' : '일감'}
-              initialName={tab ? tabLabel(task, tab) : task.name}
-              onSave={saveTemplate}
-              onCancel={closeDialogs}
-            />
-          )
-        })()}
+      {savingTemplate && (
+        <TemplateNameDialog what={savingTemplate.what} initialName={savingTemplate.initialName} onSave={saveTemplate} onCancel={closeDialogs} />
+      )}
       {removing && (
         <ConfirmDialog
           title="일감 지우기"

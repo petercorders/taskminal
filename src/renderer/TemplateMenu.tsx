@@ -37,8 +37,8 @@ export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSav
     items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
   }
 
-  const item = (label: string, onClick: () => void, disabled = false, testId?: string) => (
-    <button key={label} type="button" role="menuitem" className="menu-item" onClick={onClick} disabled={disabled} tabIndex={-1} data-testid={testId}>
+  const item = (key: string, label: string, onClick: () => void, disabled = false, testId?: string) => (
+    <button key={key} type="button" role="menuitem" className="menu-item" onClick={onClick} disabled={disabled} tabIndex={-1} data-testid={testId}>
       <span className="menu-check" aria-hidden />
       {label}
     </button>
@@ -50,15 +50,16 @@ export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSav
         <div className="menu-heading" role="presentation">
           템플릿 탭 열기
         </div>
-        {templates.map((t) => item(`${t.name}`, () => onPick(t.id)))}
+        {/* 같은 이름 템플릿이 둘일 수 있다 — 키는 id */}
+        {templates.map((t) => item(t.id, t.name, () => onPick(t.id)))}
         {templates.length === 0 && (
           <div className="menu-heading" role="presentation">
             템플릿이 없습니다
           </div>
         )}
         <div className="menu-sep" role="separator" />
-        {item('이 탭을 템플릿으로 저장…', onSaveTab, !hasTab)}
-        {item('이 일감을 템플릿으로 저장…', onSaveTask)}
+        {item('save-tab', '이 탭을 템플릿으로 저장…', onSaveTab, !hasTab)}
+        {item('save-task', '이 일감을 템플릿으로 저장…', onSaveTask)}
       </div>
     </div>
   )

@@ -86,7 +86,10 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
 
     // 시작 명령: 첫 프롬프트(셸 통합의 OSC 133;A — 사용자 .zshrc 를 다 읽은 뒤)에 한 번. 신호가 없으면 START_FALLBACK_MS 뒤에
     // (셸은 그 전에 온 입력도 줄 버퍼에 두었다 읽는다). 셸을 못 띄웠으면 보내지 않고 남겨 둔다.
+    // 신호 없이 기다리는 동안 사용자가 이미 치기 시작했으면 친 글 뒤에 붙이지 않는다 — 남겨 두고 다음 프롬프트 신호 · 다음 실행에.
     let startTimer: ReturnType<typeof setTimeout> | undefined
+    let typed = false
+    let disposed = false
     const sendStart = () => {
       const { command, onSent } = startRef.current
       clearTimeout(startTimer)
@@ -136,6 +139,8 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     const selection = term.onSelectionChange(() => {
       if (settingsRef.current.copyOnSelect && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
     })
+    // 키를 친 것만 센다 — onData 는 터미널 질의에 xterm 이 스스로 내는 답에도 불린다
+    const keys = term.onKey(() => (typed = true))
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
       for (const part of splitForWrite(data)) pty.write(paneId, part)
@@ -145,7 +150,9 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     fitNow()
     pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
       () => {
-        if (startRef.current.command) startTimer = setTimeout(sendStart, s.integration ? START_FALLBACK_MS : 0)
+        // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
+        if (disposed || !startRef.current.command) return
+        startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
       },
       (error: unknown) => {
         term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
@@ -195,10 +202,12 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     })
 
     return () => {
+      disposed = true
       observer.disconnect()
       cancelAnimationFrame(frame)
       clearTimeout(startTimer)
       input.dispose()
+      keys.dispose()
       selection.dispose()
       for (const d of oscs) d.dispose()
       offData()

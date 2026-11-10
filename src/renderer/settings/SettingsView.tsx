@@ -113,12 +113,17 @@ const NOTIFY_ROWS: Record<NotifyKind, { title: string; desc: string }> = {
 }
 
 /** 설정 창(⌘,) — 앱 안의 화면. 바꾸면 바로 상태에 반영되고 4단계의 자동 저장으로 저장된다. Esc 로 돌아간다. */
+/** 편집기를 새 템플릿으로 연다 — 템플릿 id 와 겹치지 않는 값 */
+const NEW_TEMPLATE = '\u0000new'
+
 export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Props) {
   const s = state.settings
   const [section, setSection] = useState<SectionId>('general')
   // JSON 편집기: 템플릿 id · 'new'(새 템플릿)
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
   const editedTemplate = s.templates.find((t) => t.id === editingTemplate) ?? null
+  // 고치던 템플릿이 그 사이 사라졌으면 편집기를 닫는다 — '새 템플릿' 으로 바뀌어 사본을 만들지 않게
+  const editorOpen = editingTemplate === NEW_TEMPLATE || editedTemplate !== null
   const [query, setQuery] = useState('')
   const [capturing, setCapturing] = useState<AppCommand | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -522,7 +527,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
             ))}
             {s.templates.length === 0 && <li className="manage-empty">템플릿이 없습니다</li>}
           </ul>
-          <button type="button" className="button" onClick={() => setEditingTemplate('new')}>
+          <button type="button" className="button" onClick={() => setEditingTemplate(NEW_TEMPLATE)}>
             + 새 템플릿
           </button>
         </Row>
@@ -582,7 +587,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
           </div>
         </QueryContext.Provider>
       </div>
-      {editingTemplate && (
+      {editorOpen && (
         <TemplateEditor
           template={editedTemplate}
           onSave={(value) => {
