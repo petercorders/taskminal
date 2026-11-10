@@ -350,6 +350,11 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(() => {
+    // 개발 실행 Dock 아이콘 — 패키징본은 Info.plist 의 icon.icns 를 쓴다
+    if (!app.isPackaged) {
+      const icon = join(app.getAppPath(), 'resources', 'icon', 'icon.png')
+      if (existsSync(icon)) app.dock?.setIcon(icon)
+    }
     installAppMenu()
     mainWindow = createWindow()
     // macOS: Dock 아이콘을 누르면 창을 다시 만든다.

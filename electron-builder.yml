@@ -1,0 +1,28 @@
+# 14단계 패키징 — `npm run package` (빌드 → .app → 정적 검사). 서명 · 공증 · dmg 는 하지 않는다(개인 설치용).
+appId: io.peterbong.taskminal
+productName: Taskminal
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+  # 이 앱은 arm64 mac 만 — 다른 플랫폼의 node-pty 미리 빌드는 넣지 않는다
+  - "!node_modules/node-pty/prebuilds/{win32-*,darwin-x64}/**"
+# 네이티브 모듈 · spawn-helper 는 asar 안에서 실행할 수 없다
+asarUnpack:
+  - node_modules/node-pty/**
+# node-pty 는 N-API 미리 빌드(prebuilds/darwin-arm64)를 쓴다 — 다시 컴파일하지 않는다
+npmRebuild: false
+# 셸 통합 시작 파일 — zsh 가 직접 읽으므로 asar 밖 Resources/shell/zsh 에 (main 이 app.isPackaged 면 여기를 본다).
+# 점 파일(.zshrc …)도 들어간다(electron-builder 의 기본 거르기가 점 파일을 포함 — 변이로 확인, check-package 가 본다)
+extraResources:
+  - from: resources/shell
+    to: shell
+afterPack: scripts/after-pack.cjs
+mac:
+  target:
+    - target: dir
+      arch: [arm64]
+  icon: resources/icon/icon.icns
+  category: public.app-category.developer-tools
+  identity: null
