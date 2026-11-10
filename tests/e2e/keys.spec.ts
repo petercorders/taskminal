@@ -1,7 +1,8 @@
 import { _electron as electron, expect, test, type CDPSession, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { SHORTCUTS } from '../../src/shared/keymap'
 import { seedState } from './helpers'
 
 // 8단계: 단축키 · 앱 메뉴 · 복사/붙여넣기 · 한글 조합.
@@ -131,11 +132,15 @@ test('⌘D · ⇧⌘D 로 나누고 ⌘] · ⌘[ 로 pane 을 돌고, ⌘W 는 �
   expect(await whereTyping()).toBe(next) // 남은 pane 에 포커스
 })
 
-test('⌘W 를 누르고 있어도(키 반복) pane 하나만 닫는다', async () => {
-  await win.keyboard.press('Meta+KeyD')
+test('⌘W · ⌘D · ⌘T 를 누르고 있어도(키 반복) 한 번만', async () => {
+  const cdp = await win.context().newCDPSession(win)
+  await metaKey(cdp, 'd', 'KeyD', 68)
+  await metaKey(cdp, 'd', 'KeyD', 68, { autoRepeat: true })
+  await metaKey(cdp, 'd', 'KeyD', 68, { autoRepeat: true })
+  await metaKey(cdp, 't', 'KeyT', 84, { autoRepeat: true }) // 반복 키만 오면 새 탭도 없다
   await win.keyboard.press('Meta+KeyD')
   await expect(slots()).toHaveCount(3)
-  const cdp = await win.context().newCDPSession(win)
+  await expect(tabs()).toHaveCount(1)
   await metaKey(cdp, 'w', 'KeyW', 87)
   await metaKey(cdp, 'w', 'KeyW', 87, { autoRepeat: true })
   await metaKey(cdp, 'w', 'KeyW', 87, { autoRepeat: true })
@@ -230,6 +235,36 @@ test('대화상자가 열려 있으면 단축키가 뒤의 화면을 바꾸지 �
   await expect(tabs()).toHaveCount(2)
 })
 
+test('탭 이름을 고치는 중에는 ⌘W · ⌘K 같은 단축키가 뒤의 터미널을 건드리지 않는다', async () => {
+  await typeHere('echo KEEP_$((3*3))')
+  await waitText('pane-a', /KEEP_9/)
+  await tabs().first().getByRole('tab').dblclick()
+  const input = win.getByRole('textbox', { name: '탭 이름' })
+  await expect(input).toBeFocused()
+  await win.keyboard.press('Meta+KeyW')
+  await win.keyboard.press('Meta+KeyK')
+  await win.keyboard.press('Meta+KeyD')
+  await expect(input).toBeFocused()
+  await expect(slots()).toHaveCount(1)
+  await expect.poll(() => screenOf('pane-a')).toMatch(/KEEP_9/)
+  await win.keyboard.press('Escape')
+})
+
+test('저장 파일을 읽지 못한 실행에서도 단축키는 된다', async () => {
+  await launched!.close()
+  launched = undefined
+  chmodSync(join(userData, 'state.json'), 0o000) // 읽기 실패 → 이번 실행은 저장하지 않음
+  try {
+    app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
+    win = await app.firstWindow()
+    await expect(win.getByTestId('state-notice')).toContainText('읽지 못해')
+    await win.keyboard.press('Meta+KeyN')
+    await expect(win.getByRole('dialog')).toBeVisible()
+  } finally {
+    chmodSync(join(userData, 'state.json'), 0o644)
+  }
+})
+
 test('앱 메뉴: 항목을 누르면 같은 명령, 단축키 표시는 키 표와 같고, 새로 고침은 없다', async () => {
   const info = await app.evaluate(({ Menu }) => {
     const all: Electron.MenuItem[] = []
@@ -240,8 +275,11 @@ test('앱 메뉴: 항목을 누르면 같은 명령, 단축키 표시는 키 표
       roles: all.map((i) => i.role ?? ''),
       newTab: { accel: t.accelerator, registered: t.registerAccelerator },
       roleAccels: all.filter((i) => i.role).map((i) => `${i.role}:${i.accelerator ?? ''}`),
+      commands: all.filter((i) => i.id && !i.role).map((i) => `${i.id}:${i.accelerator}`),
     }
   })
+  // 키 표의 명령이 모두 메뉴에 한 번씩, 같은 단축키로 (표와 메뉴가 따로 놀지 않게)
+  expect([...info.commands].sort()).toEqual(SHORTCUTS.map((s) => `${s.command}:${s.accel}`).sort())
   expect(info.roles).not.toContain('reload')
   expect(info.roles).not.toContain('forcereload')
   expect(info.roles).toEqual(expect.arrayContaining(['copy', 'paste', 'close']))

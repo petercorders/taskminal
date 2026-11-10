@@ -1,3 +1,4 @@
+import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
@@ -38,7 +39,7 @@ export function defaultSettings(): Settings {
         tabs: [{ layout: { split: 'right', ratio: 0.6, a: { pane: { command: 'claude' } }, b: { pane: {} } } }],
       },
     ],
-    fontSize: 13,
+    fontSize: FONT_DEFAULT,
     shell: null,
   }
 }
@@ -411,7 +412,7 @@ function parseSettings(v: unknown): Settings {
     statuses: statuses.length ? statuses : d.statuses,
     groups: Array.isArray(v.groups) ? uniqueById(v.groups.map(parseGroup)) : d.groups,
     templates: parseTemplates(v.templates, d.templates),
-    fontSize: typeof fs === 'number' && Number.isFinite(fs) && fs >= 8 && fs <= 32 ? fs : d.fontSize,
+    fontSize: Number.isInteger(fs) && (fs as number) >= FONT_MIN && (fs as number) <= FONT_MAX ? (fs as number) : d.fontSize,
     shell: isId(v.shell) ? v.shell : null,
   }
 }

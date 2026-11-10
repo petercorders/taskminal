@@ -85,19 +85,20 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
     })
 
     // 창 가장자리를 끄는 동안 프레임마다 SIGWINCH 를 보내지 않게, 한 프레임에 한 번만 맞춘다.
+    const refit = () => {
+      if (fitNow()) pty.resize(paneId, term.cols, term.rows)
+    }
     let frame = 0
     const observer = new ResizeObserver(() => {
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0
-        if (fitNow()) pty.resize(paneId, term.cols, term.rows)
+        refit()
       })
     })
     observer.observe(host)
     termRef.current = term
-    refitRef.current = () => {
-      if (fitNow()) pty.resize(paneId, term.cols, term.rows)
-    }
+    refitRef.current = refit
     terminals.set(paneId, { clear: () => term.clear() })
 
     return () => {

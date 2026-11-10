@@ -387,6 +387,7 @@ describe('normalizeState', () => {
     expect(out.settings.groups).toEqual([{ id: 'g', name: '묶음' }])
     expect(normalizeState({ settings: { fontSize: 8 } }, gen()).settings.fontSize).toBe(8)
     expect(normalizeState({ settings: { fontSize: 32.5 } }, gen()).settings.fontSize).toBe(13)
+    expect(normalizeState({ settings: { fontSize: 13.5 } }, gen()).settings.fontSize).toBe(13) // ⌘= ⌘− 는 정수만 만든다
   })
 
   test('설정: 잘못된 템플릿은 버리고 비율은 0.1~0.9 로', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { commandForKey, isAppCommand, SHORTCUTS, stepFontSize, type KeyLike } from '../../src/shared/keymap'
+import { commandForKey, isAppCommand, repeatable, SHORTCUTS, stepFontSize, type KeyLike } from '../../src/shared/keymap'
 
 const key = (code: string, mods: Partial<KeyLike> = {}, k = ''): KeyLike => ({
   key: k,
@@ -50,10 +50,14 @@ describe('commandForKey', () => {
     expect(commandForKey(key('KeyD', { shiftKey: true }, 'ㅇ'))).toBe('split-down')
   })
 
-  it('⌘ 없음 · ⌃ 함께 · 조합 중 · 표에 없는 키는 null (셸이나 네이티브 메뉴 몫)', () => {
+  it('한글을 조합하는 중에 누른 ⌘ 단축키도 버리지 않는다 (⌘ 없는 키는 어차피 단축키가 아니다)', () => {
+    expect(commandForKey(key('KeyT', { isComposing: true }, 'Process'))).toBe('new-tab')
+    expect(commandForKey(key('KeyT', { isComposing: true, metaKey: false }, 'Process'))).toBeNull()
+  })
+
+  it('⌘ 없음 · ⌃ 함께 · 표에 없는 키는 null (셸이나 네이티브 메뉴 몫)', () => {
     expect(commandForKey(key('KeyT', { metaKey: false }))).toBeNull()
     expect(commandForKey(key('KeyT', { ctrlKey: true }))).toBeNull()
-    expect(commandForKey(key('KeyT', { isComposing: true }))).toBeNull()
     expect(commandForKey(key('KeyC'))).toBeNull() // 복사는 네이티브 role
     expect(commandForKey(key('KeyV'))).toBeNull()
     expect(commandForKey(key('KeyT', { altKey: true }))).toBeNull()
@@ -86,6 +90,13 @@ describe('SHORTCUTS', () => {
     for (const s of SHORTCUTS) expect(isAppCommand(s.command)).toBe(true)
     expect(isAppCommand('reload')).toBe(false)
     expect(isAppCommand(42)).toBe(false)
+  })
+})
+
+describe('repeatable', () => {
+  it('만들거나 지우는 명령은 키 반복으로 되풀이하지 않는다, 옮기기 · 글꼴은 된다', () => {
+    for (const c of ['new-tab', 'new-task', 'split-right', 'split-down', 'close-pane'] as const) expect(repeatable(c), c).toBe(false)
+    for (const c of ['next-pane', 'next-tab', 'font-bigger', 'next-task'] as const) expect(repeatable(c), c).toBe(true)
   })
 })
 

@@ -51,11 +51,16 @@ for (const s of SHORTCUTS) {
 }
 BY_KEY.set(signature('Equal', true, false), 'font-bigger') // ⌘+ (= ⇧⌘=)
 
-/** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. 조합 중 · ⌃ 함께면 null. */
+/** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. ⌃ 함께면 null.
+ *  한글을 조합하는 중(isComposing)이어도 ⌘ 가 눌렸으면 단축키다 — ⌘ 없는 조합 키는 처음부터 해당이 없다. */
 export function commandForKey(ev: KeyLike): AppCommand | null {
-  if (!ev.metaKey || ev.ctrlKey || ev.isComposing) return null
+  if (!ev.metaKey || ev.ctrlKey) return null
   return BY_KEY.get(signature(ev.code, ev.shiftKey, ev.altKey)) ?? null
 }
+
+// 누르고 있으면(키 반복) 되풀이해도 되는 명령은 옮기기 · 글꼴뿐 — 만들거나 지우는 명령은 한 번만(셸이 여럿 뜨거나 닫히지 않게)
+const ONCE: ReadonlySet<AppCommand> = new Set(['new-task', 'new-tab', 'split-right', 'split-down', 'close-pane', 'clear'])
+export const repeatable = (command: AppCommand): boolean => !ONCE.has(command)
 
 export const FONT_MIN = 8
 export const FONT_MAX = 32

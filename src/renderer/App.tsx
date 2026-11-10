@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { paneIds } from '../shared/layout'
-import { commandForKey, isAppCommand, stepFontSize, type AppCommand } from '../shared/keymap'
+import { commandForKey, isAppCommand, repeatable, stepFontSize, type AppCommand } from '../shared/keymap'
 import { cleanExit } from '../shared/pty'
 import { createTask, emptyState } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
@@ -137,7 +137,8 @@ export function App() {
   // 앱 명령 하나 — 단축키(아래 keydown)와 앱 메뉴(main → onCommand)가 같은 길로 온다.
   const runCommand = (command: AppCommand) => {
     // 대화상자가 열려 있으면 뒤의 화면을 바꾸지 않는다 (⌘T 가 대화상자 뒤에서 탭을 만들지 않게)
-    if (dialogOpen || load.phase !== 'ready') return
+    // 읽기가 끝나기 전에는 상태가 비어 있어 받지 않는다. 읽기에 실패한 실행(저장만 안 함)에서는 된다.
+    if (dialogOpen || load.phase === 'loading') return
     const task = activeTask
     const tab = task?.tabs.find((t) => t.id === task.activeTabId)
     const font = (how: 'bigger' | 'smaller' | 'reset') =>
@@ -165,7 +166,8 @@ export function App() {
         return refocus()
       case 'split-right':
       case 'split-down':
-        return dispatch({ type: 'pane/split', taskId: task.id, dir: command === 'split-right' ? 'right' : 'down', paneId: newId() })
+        dispatch({ type: 'pane/split', taskId: task.id, dir: command === 'split-right' ? 'right' : 'down', paneId: newId() })
+        return refocus()
       case 'next-tab':
       case 'prev-tab':
         dispatch({ type: 'tab/cycle', taskId: task.id, step: command === 'next-tab' ? 1 : -1 })
@@ -200,11 +202,13 @@ export function App() {
   useEffect(() => {
     // capture 단계에서 받는다. xterm 은 ⌘ 가 눌린 키를 셸로 보내지 않으므로(@xterm Keyboard.ts) 전파는 막지 않는다.
     const onKey = (e: KeyboardEvent) => {
+      // 글을 고치는 칸(탭 이름 · 대화상자)에서는 ⌘ 키가 그 칸의 편집 몫 — ⌘W 가 뒤의 셸을 끝내지 않게. xterm 의 입력칸은 제외.
+      const t = e.target
+      if (t instanceof HTMLInputElement || (t instanceof HTMLTextAreaElement && !t.classList.contains('xterm-helper-textarea'))) return
       const command = commandForKey(e)
       if (!command) return
       e.preventDefault()
-      // pane 닫기는 누르고 있어도 한 번만 — 키 반복으로 여러 pane 을 닫지 않게
-      if (command === 'close-pane' && e.repeat) return
+      if (e.repeat && !repeatable(command)) return
       runCommandRef.current(command)
     }
     window.addEventListener('keydown', onKey, true)
