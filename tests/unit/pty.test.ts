@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPaneId, MAX_WRITE, OutputBatcher, validSize, validWrite } from '../../src/shared/pty'
+import { isPaneId, MAX_WRITE, OutputBatcher, shellEnv, splitForWrite, validSize, validWrite } from '../../src/shared/pty'
 
 describe('isPaneId', () => {
   it('영숫자 · _ · - 1~64자만 받는다', () => {
@@ -116,5 +116,59 @@ describe('OutputBatcher', () => {
     expect(sent).toEqual([['p', 'bye']])
     clock.runAll()
     expect(sent).toHaveLength(1)
+  })
+})
+
+describe('splitForWrite', () => {
+  it('상한 이하면 그대로 한 조각', () => {
+    expect(splitForWrite('abc', 4)).toEqual(['abc'])
+    expect(splitForWrite('', 4)).toEqual([])
+  })
+  it('상한보다 길면 나눠서 이어 붙이면 원문과 같다', () => {
+    const parts = splitForWrite('abcdefghij', 4)
+    expect(parts).toEqual(['abcd', 'efgh', 'ij'])
+  })
+  it('서로게이트 쌍(이모지)을 가르지 않는다', () => {
+    const text = 'abc😀def' // '😀' 는 두 코드 단위, 3·4 번째 자리
+    const parts = splitForWrite(text, 4)
+    expect(parts.join('')).toBe(text)
+    for (const p of parts) expect(p).not.toMatch(/^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/)
+  })
+})
+
+describe('shellEnv', () => {
+  it('터미널 변수를 넣고 앱 · Electron 내부 변수는 빼고, 사용자 변수는 둔다', () => {
+    const env = shellEnv({
+      PATH: '/usr/bin',
+      HOME: '/Users/x',
+      LANG: 'ko_KR.UTF-8',
+      ELECTRON_RUN_AS_NODE: '1',
+      ELECTRON_RENDERER_URL: 'http://localhost:5173',
+      NODE_OPTIONS: '--inspect',
+      TASKMINAL_USER_DATA: '/tmp/x',
+      UNDEF: undefined,
+    })
+    expect(env).toEqual({
+      PATH: '/usr/bin',
+      HOME: '/Users/x',
+      LANG: 'ko_KR.UTF-8',
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      TERM_PROGRAM: 'Taskminal',
+    })
+  })
+  it('LANG 이 없으면 UTF-8 을 넣는다 (Finder 실행)', () => {
+    expect(shellEnv({}).LANG).toBe('en_US.UTF-8')
+  })
+  it('UTF-8 이 아닌 LC_ALL · LC_CTYPE · LANG 은 UTF-8 로 바로잡는다', () => {
+    const env = shellEnv({ LANG: 'C', LC_ALL: 'C', LC_CTYPE: 'POSIX', LC_TIME: 'C' })
+    expect(env.LANG).toBe('en_US.UTF-8')
+    expect(env.LC_ALL).toBeUndefined()
+    expect(env.LC_CTYPE).toBeUndefined()
+    expect(env.LC_TIME).toBe('C') // 글자 인코딩과 상관없는 것은 그대로
+  })
+  it('UTF-8 인 LC_ALL 은 그대로 둔다', () => {
+    const env = shellEnv({ LANG: 'C', LC_ALL: 'ko_KR.UTF-8' })
+    expect(env.LC_ALL).toBe('ko_KR.UTF-8')
   })
 })

@@ -48,3 +48,36 @@ export class OutputBatcher {
     this.pending.delete(paneId)
   }
 }
+
+/** 큰 붙여넣기를 MAX_WRITE 이하 조각으로 나눈다. 서로게이트 쌍(이모지 등)은 가르지 않는다. */
+export function splitForWrite(data: string, max = MAX_WRITE): string[] {
+  const parts: string[] = []
+  let i = 0
+  while (i < data.length) {
+    let end = Math.min(i + max, data.length)
+    const last = data.charCodeAt(end - 1)
+    if (end < data.length && last >= 0xd800 && last <= 0xdbff) end -= 1 // 높은 서로게이트에서 끊기면 하나 앞에서
+    parts.push(data.slice(i, end))
+    i = end
+  }
+  return parts
+}
+
+const isUtf8 = (v: string | undefined): boolean => v !== undefined && /utf-?8/i.test(v)
+
+/** 셸에 넘길 환경. 앱 · Electron 내부 변수는 빼고, 글자 인코딩은 UTF-8 이 되게 바로잡는다. */
+export function shellEnv(base: Record<string, string | undefined>): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [k, v] of Object.entries(base)) {
+    if (v === undefined) continue
+    if (k.startsWith('ELECTRON_') || k.startsWith('TASKMINAL_') || k === 'NODE_OPTIONS') continue
+    env[k] = v
+  }
+  env['TERM'] = 'xterm-256color'
+  env['COLORTERM'] = 'truecolor'
+  env['TERM_PROGRAM'] = 'Taskminal'
+  // 글자 인코딩은 LC_ALL > LC_CTYPE > LANG 순으로 정해진다. UTF-8 이 아니면 한글이 깨진다(Finder 실행 · LC_ALL=C).
+  for (const k of ['LC_ALL', 'LC_CTYPE']) if (env[k] !== undefined && !isUtf8(env[k])) delete env[k]
+  if (!isUtf8(env['LANG'])) env['LANG'] = 'en_US.UTF-8'
+  return env
+}

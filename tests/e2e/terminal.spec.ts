@@ -108,3 +108,45 @@ test('종료 경로 ④ 렌더러 충돌: 셸이 남지 않는다', async () => 
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.forcefullyCrashRenderer())
   await expectGone(pids)
 })
+
+test('새로 고침 뒤 옛 셸이 끝나며 낸 출력이 새 터미널에 섞이지 않는다', async () => {
+  // 옛 셸이 SIGHUP 을 받으면 글자를 찍고 끝나게 한다.
+  // 새 셸이 뜬 뒤에 찍히도록 0.5초 늦게.
+  await run(`trap 'sleep 0.5; echo GHOST_$((40+2)); exit' HUP; echo READY_$((1+1))`)
+  await waitFor(/READY_2/)
+  await win.reload()
+  await run('echo FRESH_$((2+3))')
+  await waitFor(/FRESH_5/)
+  await win.waitForTimeout(1000) // 옛 셸의 마지막 출력이 늦게 와도 보이게
+  expect(await screenText()).not.toContain('GHOST_42')
+})
+
+test('SIGHUP 을 무시하는 셸도 창을 닫으면 끝난다', async () => {
+  await run(`trap '' HUP; echo PIDF $$`)
+  const m = await waitFor(/PIDF (\d+)/)
+  const pid = Number(m[1])
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close())
+  await expectGone([pid])
+})
+
+test('SIGHUP 을 무시하는 셸도 앱을 끝내면 남지 않는다', async () => {
+  await run(`trap '' HUP; echo PIDG $$`)
+  const m = await waitFor(/PIDG (\d+)/)
+  const pid = Number(m[1])
+  await app.close()
+  launched = undefined
+  await expectGone([pid])
+})
+
+test('앱을 끝낸 뒤 다시 띄우면 새 셸이 곧바로 응답한다', async () => {
+  // 종료 때 셸을 SIGKILL 하면 zsh 가 정리 없이 죽어 다음 셸이 약 10초 늦게 떴다(3단계 리뷰 반영 중 측정).
+  await run('echo FIRST_$((3*3))')
+  await waitFor(/FIRST_9/)
+  await app.close()
+  app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
+  win = await app.firstWindow()
+  const t0 = Date.now()
+  await run('echo AGAIN_$((4*4))')
+  await waitFor(/AGAIN_16/)
+  expect(Date.now() - t0).toBeLessThan(4000)
+})
