@@ -23,6 +23,8 @@ export interface StateApi {
 
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
+  /** macOS 폴더 선택 대화상자. 취소하면 null */
+  pickFolder(): Promise<string | null>
   pty: PtyApi
   state: StateApi
 }

@@ -35,7 +35,7 @@ test('손상된 저장 파일로 시작해도 뜨고, 원본은 .bak 으로 남�
   writeFileSync(statePath(), '{nope')
   const { win } = await launch()
   await expect(win.getByTestId('state-notice')).toContainText('손상')
-  await expect(win.locator('.xterm-rows')).toBeVisible() // 터미널도 뜬다
+  await expect(win.getByTestId('empty-view')).toBeVisible() // 빈 화면도 뜬다
   await win.screenshot({ path: 'test-results/state-corrupt.png' })
 
   const baks = readdirSync(userData).filter((f) => /^state\.json\..+\.bak$/.test(f))
@@ -98,7 +98,7 @@ test('새로 고침해도 저장된 일감이 빈 상태로 덮이지 않는다'
     api.state.save(state)
   })
   await win.reload() // 새 화면은 읽기가 끝나기 전에 빈 상태를 저장하려 한다
-  await expect(win.locator('.xterm-rows')).toBeVisible()
+  await expect(win.getByTestId('empty-view')).toBeVisible()
   const loaded = await win.evaluate(() => (globalThis as unknown as Api).taskminal.state.load())
   expect(loaded.state.settings.fontSize).toBe(19)
 })
@@ -113,7 +113,7 @@ test('아무것도 바꾸지 않으면 시작할 때 저장 파일을 다시 쓰
   writeFileSync(statePath(), compact)
 
   const { app, win } = await launch()
-  await expect(win.locator('.xterm-rows')).toBeVisible()
+  await expect(win.getByTestId('empty-view')).toBeVisible()
   await win.waitForTimeout(700) // 디바운스(300ms)보다 길게
   await quit(app)
   expect(readFileSync(statePath(), 'utf8')).toBe(compact)

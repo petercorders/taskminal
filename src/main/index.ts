@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
@@ -179,6 +179,14 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (bytes > MAX_STATE_BYTES) return
     stateWriter.push(normalizeState(raw, randomUUID))
+  })
+
+  ipcMain.handle(IPC.pickFolder, async (event): Promise<string | null> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = { title: '작업 폴더 선택', properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
+    const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
   })
 
   // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다

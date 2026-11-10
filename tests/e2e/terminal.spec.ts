@@ -2,6 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { seedState } from './helpers'
 
 // 임시 userData 로만 띄운다. 셸은 사용자의 실제 HOME · .zshrc 로 뜬다(로그인 셸).
 let userData: string
@@ -11,6 +12,7 @@ let win: Page
 
 test.beforeEach(async () => {
   userData = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-e2e-')))
+  seedState(userData, [{ id: 'task-1', name: '터미널 시험', paneId: 'pane-1' }]) // 5단계부터 터미널은 일감 안에 있다
   launched = undefined
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
   win = await app.firstWindow()

@@ -41,7 +41,7 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     // contextBridge 는 contextIsolation 이 꺼져 있으면 노출에 실패하므로 키가 보이는 것 자체가 격리의 증거다.
     apiKeys: Object.keys((globalThis as unknown as { taskminal: object }).taskminal),
   }))
-  expect(inPage).toEqual({ require: 'undefined', process: 'undefined', apiKeys: ['appInfo', 'pty', 'state'] })
+  expect(inPage).toEqual({ require: 'undefined', process: 'undefined', apiKeys: ['appInfo', 'pickFolder', 'pty', 'state'] })
 
   // 설정값이 아니라 실제로 돌고 있는 renderer 프로세스가 OS 샌드박스 안인지 본다.
   const sandboxed = await app.evaluate(({ app, BrowserWindow }) => {
