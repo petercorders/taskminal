@@ -66,3 +66,30 @@ e2e `tests/e2e/restore.spec.ts`
 
 ## 하지 않는 것
 - 실행 중이던 명령 다시 돌리기(일부러 안 함) · 다른 호스트(ssh) 폴더 추적 · bash/fish 용 OSC 7 통합(lsof 로 대신) · 스크롤 저장 암호화(파일 권한 0600 + 끄기)
+
+## 결과 (2026-11-10) — 단위까지 확인 · e2e 미실행
+
+**e2e 미실행 (사용자 지시 2026-11-10 "지금 실제 테스트는 하지마")** — 첫 실행을 시작했다가 지시를 받고 멈췄다(결과 없음). 돌려야 할 목록:
+- `tests/e2e/restore.spec.ts` 6개 전부(계획 시험 1~5 · 7): `npm run build && npx playwright test tests/e2e/restore.spec.ts --reporter=line`, 스크린샷 `test-results/restore-after-restart.png` · `restore-less.png` 직접 확인
+- 기존 e2e 전체(`full-check.sh`) — TerminalPane effect 의존성 · 셸을 띄우는 순서(되살리기 load 뒤 spawn)가 바뀌어 모든 터미널 시험이 영향권
+- 계획 시험 6(템플릿 시작 명령이 되살린 화면에서 다시 돌지 않음)은 따로 쓰지 않았다 — 12단계 `templates.spec.ts` 가 그 흐름을 보므로 전체 e2e 로 확인
+
+확인한 것: vitest 257 · typecheck · 경계 · 빌드 · 변이 12/12(setPaneCwd 같은 폴더/빈 경로 · ScrollbackStore live 밖 글 · 바이트 상한 · live 정리 · 0600 · 0700 · paneId 검사 · 상한 넘으면 옛 파일 지움 · 설정 끈 값 · zsh 공백 인코딩 · pane/cwd 반영). zsh OSC 7 은 실제 zsh 로(한글 · 공백 · ; · % 폴더), lsof 는 실제 lsof 로 시험.
+
+계획과 다르게 한 것:
+- 저장 · 읽기 시험을 `ScrollbackStore` 하나에 모으고, lsof 호출은 `src/main/cwd-probe.ts`(`lsofCwds`)로 따로 — PtyManager 는 pid 만 준다(`pids`).
+- appInfo(호스트 · lsof 주기)는 상태를 읽기 전에 먼저 읽는다 — pane 이 마운트되기 전에 호스트가 있어야 첫 OSC 7 을 거르지 않는다.
+- 끄기 전 확인으로 창 닫기를 취소해도 beforeunload 가 먼저 돌아 한 번 저장한다(계획 표는 '저장 안 함') — 해가 없어 그대로 둠.
+- 저장은 상태를 읽은 뒤에만(빈 상태의 live=[] 가 파일을 모두 지우지 않게) — 계획에 없던 조건.
+
+### 리뷰 (/code-review medium) 에서 고친 것 — 커밋 b719c77
+- lsof 가 로캘 없는 환경(Finder 실행)에서 한글 경로를 `\xNN` 글자로 찍어 그대로 저장됨 → `LC_ALL=en_US.UTF-8` (실제 lsof 시험 · 변이 확인)
+- OSC 7 · lsof 의 절대 경로와 `~` 로 쓴 일감 폴더가 달라 cd 없이도 폴더가 바뀐 것으로 저장 · 템플릿에 절대 경로 → `cwdLike`
+- 내려갈 때 마운트된 모든 pane 을 보내 되살리는 중인 빈 화면이 저장 글을 덮을 수 있음 · 끄기가 멈칫 → 바뀐 pane 만
+- 직렬화 실패한 pane 의 '바뀜' 까지 지움 → 성공한 것만
+- 2MB 넘으면 파일을 지움 → 최근 쪽만 남김(`trimToBytes`, 줄 처음부터)
+- main 스레드 동기 읽기 · 쓰기 → 읽기 · 주기 저장은 fs/promises, 내려갈 때만 동기, fsync, 세대 번호로 늦은 옛 저장이 새 글을 덮지 않게(시험 · 변이)
+- 쓰지 않던 `clear` · 겹친 타입 정리
+
+고치지 않은 것: '이전 세션' 줄이 재시작마다 쌓임 — 세션 경계를 보여 주는 표시이고 저장 줄 수 상한(5000)이 오래된 것을 잘라 낸다(다른 터미널 앱의 세션 복원과 같은 동작). StateFile 과 원자적 쓰기 도우미 공유는 하지 않음(파일 하나씩 다른 오류 처리).
+변이: 리뷰 수정 핵심 줄 6개 + lsof 로캘 1개 모두 잡음(처음 1개 못 잡음 → 겹친 검사를 하나로 줄여 잡음).

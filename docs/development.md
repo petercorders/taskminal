@@ -1,14 +1,14 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-10 (13단계 진행 중 · 디자인 차이는 문서로만)
+마지막 갱신: 2026-11-10 (13단계 병합 · e2e 미실행 — 사용자 지시로 앱을 띄우는 시험 보류)
 
 ## 1. 지금 어디까지
 
 | 단계 | 상태 |
 |---|---|
 | 0~12 | 끝, `main` 에 병합 (12단계 = main `3d570ab`) |
-| 13 재시작 복원 | **진행 중** — 브랜치 `stage-13-restore`. 계획 `docs/stages/13-restore.md`. 끝난 것: 계획 · 디자인 차이 문서 · `src/shared/cwd.ts` + `tests/unit/cwd.test.ts`(OSC 7 · lsof 해석, 6개 통과, 아직 커밋 안 함). 다음: 계획의 '순서 1' 나머지(모델 `setPaneCwd` · 설정 `restoreScrollback` 시험) |
+| 13 재시작 복원 | **단위까지 확인 · e2e 미실행** — main 에 병합. 브랜치 이름은 `stage-13`(worktree `~/taskminal-work`, ~/taskminal 의 `stage-13-restore` 는 그 앞 문서 브랜치). e2e 는 사용자 지시(2026-11-10 "지금 실제 테스트는 하지마")로 돌리지 않음 — 돌려야 할 목록은 `docs/stages/13-restore.md` 결과 절 |
 | 14 패키징 · 설치 | 대기 — 아래 6절 메모 |
 | 15 다듬기 | 대기 — 항목마다 따로 계획 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
@@ -30,7 +30,7 @@
 4. 변이 확인 — 새 시험이 핵심 줄을 실제로 잡는지. 시작 전에 "변이 N개 · 예상 M분" 을 말한다.
    목록 파일(탭 구분 `파일⇥원문⇥바꿀 글⇥라벨⇥시험 명령`) → `bash ~/.claude/skills/harness-engineering/stacks/common/scripts/mutation-check.sh --check <목록>` 로 먼저 점검 → `… --batch <목록> npx vitest run`
    e2e 변이의 5번째 칸: `sh -c 'npm run build >/dev/null && npx playwright test tests/e2e/x.spec.ts -g <이름> --reporter=line'`
-5. 전체 검사: `bash ~/.claude/skills/harness-engineering/stacks/electron/scripts/full-check.sh` — 종료 코드 0 통과 · 1 실패 · 3 불안정(실패한 e2e 를 다시 돌려 통과). `| tail` 로 감싸지 않는다(종료 코드가 사라진다). 화면이 바뀐 단계는 `test-results/*.png` 스크린샷을 직접 열어 본다.
+5. 전체 검사: `bash ~/.claude/skills/harness-engineering/stacks/electron/scripts/full-check.sh` — 종료 코드 0 통과 · 1 실패 · 3 불안정(실패한 e2e 를 다시 돌려 통과). 사용자가 앱 실행을 막았으면 `FULL_CHECK_NO_E2E=1` → 종료 코드 4(e2e 미실행) — '통과' 로 쓰지 않는다. `| tail` 로 감싸지 않는다(종료 코드가 사라진다). 화면이 바뀐 단계는 `test-results/*.png` 스크린샷을 직접 열어 본다.
 6. 커밋 → `/code-review medium main...stage-N-…` → 고친 것은 **별도 커밋** → 다시 전체 검사
 7. `docs/plan.md` 그 단계 줄에 `(완료: …)` · 이 문서 1절 갱신 → 커밋 → `git checkout main && git merge --ff-only stage-N-…`
 8. 회고 `/harness-gc electron retro` — retro-collect 출력 끝의 gc 진단(승격 후보 · 승격 후 재발 · 규칙 감사)까지. 도구화 후보는 보고로 끝내지 말고 반영해 실제 입력으로 확인한다.
