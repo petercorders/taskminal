@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Modal } from './Modal'
 import type { NewTaskInput, Settings } from '../shared/types'
 
 export const TASK_COLORS = ['#5b9cf5', '#7ccf8a', '#e5b567', '#e07a7a', '#b48ef0', '#5ec4c4']
@@ -17,19 +18,21 @@ export function NewTaskDialog({ settings, onCreate, onCancel }: Props) {
   const [groupId, setGroupId] = useState<string>('')
   const [color, setColor] = useState<string | null>(TASK_COLORS[0]!)
   const nameRef = useRef<HTMLInputElement>(null)
+  const submitted = useRef(false)
 
   useEffect(() => nameRef.current?.focus(), [])
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault()
+    if (submitted.current) return // Enter 와 ⌘↩ 가 겹쳐도 한 번만
+    submitted.current = true
     onCreate({ name, cwd, templateId: null, statusId, groupId: groupId || null, color })
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    // 한글 조합 중의 Enter 는 글자를 확정하는 키다 — 만들기로 보내지 않는다.
+    if (e.key === 'Enter' && e.metaKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      onCancel()
-    } else if (e.key === 'Enter' && e.metaKey) {
       submit()
     }
   }
@@ -40,8 +43,8 @@ export function NewTaskDialog({ settings, onCreate, onCancel }: Props) {
   }
 
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="new-task-title" onSubmit={submit} onKeyDown={onKeyDown}>
+    <Modal role="dialog" labelledBy="new-task-title" onCancel={onCancel}>
+      <form className="dialog-form" onSubmit={submit} onKeyDown={onKeyDown}>
         <h1 id="new-task-title">새 일감</h1>
 
         <label className="field">
@@ -116,6 +119,6 @@ export function NewTaskDialog({ settings, onCreate, onCancel }: Props) {
           </button>
         </footer>
       </form>
-    </div>
+    </Modal>
   )
 }

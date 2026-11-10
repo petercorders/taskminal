@@ -28,6 +28,8 @@ test.afterEach(async () => {
 
 const row = (name: string) => win.locator(`[data-testid="task-row"][data-task-name="${name}"]`)
 const view = (name: string) => win.locator(`[data-testid="task-view"][data-task-name="${name}"]`)
+// 일감을 고르는 버튼 (같은 줄의 '지우기' 버튼과 구별)
+const selectButton = (name: string) => row(name).locator('.task-main')
 const screenOf = (name: string) => view(name).locator('.xterm-rows').innerText()
 
 async function createTask(name: string, opts: { cwd?: string; group?: string; colorIndex?: number } = {}) {
@@ -72,10 +74,10 @@ test('일감 두 개를 오가도 각 터미널의 출력과 폴더가 남는다
   await waitText('B 일감', /MARK_B_3/)
 
   for (let i = 0; i < 2; i++) {
-    await row('A 일감').getByRole('button', { name: /A 일감/ }).click()
+    await selectButton('A 일감').click()
     await expect(view('A 일감')).toBeVisible()
     await expect(view('B 일감')).toBeHidden()
-    await row('B 일감').getByRole('button', { name: /B 일감/ }).click()
+    await selectButton('B 일감').click()
     await expect(view('B 일감')).toBeVisible()
     await expect(view('A 일감')).toBeHidden()
   }
@@ -146,7 +148,7 @@ test('폴더 선택…: 고르면 칸에 들어가고, 취소하면 그대로', 
 test('껐다 켜면 일감 · 묶음 · 활성 일감이 그대로', async () => {
   await createTask('A 일감')
   await createTask('B 일감', { group: '서버' })
-  await row('A 일감').getByRole('button', { name: /A 일감/ }).click()
+  await selectButton('A 일감').click()
   await expect(view('A 일감')).toBeVisible()
   await app.close()
   launched = undefined
@@ -167,4 +169,48 @@ test('일감이 없으면 빈 화면 안내 — 새 일감 버튼과 Esc', async
   await win.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect(win.getByTestId('task-row')).toHaveCount(0)
+})
+
+test('키보드: Tab 으로 지우기 버튼에 갈 수 있다', async () => {
+  await createTask('A 일감')
+  await selectButton('A 일감').focus()
+  await win.keyboard.press('Tab')
+  await expect(win.getByRole('button', { name: 'A 일감 지우기' })).toBeFocused()
+  await expect(win.getByRole('button', { name: 'A 일감 지우기' })).toHaveCSS('opacity', '1')
+})
+
+test('대화상자를 닫으면 포커스가 터미널로 돌아와 바로 칠 수 있다', async () => {
+  await createTask('A 일감')
+  await win.getByRole('button', { name: '새 일감' }).first().click()
+  await win.keyboard.press('Escape')
+  await win.keyboard.type('echo BACK_$((5+5))')
+  await win.keyboard.press('Enter')
+  await waitText('A 일감', /BACK_10/)
+})
+
+test('대화상자가 열려 있는 동안 Tab · Shift+Tab 이 밖으로 나가지 않는다', async () => {
+  await createTask('A 일감')
+  await row('A 일감').hover()
+  await win.getByRole('button', { name: 'A 일감 지우기' }).click()
+  const confirm = win.getByRole('alertdialog')
+  await expect(confirm.getByRole('button', { name: '취소' })).toBeFocused()
+  await win.keyboard.press('Shift+Tab')
+  await expect(confirm.getByRole('button', { name: '지우기' })).toBeFocused()
+  await win.keyboard.press('Tab')
+  await expect(confirm.getByRole('button', { name: '취소' })).toBeFocused()
+})
+
+test('저장된 일감의 셸은 처음 볼 때 뜬다 — 시작할 때 한꺼번에 띄우지 않는다', async () => {
+  await createTask('A 일감')
+  await createTask('B 일감')
+  await app.close()
+  launched = undefined
+  await launch()
+  // 활성은 B(마지막에 만든 일감). A 는 아직 열지 않았으니 터미널이 없다.
+  await expect(view('B 일감').locator('.terminal-pane')).toHaveCount(1)
+  await expect(view('A 일감').locator('.terminal-pane')).toHaveCount(0)
+  await selectButton('A 일감').click()
+  await expect(view('A 일감').locator('.terminal-pane')).toHaveCount(1)
+  await runIn('A 일감', 'echo LAZY_$((2*4))')
+  await waitText('A 일감', /LAZY_8/)
 })

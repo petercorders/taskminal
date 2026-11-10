@@ -35,6 +35,12 @@ export function App() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<Task | null>(null)
+  // 대화상자가 닫히면 올려서 보이는 터미널이 포커스를 다시 가져가게 한다
+  const [focusSignal, setFocusSignal] = useState(0)
+  const refocus = () => setFocusSignal((n) => n + 1)
+  // 한 번이라도 연 일감만 터미널(셸)을 띄운다 — 저장된 일감이 많아도 시작 때 셸을 한꺼번에 띄우지 않게.
+  // 한 번 띄운 셸은 다른 일감으로 옮겨도 숨겨 둔 채 유지한다.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set())
   const loadedRef = useRef<LoadedState['state'] | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
@@ -65,16 +71,28 @@ export function App() {
     if (canSave && state !== loadedRef.current) window.taskminal.state.save(state)
   }, [state, canSave])
 
+  const activeId = state.activeTaskId
+  useEffect(() => {
+    if (activeId && !opened.has(activeId)) setOpened((s) => new Set(s).add(activeId))
+  }, [activeId, opened])
+
   const create = (input: NewTaskInput) => {
     dispatch({ type: 'task/create', task: createTask(input, state.settings, newId, Date.now()) })
     setCreating(false)
+    refocus()
+  }
+
+  const closeDialogs = () => {
+    setCreating(false)
+    setRemoving(null)
+    refocus()
   }
 
   const remove = (task: Task) => {
     // 그 일감의 셸을 모두 끝내고 목록에서 뺀다 (화면에서 빠지는 것만으로는 셸이 끝나지 않는다).
     for (const paneId of Object.keys(task.panes)) window.taskminal.pty.kill(paneId)
     dispatch({ type: 'task/remove', id: task.id })
-    setRemoving(null)
+    closeDialogs()
   }
 
   const message =
@@ -96,6 +114,7 @@ export function App() {
       <div className="app-body">
         <Sidebar
           state={state}
+          loading={load.phase === 'loading'}
           onSelect={(id) => dispatch({ type: 'task/select', id })}
           onNew={() => setCreating(true)}
           onRemove={setRemoving}
@@ -105,6 +124,7 @@ export function App() {
           {state.tasks.map((task) => {
             const pane = visiblePane(task)
             const active = task.id === state.activeTaskId
+            const mounted = active || opened.has(task.id)
             return (
               <section
                 key={task.id}
@@ -114,7 +134,7 @@ export function App() {
                 data-task-name={task.name}
                 aria-hidden={!active}
               >
-                {pane && <TerminalPane paneId={pane.id} cwd={pane.cwd} active={active} />}
+                {pane && mounted && <TerminalPane paneId={pane.id} cwd={pane.cwd} active={active} focusSignal={focusSignal} />}
               </section>
             )
           })}
@@ -129,14 +149,14 @@ export function App() {
           )}
         </main>
       </div>
-      {creating && <NewTaskDialog settings={state.settings} onCreate={create} onCancel={() => setCreating(false)} />}
+      {creating && <NewTaskDialog settings={state.settings} onCreate={create} onCancel={closeDialogs} />}
       {removing && (
         <ConfirmDialog
           title="일감 지우기"
           message={`‘${removing.name}’ 일감을 지울까요? 터미널 ${Object.keys(removing.panes).length}개가 함께 종료됩니다.`}
           confirmLabel="지우기"
           onConfirm={() => remove(removing)}
-          onCancel={() => setRemoving(null)}
+          onCancel={closeDialogs}
         />
       )}
     </div>

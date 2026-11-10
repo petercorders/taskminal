@@ -1,4 +1,5 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef } from 'react'
+import { Modal } from './Modal'
 
 interface Props {
   title: string
@@ -13,27 +14,18 @@ export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCance
   const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => cancelRef.current?.focus(), [])
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      onCancel()
-    }
-  }
-
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className="dialog narrow" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" onKeyDown={onKeyDown}>
-        <h1 id="confirm-title">{title}</h1>
-        <p className="dialog-message">{message}</p>
-        <footer className="dialog-actions">
-          <button ref={cancelRef} type="button" className="button" onClick={onCancel}>
-            취소
-          </button>
-          <button type="button" className="button danger" onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </footer>
-      </div>
-    </div>
+    <Modal role="alertdialog" labelledBy="confirm-title" className="narrow" onCancel={onCancel}>
+      <h1 id="confirm-title">{title}</h1>
+      <p className="dialog-message">{message}</p>
+      <footer className="dialog-actions">
+        <button ref={cancelRef} type="button" className="button" onClick={onCancel}>
+          취소
+        </button>
+        <button type="button" className="button danger" onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </footer>
+    </Modal>
   )
 }

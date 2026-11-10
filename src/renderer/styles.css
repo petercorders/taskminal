@@ -170,7 +170,7 @@ select {
 }
 
 .task-remove {
-  visibility: hidden;
+  opacity: 0; /* visibility:hidden 이면 Tab 으로 갈 수 없다 */
   width: 22px;
   height: 22px;
   margin-right: 6px;
@@ -182,7 +182,7 @@ select {
 }
 .task-row:hover .task-remove,
 .task-remove:focus-visible {
-  visibility: visible;
+  opacity: 1;
 }
 .task-remove:hover {
   background: #e07a7a22;
@@ -279,6 +279,11 @@ select {
   border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 20px 60px #00000080;
+}
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .dialog.narrow {
   width: 380px;

@@ -10,10 +10,12 @@ interface Props {
   cwd: string
   /** 보이는 pane — 숨겨진 일감의 pane 도 마운트된 채(셸 · 화면 유지) display:none 으로 남는다 */
   active: boolean
+  /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
+  focusSignal: number
 }
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
-export function TerminalPane({ paneId, cwd, active }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
 
@@ -91,7 +93,7 @@ export function TerminalPane({ paneId, cwd, active }: Props) {
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.
   useEffect(() => {
     if (active) termRef.current?.focus()
-  }, [active])
+  }, [active, focusSignal])
 
   return <div className="terminal-pane" ref={hostRef} data-testid={`pane-${paneId}`} />
 }

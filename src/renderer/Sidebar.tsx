@@ -3,13 +3,15 @@ import { shortPath, sidebarSections } from './sidebar-model'
 
 interface Props {
   state: AppState
+  /** 저장 파일을 읽는 중 — '일감이 없습니다'를 잠깐 보이지 않게, 그 사이 만든 일감이 읽은 값에 덮이지 않게 */
+  loading: boolean
   onSelect(id: Id): void
   onNew(): void
   onRemove(task: Task): void
 }
 
 /** 왼쪽 일감 목록 — 묶음별 칸, 일감은 두 줄(이름 / 폴더 · 상태). */
-export function Sidebar({ state, onSelect, onNew, onRemove }: Props) {
+export function Sidebar({ state, loading, onSelect, onNew, onRemove }: Props) {
   const sections = sidebarSections(state)
   const statusOf = (task: Task) => state.settings.statuses.find((s) => s.id === task.statusId)
 
@@ -17,11 +19,11 @@ export function Sidebar({ state, onSelect, onNew, onRemove }: Props) {
     <nav className="sidebar" aria-label="일감" data-testid="sidebar">
       <header className="sidebar-head">
         <span>일감</span>
-        <button type="button" className="icon-button" onClick={onNew} aria-label="새 일감" title="새 일감">
+        <button type="button" className="icon-button" onClick={onNew} aria-label="새 일감" title="새 일감" disabled={loading}>
           +
         </button>
       </header>
-      {sections.length === 0 && <p className="sidebar-empty">일감이 없습니다 — + 로 만듭니다</p>}
+      {!loading && sections.length === 0 && <p className="sidebar-empty">일감이 없습니다 — + 로 만듭니다</p>}
       {sections.map((section) => (
         <section key={section.group?.id ?? '__loose'} className="sidebar-section">
           {section.title && <h2 className="sidebar-section-title">{section.title}</h2>}
