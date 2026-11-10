@@ -66,6 +66,7 @@
 - 스크롤 저장 파일은 비밀값이 섞일 수 있다 → 0600 · 끄면 모두 지움.
 
 ### 14 패키징 · 설치
+- **앱 아이콘: `resources/icon/icon.svg`** (2026-11-10 사용자 결정 — C1 모양 · 보라, 디자인 캔버스 '앱 아이콘' 보드). 1024 PNG 로 그린 뒤(Electron/Playwright 로 렌더) `iconutil` 로 `.icns`(16~1024 @1x·@2x) → electron-builder `mac.icon`. 개발 모드 Dock 아이콘(`app.dock.setIcon`)도 같은 그림으로.
 - electron-builder `.app`(arm64) · `asarUnpack` node-pty(+ `spawn-helper` 실행 권한 — 빠지면 `posix_spawnp failed`, `scripts/fix-node-pty.mjs` 참고) · 셸 통합 `resources/shell/zsh` 를 `extraResources` 로 `Resources/shell/zsh` 에(main 이 `app.isPackaged` 면 그 경로를 본다, `src/main/index.ts` 위쪽).
 - Finder 로 띄우면 PATH · LANG 이 비어 있다 → 로그인 셸에서 환경을 읽어 오거나 셸을 `-l` 로(이미 `-l`) — `which node` · 한글을 설치본에서 확인.
 - 네이티브 모듈은 Electron ABI 와 패키징까지 확인해야 "된다" 고 쓴다(`ELECTRON_RUN_AS_NODE=1 …` 로 확인).
