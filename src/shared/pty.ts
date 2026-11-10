@@ -81,3 +81,11 @@ export function shellEnv(base: Record<string, string | undefined>): Record<strin
   if (!isUtf8(env['LANG'])) env['LANG'] = 'en_US.UTF-8'
   return env
 }
+
+/**
+ * 셸이 깨끗하게 끝났나 (exit 0 · 신호 없음). 깨끗하면 pane 을 바로 닫고, 아니면 이유를 보여 주고 키를 누를 때 닫는다
+ * (iTerm 의 'Close if the session ends cleanly' 와 같은 규칙 — 시작하자마자 죽는 셸이 말없이 사라지지 않게).
+ */
+export function cleanExit(exit: { exitCode: number; signal: number | null }): boolean {
+  return exit.exitCode === 0 && !exit.signal
+}

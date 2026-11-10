@@ -103,9 +103,19 @@ test('분할선을 끌면 비율이 바뀌고 셸 크기도 따라간다, 껐다
   await win.mouse.up()
   const after = Number(await divider.getAttribute('aria-valuenow'))
   expect(after).toBeLessThan(40)
+  // 놓은 뒤 포커스가 (다른 곳을 누르기 전에) 활성 터미널로 돌아와 바로 칠 수 있다 — 화살표가 분할선을 움직이지 않는다
+  // (활성 pane 은 왼쪽 — 위의 크기 확인이 왼쪽을 눌렀다)
+  await expect(slot(left)).toHaveAttribute('data-focused', 'true')
+  await expect(term(left).locator('textarea')).toBeFocused()
+  await win.keyboard.press('ArrowLeft')
+  await expect(divider).toHaveAttribute('aria-valuenow', String(after))
+  await win.keyboard.type('echo DRAGGED_$((8+1))')
+  await win.keyboard.press('Enter')
+  await waitText(left, /DRAGGED_9/)
   await expect.poll(() => cols(left)).toBeLessThan(before)
   await expectShellSizeMatches(left)
   await expectShellSizeMatches(right)
+
 
   await term(left).click() // 활성 pane = 왼쪽
   await expect(slot(left)).toHaveAttribute('data-focused', 'true')
@@ -151,6 +161,20 @@ test('셸 exit: 그 pane 만 닫히고 형제가 자리를 채운다, 마지막 
   await runIn(left, 'exit')
   await expect(win.getByTestId('tab')).toHaveCount(0)
   await expect(win.getByTestId('no-tabs')).toBeVisible()
+  // 키보드로 바로 새 탭을 열 수 있게 포커스가 '새 탭' 버튼으로
+  await expect(win.getByTestId('no-tabs').getByRole('button', { name: '새 탭' })).toBeFocused()
+})
+
+test('깨끗하지 않게 끝난 셸은 이유를 보여 주고 남는다 — 키를 누르면 닫힌다', async () => {
+  await split('오른쪽으로 나누기')
+  const [left, right] = (await slotIds()) as [string, string]
+  await runIn(right, 'exit 3')
+  await waitText(right, /셸이 끝났습니다 — exit 3/)
+  await win.waitForTimeout(300)
+  await expect(slots()).toHaveCount(2)
+  await win.keyboard.press('x')
+  await expect(slots()).toHaveCount(1)
+  await expect(slot(left)).toHaveAttribute('data-focused', 'true')
 })
 
 test('새로 고침해도 분할 pane 이 그대로 — 끝낸 옛 셸이 pane 을 닫지 않는다', async () => {
@@ -181,4 +205,24 @@ test('분할선은 키보드로도 — Tab 으로 닿고 ← → 로 5%씩', asy
   await expect(divider).toHaveAttribute('aria-valuenow', '45')
   await win.keyboard.press('ArrowUp') // 좌우 선에는 위아래 키가 없다
   await expect(divider).toHaveAttribute('aria-valuenow', '45')
+})
+
+test('끌기가 취소되면(pointercancel) 저장하지 않고 원래 비율로', async () => {
+  await split('오른쪽으로 나누기')
+  const divider = win.getByTestId('divider')
+  const box = (await divider.boundingBox())!
+  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await win.mouse.down()
+  await win.mouse.move(box.x - 200, box.y + box.height / 2, { steps: 4 })
+  await expect.poll(async () => Number(await divider.getAttribute('aria-valuenow'))).toBeLessThan(45)
+  // 운영체제가 끌기를 가져간 것처럼: 좌표 0 의 pointercancel
+  await divider.evaluate((el) => {
+    // 시험 코드의 tsconfig 에는 DOM 타입이 없다 — 창 안의 PointerEvent 생성자를 그대로 쓴다
+    const PE = (globalThis as unknown as { PointerEvent: new (type: string, init: object) => Event }).PointerEvent
+    el.dispatchEvent(new PE('pointercancel', { pointerId: 1, bubbles: true, clientX: 0, clientY: 0 }))
+  })
+  await expect(divider).toHaveAttribute('aria-valuenow', '50')
+  await win.mouse.up()
+  await win.waitForTimeout(200)
+  await expect(divider).toHaveAttribute('aria-valuenow', '50')
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPaneId, MAX_WRITE, OutputBatcher, shellEnv, splitForWrite, validSize, validWrite } from '../../src/shared/pty'
+import { cleanExit, isPaneId, MAX_WRITE, OutputBatcher, shellEnv, splitForWrite, validSize, validWrite } from '../../src/shared/pty'
 
 describe('isPaneId', () => {
   it('영숫자 · _ · - 1~64자만 받는다', () => {
@@ -170,5 +170,13 @@ describe('shellEnv', () => {
   it('UTF-8 인 LC_ALL 은 그대로 둔다', () => {
     const env = shellEnv({ LANG: 'C', LC_ALL: 'ko_KR.UTF-8' })
     expect(env.LC_ALL).toBe('ko_KR.UTF-8')
+  })
+})
+
+describe('cleanExit', () => {
+  it('exit 0 이고 신호가 없을 때만 깨끗한 끝 — 그때만 pane 을 바로 닫는다', () => {
+    expect(cleanExit({ exitCode: 0, signal: null })).toBe(true)
+    expect(cleanExit({ exitCode: 1, signal: null })).toBe(false)
+    expect(cleanExit({ exitCode: 0, signal: 9 })).toBe(false)
   })
 })

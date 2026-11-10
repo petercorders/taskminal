@@ -36,10 +36,13 @@ export function clampRatio(ratio: number): number {
   return Math.min(0.9, Math.max(0.1, ratio))
 }
 
-/** path 가 가리키는 분할 노드의 비율을 바꾼다. 경로가 틀리면 그대로 둔다. */
+/** path 가 가리키는 분할 노드의 비율을 바꾼다. 경로가 틀리거나 비율이 그대로면 같은 객체. */
 export function setRatioAt(layout: Layout, path: SplitPath, ratio: number): Layout {
   if (layout.type !== 'split') return layout
-  if (path.length === 0) return { ...layout, ratio: clampRatio(ratio) }
+  if (path.length === 0) {
+    const next = clampRatio(ratio)
+    return next === layout.ratio ? layout : { ...layout, ratio: next }
+  }
   const [head, ...rest] = path
   const child = setRatioAt(layout[head], rest, ratio)
   return child === layout[head] ? layout : { ...layout, [head]: child }

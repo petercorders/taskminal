@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { paneIds } from '../shared/layout'
+import { cleanExit } from '../shared/pty'
 import { createTask, emptyState } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, Task } from '../shared/types'
@@ -55,8 +56,15 @@ export function App() {
   const loadedRef = useRef<LoadedState['state'] | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
-  // 셸이 스스로 끝나면(exit) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 우리가 끝낸 셸은 main 이 알리지 않는다.
-  useEffect(() => window.taskminal.pty.onExit((paneId) => dispatch({ type: 'pane/exited', paneId })), [])
+  // 셸이 깨끗하게 끝나면(exit 0) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 아니면 TerminalPane 이 이유를 보여 주고 키를 누를 때 닫는다.
+  // 우리가 끝낸 셸(탭 닫기 · 새로 고침 …)은 main 이 알리지 않는다.
+  useEffect(
+    () =>
+      window.taskminal.pty.onExit((paneId, exit) => {
+        if (cleanExit(exit)) dispatch({ type: 'pane/exited', paneId })
+      }),
+    [],
+  )
 
   useEffect(() => {
     let alive = true
@@ -189,6 +197,8 @@ export function App() {
                           focusSignal={focusSignal}
                           onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
+                          onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
+                          onDragEnd={refocus}
                         />
                       )}
                     </div>

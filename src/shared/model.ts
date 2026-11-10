@@ -229,8 +229,7 @@ export function setTabRatio(task: Task, tabId: Id, path: SplitPath, ratio: numbe
   const tab = task.tabs.find((t) => t.id === tabId)
   if (!tab) return task
   const layout = setRatioAt(tab.layout, path, ratio)
-  // 같은 비율이면 setRatioAt 이 새 노드를 만들어도 바뀐 것이 없다
-  if (layout === tab.layout || JSON.stringify(layout) === JSON.stringify(tab.layout)) return task
+  if (layout === tab.layout) return task
   return { ...task, tabs: task.tabs.map((t) => (t === tab ? { ...tab, layout } : t)) }
 }
 

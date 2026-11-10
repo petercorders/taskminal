@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { clampRatio, layoutRects, setRatioAt, type Divider, type SplitPath } from '../shared/layout'
 import type { Id, Pane, Tab } from '../shared/types'
 import { TerminalPane } from './TerminalPane'
@@ -11,6 +11,10 @@ interface Props {
   focusSignal: number
   onFocusPane(paneId: Id): void
   onRatio(path: SplitPath, ratio: number): void
+  /** 깨끗하지 않게 끝난 셸을 본 뒤 키를 눌렀다 */
+  onClosePane(paneId: Id): void
+  /** 마우스로 끄는 것이 끝났다(놓음 · 취소) — 터미널이 포커스를 다시 가져가게 */
+  onDragEnd(): void
 }
 
 const pct = (n: number) => `${n * 100}%`
@@ -20,10 +24,22 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRatio }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
-  const dragging = useRef<{ divider: Divider; pointerId: number } | null>(null)
+  const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
+
+  /** 끌기를 버리고 원래 비율로 (Esc · 브라우저가 취소 · 끄는 사이 pane 이 바뀜) */
+  const cancelDrag = () => {
+    const cur = dragging.current
+    if (!cur) return
+    dragging.current = null
+    if (cur.el.hasPointerCapture(cur.pointerId)) cur.el.releasePointerCapture(cur.pointerId)
+    setDrag(null)
+    onDragEnd()
+  }
+  // 끄는 사이 셸이 끝나 pane 이 바뀌면 잡은 경로가 다른 분할을 가리킬 수 있다 → 끌기를 버린다
+  useEffect(() => cancelDrag, [tab.layout]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const layout = drag ? setRatioAt(tab.layout, drag.path, drag.ratio) : tab.layout
   const { panes: rects, dividers } = layoutRects(layout)
@@ -41,7 +57,7 @@ export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRat
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     e.currentTarget.focus() // 끄는 중 Esc 로 취소할 수 있게
-    dragging.current = { divider: d, pointerId: e.pointerId }
+    dragging.current = { divider: d, pointerId: e.pointerId, el: e.currentTarget }
     setDrag({ path: d.path, ratio: d.at })
   }
   const onPointerMove = (e: PointerEvent) => {
@@ -55,14 +71,20 @@ export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRat
     dragging.current = null
     setDrag(null)
     onRatio(cur.divider.path, clampRatio(ratioAt(cur.divider, e)))
+    onDragEnd()
+  }
+  const onPointerCancel = (e: PointerEvent) => {
+    // 취소 이벤트의 좌표는 0 이거나 낡았다 — 저장하지 않고 원래 비율로
+    if (dragging.current?.pointerId === e.pointerId) cancelDrag()
   }
 
   const onDividerKey = (d: Divider) => (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Escape' && dragging.current) {
-      e.preventDefault()
-      e.currentTarget.releasePointerCapture(dragging.current.pointerId)
-      dragging.current = null
-      setDrag(null) // 원래 비율로
+    if (dragging.current) {
+      // 끄는 중에는 Esc 만 받는다 — 화살표가 끄는 중의 비율로 한 번 더 저장하지 않게
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        cancelDrag()
+      }
       return
     }
     const keys = d.dir === 'right' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown']
@@ -85,9 +107,18 @@ export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRat
             data-testid="pane-slot"
             data-pane-id={r.paneId}
             data-focused={focused}
-            onFocus={() => onFocusPane(r.paneId)}
+            // 보이는 탭에서만 — 숨은 탭 안의 포커스가 활성 탭을 바꾸지 않게
+            onFocus={() => visible && onFocusPane(r.paneId)}
           >
-            {pane && <TerminalPane paneId={pane.id} cwd={pane.cwd} active={visible && focused} focusSignal={focusSignal} />}
+            {pane && (
+              <TerminalPane
+                paneId={pane.id}
+                cwd={pane.cwd}
+                active={visible && focused}
+                focusSignal={focusSignal}
+                onClosed={() => onClosePane(pane.id)}
+              />
+            )}
           </div>
         )
       })}
@@ -112,7 +143,7 @@ export function SplitView({ tab, panes, visible, focusSignal, onFocusPane, onRat
             onPointerDown={onPointerDown(d)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
+            onPointerCancel={onPointerCancel}
             onKeyDown={onDividerKey(d)}
           />
         )

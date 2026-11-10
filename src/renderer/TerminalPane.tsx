@@ -3,7 +3,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
-import { splitForWrite } from '../shared/pty'
+import { cleanExit, splitForWrite } from '../shared/pty'
 
 interface Props {
   paneId: string
@@ -12,12 +12,16 @@ interface Props {
   active: boolean
   /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
   focusSignal: number
+  /** 깨끗하지 않게 끝난 셸의 이유를 본 뒤 키를 눌렀다 — pane 을 닫는다 */
+  onClosed(): void
 }
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
-export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, onClosed }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
+  const onClosedRef = useRef(onClosed)
+  onClosedRef.current = onClosed
 
   useEffect(() => {
     const host = hostRef.current!
@@ -49,9 +53,17 @@ export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
     const offData = pty.onData((id, data) => {
       if (id === paneId) term.write(data)
     })
-    // 셸이 스스로 끝나면 App 이 pane 을 닫는다(pane/exited) — 여기서는 따로 할 일이 없다.
+    // 깨끗하게 끝나면(exit 0) App 이 pane 을 바로 닫는다. 아니면 이유를 보여 주고 다음 키에 닫는다.
+    let ended = false
+    const offExit = pty.onExit((id, exit) => {
+      if (id !== paneId || cleanExit(exit)) return
+      ended = true
+      const how = exit.signal ? `신호 ${exit.signal}` : `exit ${exit.exitCode}`
+      term.write(`\r\n\x1b[2m[셸이 끝났습니다 — ${how} · 아무 키나 누르면 이 pane 을 닫습니다]\x1b[0m\r\n`)
+    })
     // 큰 붙여넣기는 main 의 입력 상한(1MB) 이하로 나눠 보낸다 — 넘으면 main 이 통째로 버린다.
     const input = term.onData((data) => {
+      if (ended) return onClosedRef.current()
       for (const part of splitForWrite(data)) pty.write(paneId, part)
     })
 
@@ -78,6 +90,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal }: Props) {
       cancelAnimationFrame(frame)
       input.dispose()
       offData()
+      offExit()
       termRef.current = null
       term.dispose()
     }

@@ -61,6 +61,12 @@ describe('setRatioAt · clampRatio', () => {
     expect(setRatioAt(three, [], 5)).toMatchObject({ ratio: 0.9 })
   })
 
+  test('비율이 그대로면(막은 뒤 같은 값 포함) 같은 객체', () => {
+    expect(setRatioAt(three, [], 0.6)).toBe(three)
+    const edge = split('right', pane('a'), pane('b'), 0.9)
+    expect(setRatioAt(edge, [], 5)).toBe(edge)
+  })
+
   test('경로가 pane 을 가리키거나 틀리면 그대로', () => {
     expect(setRatioAt(three, ['a'], 0.3)).toBe(three)
     expect(setRatioAt(three, ['a', 'b'], 0.3)).toBe(three)
