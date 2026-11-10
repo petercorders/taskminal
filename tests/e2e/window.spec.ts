@@ -1,4 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,17 +7,22 @@ import { join } from 'node:path'
 // 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게 시험마다 임시 userData 로만 띄운다.
 let userData: string
 let app: ElectronApplication
+let launched: ElectronApplication | undefined // 이번 시험에서 실제로 뜬 앱 — afterEach 가 닫는다
 let win: Page
 
 test.beforeEach(async () => {
   userData = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-e2e-')))
   // 'out/main/index.js' 를 직접 주면 package.json 을 못 찾아 앱 이름 · 버전이 Electron 것이 된다 → 폴더로 띄운다.
-  app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
+  launched = undefined
+  app = launched = await launch()
   win = await app.firstWindow()
 })
 
+const launch = () => electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
+
 test.afterEach(async () => {
-  await app?.close()
+  // launch 가 실패했으면 launched 가 비어 있어 앞 시험의 닫힌 app 을 다시 닫지 않는다.
+  await launched?.close()
   rmSync(userData, { recursive: true, force: true })
 })
 
@@ -64,12 +70,27 @@ test('window.open 은 새 창을 만들지 않고 http(s) 만 바깥 브라우�
   })
   await win.evaluate(() => {
     const w = globalThis as unknown as { open: (url: string) => unknown }
-    w.open('https://example.com/a')
+    // main 은 요청을 순서대로 처리한다 — 막혀야 할 file: 을 먼저 보내고, https 가 기록된 것을 보면 file: 도 처리가 끝난 것이다.
     w.open('file:///etc/passwd')
+    w.open('https://example.com/a')
   })
   await expect.poll(() => app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened)).toEqual([
     'https://example.com/a',
   ])
   // main 이 open 요청 두 개를 처리한 뒤(위 poll) 만들어진 창이 하나도 없어야 한다.
   expect(await app.evaluate(() => (globalThis as unknown as { created: number }).created)).toBe(0)
+})
+
+test('macOS: 창을 닫은 뒤 앱을 다시 실행하면 남아 있던 앱이 창을 연다', async () => {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close())
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(0)
+
+  // 같은 userData 로 두 번째 실행 → 단일 인스턴스 잠금을 못 얻고 끝나며, 첫 앱에 second-instance 가 온다.
+  // Playwright launch 는 곧바로 끝나는 프로세스를 실패로 보므로 그냥 자식 프로세스로 띄운다.
+  const electronPath = (await import('electron')).default as unknown as string
+  const code = await new Promise<number | null>((done) => {
+    spawn(electronPath, ['.'], { env: { ...process.env, TASKMINAL_USER_DATA: userData }, stdio: 'ignore' }).on('exit', done)
+  })
+  expect(code).toBe(0)
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1)
 })

@@ -48,6 +48,12 @@ function createWindow(): BrowserWindow {
   })
 
   win.once('ready-to-show', () => win.show())
+  // 화면을 못 읽으면 ready-to-show 가 오지 않는다 — 숨은 창으로 남지 않게 보여 주고 기록한다.
+  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+    if (!isMainFrame) return
+    console.error(`화면을 읽지 못함 (${code} ${description}): ${url}`)
+    win.show()
+  })
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalIfWeb(url)
     return { action: 'deny' }
@@ -62,20 +68,34 @@ function createWindow(): BrowserWindow {
     if (mainWindow === win) mainWindow = null
   })
 
-  if (devServerUrl) void win.loadURL(devServerUrl)
-  else void win.loadFile(rendererFile)
+  const load = devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(rendererFile)
+  load.catch(() => {
+    // did-fail-load 가 처리한다
+  })
   return win
 }
 
-// 우리 창의 맨 위 프레임에서 온 요청만 받는다.
-const fromOurWindow = (event: IpcMainInvokeEvent): boolean =>
-  mainWindow !== null && event.senderFrame === mainWindow.webContents.mainFrame
+// 우리 창의 맨 위 프레임이 우리 페이지를 띄우고 있을 때만 받는다 (창이 여러 개여도 같은 규칙).
+const fromOurWindow = (event: IpcMainInvokeEvent): boolean => {
+  const frame = event.senderFrame
+  return (
+    frame !== null &&
+    BrowserWindow.fromWebContents(event.sender) !== null &&
+    frame === event.sender.mainFrame &&
+    isOurPage(frame.url)
+  )
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
+  // macOS 는 창을 다 닫아도 앱이 남으므로, 다시 실행하면 창이 없을 수 있다 → 만든다.
   app.on('second-instance', () => {
-    if (!mainWindow) return
+    if (!app.isReady()) return
+    if (!mainWindow) {
+      mainWindow = createWindow()
+      return
+    }
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })

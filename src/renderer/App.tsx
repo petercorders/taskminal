@@ -6,9 +6,15 @@ export function App() {
 
   useEffect(() => {
     let alive = true
-    window.taskminal.appInfo().then((info) => {
-      if (alive) setVersion(info.version)
-    })
+    window.taskminal.appInfo().then(
+      (info) => {
+        if (alive) setVersion(info.version)
+      },
+      (error: unknown) => {
+        console.error('앱 정보를 읽지 못함', error)
+        if (alive) setVersion('버전을 읽지 못함')
+      },
+    )
     return () => {
       alive = false
     }
