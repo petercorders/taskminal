@@ -1,3 +1,4 @@
+import type { RendererMode } from './renderer'
 import type { AppState } from './types'
 
 // main · preload 가 함께 쓰는 IPC 채널 이름. renderer 는 채널을 모르고 preload API 만 부른다.
@@ -37,6 +38,8 @@ export interface AppInfo {
   home: string
   /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 (시험은 TASKMINAL_CWD_POLL_MS 로 줄인다) */
   cwdPollMs: number
+  /** 터미널 그리기 — 보이는 pane 은 WebGL(기본), 시험은 TASKMINAL_RENDERER=dom 으로 DOM (15e) */
+  renderer: RendererMode
 }
 
 export interface ScrollbackEntry {

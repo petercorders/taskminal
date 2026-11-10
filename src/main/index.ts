@@ -8,6 +8,7 @@ import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
 import { isAccel, isAppCommand } from '../shared/keymap'
 import { MAX_LINK, webUrl } from '../shared/links'
+import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
@@ -76,6 +77,8 @@ const cwdPollMs = ((): number => {
   const v = Number(process.env['TASKMINAL_CWD_POLL_MS'])
   return Number.isInteger(v) && v >= 100 ? v : 15_000
 })()
+// 15e: 터미널 그리기 — 시험(e2e)은 DOM 의 글을 읽으므로 playwright 설정이 dom 을 넣는다
+const renderer: RendererMode = process.env['TASKMINAL_RENDERER'] === 'dom' ? 'dom' : 'webgl'
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
 // 디바운스가 main 에 있어서 창 닫기 · 새로 고침 · 렌더러 충돌 뒤에도 이미 받은 값은 타이머가 쓴다.
 const stateWriter = new Debouncer<AppState>(
@@ -212,7 +215,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, renderer }
   })
 
   ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {

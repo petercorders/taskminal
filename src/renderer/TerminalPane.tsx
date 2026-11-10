@@ -3,6 +3,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
@@ -10,9 +11,10 @@ import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
+import { wantWebgl } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
-import { dirtyPanes, osc7Panes, restoredPanes, runtime } from './runtime'
+import { dirtyPanes, osc7Panes, restoredPanes, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -20,6 +22,8 @@ interface Props {
   cwd: string
   /** 보이는 활성 pane — 숨겨진 일감 · 탭의 pane 도 마운트된 채(셸 · 화면 유지) display:none 으로 남는다 */
   active: boolean
+  /** 일감 · 탭이 보이는 중 — 그동안만 WebGL (15e) */
+  visible: boolean
   /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
   focusSignal: number
   /** 설정 창 · ⌘= ⌘− 의 터미널 설정 — 바뀌면 바로 적용(셸 · 셸 통합은 띄울 때만) */
@@ -75,7 +79,7 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd }: Props) {
+export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
@@ -328,6 +332,44 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     })
     if (resize) refitRef.current()
   }, [settings])
+
+  // 보이는 동안만 WebGL (15e) — 숨으면 놓아 창당 컨텍스트 한도를 넘지 않게. 실패하면 DOM 으로 남는다.
+  // term 이 새로 만들어지면(paneId) 다시 판단. 정리(숨음 · 해제)에서 놓고 수를 줄인다.
+  useEffect(() => {
+    const term = termRef.current
+    const host = hostRef.current
+    if (!term || !host) return
+    host.dataset['renderer'] = 'dom'
+    const fail = () => webgl.failures.set(paneId, (webgl.failures.get(paneId) ?? 0) + 1)
+    if (!wantWebgl({ mode: runtime.renderer, visible, inUse: webgl.inUse, failures: webgl.failures.get(paneId) ?? 0 })) return
+    let addon: WebglAddon | null = null
+    const release = () => {
+      if (!addon) return
+      const a = addon
+      addon = null
+      webgl.inUse--
+      host.dataset['renderer'] = 'dom'
+      try {
+        a.dispose() // DOM 그리기로 돌아간다
+      } catch {
+        // 이미 잃은 컨텍스트
+      }
+    }
+    try {
+      const a = new WebglAddon()
+      a.onContextLoss(() => {
+        fail()
+        release()
+      })
+      term.loadAddon(a)
+      addon = a
+      webgl.inUse++
+      host.dataset['renderer'] = 'webgl'
+    } catch {
+      fail() // WebGL2 가 없는 환경 — DOM 으로
+    }
+    return release
+  }, [paneId, visible])
 
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.

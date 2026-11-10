@@ -41,6 +41,7 @@ const loadState = () =>
       runtime.host = info.host
       runtime.home = info.home
       runtime.cwdPollMs = info.cwdPollMs
+      runtime.renderer = info.renderer
       return window.taskminal.state.load()
     },
     () => window.taskminal.state.load(),

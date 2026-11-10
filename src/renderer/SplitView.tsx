@@ -132,6 +132,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 paneId={pane.id}
                 cwd={pane.cwd}
                 active={visible && focused}
+                visible={visible}
                 focusSignal={focusSignal}
                 settings={term}
                 onClosed={() => onClosePane(pane.id)}
