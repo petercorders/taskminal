@@ -46,3 +46,28 @@ Taskminal 로 옮긴 안 (추천, 사용자 확인 전):
 
 정한 것 (2026-11-10 사용자): **카드 = 터미널(pane) 하나** · **본문 자리에 띄움**(사이드바 '전체 보기' · 단축키, 카드를 누르면 그 터미널로) · **끝남 카드는 그 터미널을 한 번 보면 '조용함' 으로**.
 화면 디자인: 디자인 캔버스의 '전체 보기' 보드(Dashboard.dc.html) + 옆 기획 메모.
+
+### 2. CLI — Claude 가 일감을 스스로 다루게 (2026-11-10)
+사용자: "claude가 일감을 알아서 처리할 수 있게 cli로 명령어나 cli로도 일감들을 옮길수 있도록". 참고: Orca CLI(`orca terminal wait --for tui-idle` 처럼 터미널을 읽고 · 보내고 · 기다림).
+
+안 (추천, 사용자 확인 전):
+- 실행 파일 `taskminal` (앱 안에 들어 있고, 설정에서 `/usr/local/bin` 에 링크 · 각 pane 의 PATH 에는 자동으로).
+- 앱과는 **유닉스 소켓**(`<userData>/cli.sock`, 0600 — 같은 사용자만)으로 JSON 요청. 앱이 꺼져 있으면 "Taskminal 이 실행 중이 아닙니다" (자동으로 켜기는 나중).
+- 각 pane 의 환경 변수: `TASKMINAL_PANE_ID` · `TASKMINAL_TASK_ID` · `TASKMINAL_SOCKET` → 그 안의 Claude 는 id 없이 "이 일감" 을 가리킨다(`--self` 생략 가능).
+
+| 명령 | 하는 일 |
+|---|---|
+| `taskminal list [--json]` | 일감 · 탭 · pane 과 상태 · 활동(확인 필요 · 실행 중 · 끝남) |
+| `taskminal task new <이름> --cwd <폴더> [--template 이름] [--group 이름] [--status 이름]` | 새 일감 (템플릿 시작 명령 포함) |
+| `taskminal task move [<일감>] --status 완료 / --group 서버` | 상태 · 묶음 옮기기 — 일감 생략 = 이 일감 |
+| `taskminal task rename · color · open · remove` | 이름 · 색 · 화면에 열기 · 지우기(실행 중이면 `--force` 필요) |
+| `taskminal tab new [<일감>] [--template 이름] [--cmd "…"]` · `taskminal pane split --right/--down [--cmd "…"]` | 탭 · 분할을 만들고 명령 실행 |
+| `taskminal pane send <pane> "글" [--enter]` | 그 터미널에 입력 (예: 다른 Claude 에 "y") |
+| `taskminal pane read <pane> [--lines 50] [--json]` | 그 터미널의 최근 출력 |
+| `taskminal pane wait <pane> --for idle\|prompt\|exit\|text:"…" [--timeout 10m]` | 끝나거나 입력을 기다릴 때까지 기다림 — 셸 통합(OSC 133) · 9단계 활동 신호 사용 |
+| `taskminal notify "글"` | 앱의 '확인 필요' 에 올리고 macOS 알림 |
+
+`<일감>` · `<pane>` 은 id · 이름 · `일감이름:탭이름` 으로 가리킨다(겹치면 오류와 후보 목록).
+
+함께 만들 것: Claude Code 가 이 명령을 알도록 **skill 파일**(또는 CLAUDE.md 조각)을 앱이 제공 — "작업이 끝나면 `taskminal task move --status 완료`, 사용자 확인이 필요하면 `taskminal notify`".
+정할 것: 다른 일감의 터미널에 `pane send` 를 허락할지(기본: 허락 · 설정에서 끔) · `remove` 를 CLI 에 열지 · 소켓 대신 HTTP(localhost) 가 필요한지(아니라고 봄 — 소켓이 권한이 더 좁다).
