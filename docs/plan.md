@@ -35,7 +35,7 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 |---|---|---|---|
 | 0 | 뼈대 · 하네스 | package.json · tsconfig(node/web) · vitest · 전역 electron 하네스 · 이 문서 | 편집 · 종료 훅이 경계 · 타입 · 시험 실패를 막는 것을 일부러 깨서 확인 (완료) |
 | 1 | 공통 모델 | `src/shared`: 타입 · 분할 트리(split/remove/ratio/cycle) · 일감 만들기 · 템플릿 펼치기 · 저장 파일 검증(normalize) · 기본 상태/템플릿 | vitest 단위 시험 + 핵심 줄 변이 확인 |
-| 2 | Electron 창 | electron-vite 설정 · main 창(sandbox · contextIsolation) · preload API 골격 · React 빈 화면 · Playwright e2e 골격 | `npm run e2e` 가 창을 띄워 제목 확인 + 스크린샷 |
+| 2 | Electron 창 | electron-vite 설정 · main 창(sandbox · contextIsolation) · preload API 골격 · React 빈 화면 · Playwright e2e 골격 | `npm run e2e` 가 창을 띄워 제목 확인 + 스크린샷 (완료: 제목 · preload 왕복 · 실제 샌드박스 · 임시 userData · 바깥 링크 차단) |
 | 3 | 터미널 하나 | main PtyManager(spawn · write · resize · kill · 출력 묶어 보내기) · xterm pane · 로그인 셸 · LANG/TERM 환경 · 종료 경로 4개(창 닫기 · 앱 종료 · 새로 고침 · 렌더러 충돌)에서 pty 정리 | e2e: `echo 안녕` 출력 · `stty size` 가 창 크기와 맞음 · 앱 종료 후 고아 셸 0개(`pgrep`) |
 | 4 | 상태 저장 | main: state.json 원자적 저장 · 손상 파일 백업 후 기본값 · `TASKMINAL_USER_DATA` · renderer 상태 저장소(reducer) · 변경 시 디바운스 저장 · **더 새 버전 파일(version > 1)은 덮어쓰지 않는다**(1단계 리뷰: normalizeState 는 모르는 칸을 버리므로 옛 앱이 새 파일을 저장하면 데이터가 사라짐 → 읽기 전용으로 열고 알리거나 백업 후 진행) | 단위(reducer · normalize) + e2e: 손상 파일로 시작해도 뜨고 `.bak` 남음 · version 2 파일로 시작하면 원본이 그대로 |
 | 5 | 일감 사이드바 | 일감 목록 · 새 일감 대화상자(이름 · 폴더 선택 · 상태 · 묶음 · 색) · 전환 시 터미널 유지 · 일감 삭제(확인) | e2e: 일감 2개 만들고 오가도 각 셸 출력 유지 · 삭제 시 그 pty 종료 |

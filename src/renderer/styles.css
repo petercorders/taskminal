@@ -1,0 +1,50 @@
+:root {
+  --bg: #0e0f11;
+  --fg: #e6e7ea;
+  --muted: #8a8f98;
+  --accent: #5b9cf5;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: Inter, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.empty h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.empty .version {
+  margin: 0;
+  min-height: 1em;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.empty .hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
