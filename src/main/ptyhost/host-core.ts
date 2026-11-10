@@ -73,6 +73,11 @@ export class HostCore {
     return n
   }
 
+  /** 끝난 셸의 기록까지 — 다음에 열 때 알릴 것이 남아 있으면 유휴로 끝내지 않는다 */
+  get sessionCount(): number {
+    return this.sessions.size
+  }
+
   get clientCount(): number {
     return this.conns.size
   }

@@ -77,7 +77,8 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
         markReady()
       } else patch({ state: 'starting' })
     },
-    onReconnected: () => void ptys.reattachAll(),
+    // 끊긴 동안(처음 연결 실패 포함) 셸을 못 띄운 pane 이 있으면 창을 다시 읽어 attach 부터 다시 — 셸은 남아 있다
+    onReconnected: () => (ptys.takeMissed() ? reloadWindows() : void ptys.reattachAll()),
     onHostLost: () => {
       patch({ fresh: true })
       reloadWindows()
@@ -107,7 +108,8 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
     try {
       return readdirSync(dirname(sockPath))
         .map((name) => ({ path: join(dirname(sockPath), name), version: socketVersion(name, prefix) }))
-        .filter((x): x is { path: string; version: number } => x.version !== null && x.version !== protocol)
+        // 옛 버전만 — 더 새 앱이 띄운 지킴이를 옛 앱이 '바꾸기' 로 끄지 않게
+        .filter((x): x is { path: string; version: number } => x.version !== null && x.version < protocol)
     } catch {
       return []
     }
@@ -132,8 +134,10 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
     view: () => view,
     async beforeQuit(win) {
       const seen = process.env['TASKMINAL_QUIT_NOTICE'] === 'seen' || existsSync(noticeFile)
-      const live = view.sessions !== undefined ? view.sessions : (await ptys.sessions().catch(() => [])).filter((s) => !s.exited).length
-      if (seen || live === 0) return 'quit'
+      if (seen) return 'quit'
+      // view.sessions 는 5분마다 읽는 값이라 늦다 — 지금 물어본다
+      const live = (await ptys.sessions().catch(() => [])).filter((s) => !s.exited).length
+      if (live === 0) return 'quit'
       const r = await askBox(win, {
         type: 'info',
         message: '이제 앱을 꺼도 셸은 계속 돌아요',

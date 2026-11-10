@@ -208,22 +208,31 @@ export class HostClient {
     const decoder = new LineDecoder((v) => this.onFrame(v as Record<string, unknown>))
     socket.on('data', (chunk: Buffer) => decoder.push(chunk))
     socket.on('error', () => {})
+    let adopted = false
     socket.on('close', () => {
       if (this.socket !== socket) return
       this.socket = null
       this.failWaiting()
-      if (!this.disposed) this.lost()
+      // hello 전에 닫히면 hello 가 실패하고 부른 쪽이 다시 시도한다 — 여기서도 시작하면 다시 붙기가 둘이 된다
+      if (adopted && !this.disposed) this.lost()
     })
     // hello 는 연결 상태 전에 보낸다 (request 는 connected 를 요구)
-    const hello = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      const id = this.nextId++
-      const timer = setTimeout(() => {
-        this.waiting.delete(id)
-        reject(new Error('셸 지킴이가 답하지 않음'))
-      }, REQUEST_TIMEOUT_MS)
-      this.waiting.set(id, { resolve, reject, timer })
-      socket.write(encodeFrame({ op: 'hello', version: PTYHOST_PROTOCOL, id }))
-    })
+    let hello: Record<string, unknown>
+    try {
+      hello = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const id = this.nextId++
+        const timer = setTimeout(() => {
+          this.waiting.delete(id)
+          reject(new Error('셸 지킴이가 답하지 않음'))
+        }, REQUEST_TIMEOUT_MS)
+        this.waiting.set(id, { resolve, reject, timer })
+        socket.write(encodeFrame({ op: 'hello', version: PTYHOST_PROTOCOL, id }))
+      })
+    } catch (e) {
+      if (this.socket === socket) this.closeSocket()
+      throw e
+    }
+    adopted = true
     this.pid = Number(hello['pid'])
     this.setStatus({ state: 'connected', pid: this.pid, version: Number(hello['version']), startedAt: Number(hello['startedAt']), fresh })
   }

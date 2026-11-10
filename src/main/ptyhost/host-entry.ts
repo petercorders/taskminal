@@ -121,7 +121,8 @@ function watch(): void {
       core.handle({ send: () => {} }, { op: 'shutdown' })
       return
     }
-    if (core.liveCount === 0 && core.clientCount === 0) {
+    // 끝난 셸의 기록(exit · 못 본 실패)도 다음에 열 때 보여 줄 것이라 남아 있으면 기다린다
+    if (core.sessionCount === 0 && core.clientCount === 0) {
       idleSince ??= Date.now()
       if (Date.now() - idleSince >= IDLE_MS) exitNow(0)
     } else {

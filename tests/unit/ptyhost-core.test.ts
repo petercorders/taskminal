@@ -344,6 +344,32 @@ describe('HostCore', () => {
     expect(bad.liveCount).toBe(0)
   })
 
+  it('붙은 손님이 있을 때 셸이 끝나도, 기다리던 attach · tail 은 화면을 받는다 (닫힌 headless 를 읽지 않는다)', async () => {
+    const a = new Conn()
+    core.open(a)
+    core.handle(a, spawnReq(1))
+    ptys[0]!.emit('before exit\r\n')
+    const b = new Conn()
+    core.open(b)
+    core.handle(b, { op: 'attach', id: 2, paneId: 'p1' })
+    core.handle(b, { op: 'tail', id: 3, paneId: 'p1', lines: 5 })
+    ptys[0]!.exit(1) // a 가 붙어 있어 바로 세션을 지운다 — b 의 콜백은 아직
+    const r = await until(() => b.reply(2))
+    expect(r).toMatchObject({ ok: true, found: true, exited: { exitCode: 1, signal: null } })
+    expect(r['screen']).toContain('before exit')
+    expect(await until(() => b.reply(3))).toMatchObject({ ok: true, text: 'before exit' })
+  })
+
+  it('끝난 셸의 기록이 남아 있으면 유휴로 세지 않는다 (sessionCount)', () => {
+    const a = new Conn()
+    core.open(a)
+    core.handle(a, spawnReq(1))
+    core.close(a)
+    ptys[0]!.exit(2)
+    expect(core.liveCount).toBe(0)
+    expect(core.sessionCount).toBe(1)
+  })
+
   it('손님 수 · 살아 있는 셸 수로 유휴를 안다', () => {
     const a = new Conn()
     core.open(a)
