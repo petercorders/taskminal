@@ -56,3 +56,52 @@ describe('reducer', () => {
     expect(reducer(s, { type: 'task/remove', id: 'nope' })).toBe(s)
   })
 })
+
+describe('reducer — 탭', () => {
+  const add = (s: AppState, taskId: string, tabId: string) =>
+    reducer(s, { type: 'tab/add', taskId, tabId, paneId: `${tabId}-pane` })
+  const tabsOf = (s: AppState, i = 0) => s.tasks[i]!.tabs.map((t) => t.id)
+  const activeOf = (s: AppState, i = 0) => s.tasks[i]!.activeTabId
+
+  /** 일감 a(첫 탭 + t2 + t3) · 일감 b */
+  const three = () => {
+    let s = withTasks('a', 'b')
+    const a = s.tasks[0]!.id
+    s = add(add(s, a, 't2'), a, 't3')
+    return { s, a, first: s.tasks[0]!.tabs[0]!.id }
+  }
+
+  it('tab/add: 끝에 붙고 활성, 새 pane 은 넘긴 id · 활성 pane 폴더', () => {
+    const { s, a, first } = three()
+    expect(tabsOf(s)).toEqual([first, 't2', 't3'])
+    expect(activeOf(s)).toBe('t3')
+    expect(s.tasks[0]!.panes['t3-pane']).toEqual({ id: 't3-pane', cwd: '~' })
+    expect(s.tasks[0]!.tabs[2]!.activePaneId).toBe('t3-pane')
+    expect(s.tasks[1]!.tabs).toHaveLength(1) // 다른 일감은 그대로
+    expect(add(s, 'nope', 't9')).toBe(s)
+    expect(a).toBe(s.tasks[0]!.id)
+  })
+
+  it('tab/close: 가운데 활성 → 오른쪽, 끝 활성 → 왼쪽, 비활성 → 그대로', () => {
+    const { s, a, first } = three()
+    const mid = reducer(s, { type: 'tab/select', taskId: a, tabId: 't2' })
+    const afterMid = reducer(mid, { type: 'tab/close', taskId: a, tabId: 't2' })
+    expect(tabsOf(afterMid)).toEqual([first, 't3'])
+    expect(activeOf(afterMid)).toBe('t3')
+    expect(afterMid.tasks[0]!.panes['t2-pane']).toBeUndefined()
+
+    expect(activeOf(reducer(s, { type: 'tab/close', taskId: a, tabId: 't3' }))).toBe('t2')
+    expect(activeOf(reducer(s, { type: 'tab/close', taskId: a, tabId: first }))).toBe('t3')
+    expect(reducer(s, { type: 'tab/close', taskId: a, tabId: 'nope' })).toBe(s)
+  })
+
+  it('tab/select · tab/rename: 있는 일감 · 탭만', () => {
+    const { s, a, first } = three()
+    expect(activeOf(reducer(s, { type: 'tab/select', taskId: a, tabId: first }))).toBe(first)
+    expect(reducer(s, { type: 'tab/select', taskId: a, tabId: 'nope' })).toBe(s)
+    expect(reducer(s, { type: 'tab/select', taskId: 'nope', tabId: first })).toBe(s)
+    const renamed = reducer(s, { type: 'tab/rename', taskId: a, tabId: 't2', title: ' 로그 ' })
+    expect(renamed.tasks[0]!.tabs[1]!.title).toBe('로그')
+    expect(reducer(s, { type: 'tab/rename', taskId: 'nope', tabId: 't2', title: 'x' })).toBe(s)
+  })
+})

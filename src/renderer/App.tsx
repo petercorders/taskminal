@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
+import { paneIds } from '../shared/layout'
 import { createTask, emptyState } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, Task } from '../shared/types'
@@ -6,6 +7,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog } from './NewTaskDialog'
 import { Sidebar } from './Sidebar'
 import { reducer } from './store'
+import { TabBar } from './TabBar'
 import { TerminalPane } from './TerminalPane'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
@@ -22,11 +24,20 @@ const loadState = () => (loadOnce ??= window.taskminal.state.load())
 
 const newId = () => crypto.randomUUID()
 
-/** 일감마다 보여 줄 pane: 활성 탭의 활성 pane (탭은 6단계, 분할은 7단계). */
-function visiblePane(task: Task) {
-  const tab = task.tabs.find((t) => t.id === task.activeTabId) ?? task.tabs[0]
-  const pane = tab ? task.panes[tab.activePaneId] : undefined
-  return pane ?? null
+/** 탭을 모두 닫은 일감: 일감은 남기고 새 탭 버튼. 보이는 일감이면 버튼이 포커스를 받는다(키보드로 바로 새 탭). */
+function NoTabs({ active, focusSignal, onAdd }: { active: boolean; focusSignal: number; onAdd(): void }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (active) ref.current?.focus()
+  }, [active, focusSignal])
+  return (
+    <div className="empty" data-testid="no-tabs">
+      <p className="hint">탭이 없습니다</p>
+      <button ref={ref} type="button" className="button primary" onClick={onAdd}>
+        새 탭
+      </button>
+    </div>
+  )
 }
 
 export function App() {
@@ -38,9 +49,9 @@ export function App() {
   // 대화상자가 닫히면 올려서 보이는 터미널이 포커스를 다시 가져가게 한다
   const [focusSignal, setFocusSignal] = useState(0)
   const refocus = () => setFocusSignal((n) => n + 1)
-  // 한 번이라도 연 일감만 터미널(셸)을 띄운다 — 저장된 일감이 많아도 시작 때 셸을 한꺼번에 띄우지 않게.
-  // 한 번 띄운 셸은 다른 일감으로 옮겨도 숨겨 둔 채 유지한다.
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set())
+  // 한 번이라도 본 탭만 터미널(셸)을 띄운다 — 저장된 일감 · 탭이 많아도 시작 때 셸을 한꺼번에 띄우지 않게.
+  // 한 번 띄운 셸은 다른 탭 · 일감으로 옮겨도 숨겨 둔 채 유지한다.
+  const [seenTabs, setSeenTabs] = useState<ReadonlySet<string>>(() => new Set())
   const loadedRef = useRef<LoadedState['state'] | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
@@ -71,10 +82,22 @@ export function App() {
     if (canSave && state !== loadedRef.current) window.taskminal.state.save(state)
   }, [state, canSave])
 
-  const activeId = state.activeTaskId
+  const shownTabId = state.tasks.find((t) => t.id === state.activeTaskId)?.activeTabId ?? null
   useEffect(() => {
-    if (activeId && !opened.has(activeId)) setOpened((s) => new Set(s).add(activeId))
-  }, [activeId, opened])
+    if (shownTabId && !seenTabs.has(shownTabId)) setSeenTabs((s) => new Set(s).add(shownTabId))
+  }, [shownTabId, seenTabs])
+
+  const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })
+
+  const closeTab = (task: Task, tabId: string) => {
+    const tab = task.tabs.find((t) => t.id === tabId)
+    if (!tab) return
+    // 그 탭의 셸만 끝낸다 — 다른 탭 · 일감의 셸은 그대로.
+    for (const paneId of paneIds(tab.layout)) window.taskminal.pty.kill(paneId)
+    dispatch({ type: 'tab/close', taskId: task.id, tabId })
+    // 이웃 탭이 활성이 되면 그 터미널이, 마지막 탭이었으면 '새 탭' 버튼이 포커스를 받는다
+    refocus()
+  }
 
   const create = (input: NewTaskInput) => {
     dispatch({ type: 'task/create', task: createTask(input, state.settings, newId, Date.now()) })
@@ -120,21 +143,49 @@ export function App() {
           onRemove={setRemoving}
         />
         <main className="workspace">
-          {/* 전환해도 셸 · 화면이 남도록 모든 일감의 pane 을 마운트해 두고, 활성이 아닌 것은 숨긴다. */}
+          {/* 전환해도 셸 · 화면이 남도록 본 탭의 pane 은 모두 마운트해 두고, 활성이 아닌 일감 · 탭은 숨긴다. */}
           {state.tasks.map((task) => {
-            const pane = visiblePane(task)
-            const active = task.id === state.activeTaskId
-            const mounted = active || opened.has(task.id)
+            const taskActive = task.id === state.activeTaskId
             return (
               <section
                 key={task.id}
                 className="task-view"
-                style={{ display: active ? 'flex' : 'none' }}
+                style={{ display: taskActive ? 'flex' : 'none' }}
                 data-testid="task-view"
                 data-task-name={task.name}
-                aria-hidden={!active}
+                aria-hidden={!taskActive}
               >
-                {pane && mounted && <TerminalPane paneId={pane.id} cwd={pane.cwd} active={active} focusSignal={focusSignal} />}
+                <TabBar
+                  task={task}
+                  onSelect={(tabId) => dispatch({ type: 'tab/select', taskId: task.id, tabId })}
+                  onAdd={() => addTab(task.id)}
+                  onClose={(tabId) => closeTab(task, tabId)}
+                  onRename={(tabId, title) => dispatch({ type: 'tab/rename', taskId: task.id, tabId, title })}
+                  onDone={refocus}
+                />
+                {task.tabs.map((tab) => {
+                  const tabActive = tab.id === task.activeTabId
+                  // 분할은 7단계 — 지금은 탭마다 활성 pane 하나
+                  const pane = task.panes[tab.activePaneId]
+                  const mounted = (taskActive && tabActive) || seenTabs.has(tab.id)
+                  return (
+                    <div
+                      key={tab.id}
+                      className="tab-view"
+                      role="tabpanel"
+                      style={{ display: tabActive ? 'flex' : 'none' }}
+                      data-testid="tab-view"
+                      data-tab-id={tab.id}
+                    >
+                      {pane && mounted && (
+                        <TerminalPane paneId={pane.id} cwd={pane.cwd} active={taskActive && tabActive} focusSignal={focusSignal} />
+                      )}
+                    </div>
+                  )
+                })}
+                {task.tabs.length === 0 && (
+                  <NoTabs active={taskActive} focusSignal={focusSignal} onAdd={() => addTab(task.id)} />
+                )}
               </section>
             )
           })}

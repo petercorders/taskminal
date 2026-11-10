@@ -184,6 +184,32 @@ export function addTab(task: Task, newId: NewId): Task {
   }
 }
 
+export function selectTab(task: Task, tabId: Id): Task {
+  return task.tabs.some((t) => t.id === tabId) ? { ...task, activeTabId: tabId } : task
+}
+
+/** 빈 이름이면 title 을 지워 기본 이름(tabLabel)으로 돌아간다. */
+export function renameTab(task: Task, tabId: Id, title: string): Task {
+  if (!task.tabs.some((t) => t.id === tabId)) return task
+  const name = title.trim()
+  return {
+    ...task,
+    tabs: task.tabs.map((t) => {
+      if (t.id !== tabId) return t
+      const { title: _old, ...rest } = t
+      return name ? { ...rest, title: name } : rest
+    }),
+  }
+}
+
+/** 탭에 보일 이름: 정한 이름, 없으면 활성 pane 폴더의 끝 이름 (`~` · `/` 는 그대로). */
+export function tabLabel(task: Task, tab: Tab): string {
+  if (tab.title) return tab.title
+  const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
+  if (cwd === '~' || cwd === '/') return cwd
+  return cwd.slice(cwd.lastIndexOf('/') + 1)
+}
+
 export function splitActivePane(task: Task, dir: SplitDir, newId: NewId): Task {
   const tab = activeTab(task)
   if (!tab || !hasPane(tab.layout, tab.activePaneId)) return task

@@ -200,6 +200,120 @@ select {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  flex-direction: column;
+}
+
+.tab-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ─── 탭 줄 ─── */
+.tab-bar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  height: 34px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-list {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  max-width: 200px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+}
+.tab:hover {
+  background: var(--raised);
+}
+.tab.active {
+  background: var(--bg);
+  color: var(--fg);
+}
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.tab-main {
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.tab-main:focus-visible,
+.tab-close:focus-visible,
+.tab-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tab-close {
+  opacity: 0; /* visibility:hidden 이면 Tab 으로 갈 수 없다 */
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  line-height: 1;
+}
+.tab:hover .tab-close,
+.tab.active .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+}
+.tab-close:hover {
+  background: var(--line);
+  color: var(--fg);
+}
+
+.tab-rename {
+  width: 140px;
+  margin: 0 6px 0 8px;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  outline: none;
+}
+
+.tab-add {
+  flex: none;
+  width: 34px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+}
+.tab-add:hover {
+  background: var(--raised);
+  color: var(--fg);
 }
 
 .terminal-pane {

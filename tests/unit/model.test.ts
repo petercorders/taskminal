@@ -11,8 +11,11 @@ import {
   normalizeState,
   removeGroup,
   removeStatus,
+  renameTab,
   resolveCwd,
+  selectTab,
   splitActivePane,
+  tabLabel,
   taskToTemplate,
 } from '../../src/shared/model'
 import type { AppState, NewTaskInput, Settings, Task, Template } from '../../src/shared/types'
@@ -229,6 +232,45 @@ describe('closePane · closeTab', () => {
     const t = flutterTask()
     expect(closePane(t, 'zz')).toBe(t)
     expect(closeTab(t, 'zz')).toBe(t)
+  })
+})
+
+describe('selectTab · renameTab · tabLabel', () => {
+  test('selectTab: 있는 탭만 활성으로, 없는 id 는 그대로', () => {
+    const t = flutterTask()
+    expect(selectTab(t, t.tabs[1].id).activeTabId).toBe(t.tabs[1].id)
+    expect(selectTab(t, 'zz')).toBe(t)
+  })
+
+  test('renameTab: 앞뒤 공백 제거, 빈 이름이면 title 을 지워 기본 이름으로, 없는 탭은 그대로', () => {
+    const t = flutterTask()
+    const id = t.tabs[0].id
+    expect(renameTab(t, id, '  서버  ').tabs[0].title).toBe('서버')
+    const cleared = renameTab(t, id, '   ')
+    expect(cleared.tabs[0]).not.toHaveProperty('title')
+    expect(cleared.tabs[1].title).toBe('로그') // 다른 탭은 그대로
+    expect(renameTab(t, 'zz', 'x')).toBe(t)
+  })
+
+  test('tabLabel: 이름이 있으면 이름, 없으면 활성 pane 폴더의 끝 이름', () => {
+    const t = flutterTask()
+    expect(tabLabel(t, t.tabs[0])).toBe('개발')
+    const plain = renameTab(t, t.tabs[1].id, '') // 로그 탭: /var/log
+    expect(tabLabel(plain, plain.tabs[1])).toBe('log')
+    const at = (cwd: string) => {
+      const pid = plain.tabs[1].activePaneId
+      const u = { ...plain, panes: { ...plain.panes, [pid]: { id: pid, cwd } } }
+      return tabLabel(u, u.tabs[1])
+    }
+    expect(at('~')).toBe('~')
+    expect(at('/')).toBe('/')
+    expect(at('~/code/app/')).toBe('app')
+  })
+
+  test('tabLabel: pane 기록이 없으면 일감 폴더 끝 이름', () => {
+    const t = flutterTask()
+    const tab = { ...t.tabs[1], title: undefined, activePaneId: 'ghost' }
+    expect(tabLabel(t, tab)).toBe('app')
   })
 })
 

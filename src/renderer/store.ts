@@ -1,4 +1,5 @@
-// 화면 상태의 주인. 순수 reducer — 일감을 만드는 일(새 id · 시각)은 부르는 쪽이 createTask 로 하고 결과를 넘긴다.
+// 화면 상태의 주인. 순수 reducer — 새 id · 시각은 부르는 쪽이 만들어 넘긴다.
+import { addTab, closeTab, renameTab, selectTab } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 
 export type Action =
@@ -6,6 +7,18 @@ export type Action =
   | { type: 'task/create'; task: Task }
   | { type: 'task/select'; id: Id }
   | { type: 'task/remove'; id: Id }
+  | { type: 'tab/add'; taskId: Id; tabId: Id; paneId: Id }
+  | { type: 'tab/select'; taskId: Id; tabId: Id }
+  | { type: 'tab/close'; taskId: Id; tabId: Id }
+  | { type: 'tab/rename'; taskId: Id; tabId: Id; title: string }
+
+/** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
+function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
+  const task = state.tasks.find((t) => t.id === taskId)
+  if (!task) return state
+  const next = change(task)
+  return next === task ? state : { ...state, tasks: state.tasks.map((t) => (t === task ? next : t)) }
+}
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -24,5 +37,15 @@ export function reducer(state: AppState, action: Action): AppState {
         state.activeTaskId === action.id ? (tasks[i]?.id ?? tasks[i - 1]?.id ?? null) : state.activeTaskId
       return { ...state, tasks, activeTaskId }
     }
+    case 'tab/add': {
+      const ids = [action.tabId, action.paneId]
+      return updateTask(state, action.taskId, (t) => addTab(t, () => ids.shift()!))
+    }
+    case 'tab/select':
+      return updateTask(state, action.taskId, (t) => selectTab(t, action.tabId))
+    case 'tab/close':
+      return updateTask(state, action.taskId, (t) => closeTab(t, action.tabId))
+    case 'tab/rename':
+      return updateTask(state, action.taskId, (t) => renameTab(t, action.tabId, action.title))
   }
 }
