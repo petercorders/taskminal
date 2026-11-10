@@ -71,3 +71,17 @@ Taskminal 로 옮긴 안 (추천, 사용자 확인 전):
 
 함께 만들 것: Claude Code 가 이 명령을 알도록 **skill 파일**(또는 CLAUDE.md 조각)을 앱이 제공 — "작업이 끝나면 `taskminal task move --status 완료`, 사용자 확인이 필요하면 `taskminal notify`".
 정할 것: 다른 일감의 터미널에 `pane send` 를 허락할지(기본: 허락 · 설정에서 끔) · `remove` 를 CLI 에 열지 · 소켓 대신 HTTP(localhost) 가 필요한지(아니라고 봄 — 소켓이 권한이 더 좁다).
+
+### 3. Jira · Notion 연동 — 일정 관리를 이 터미널 하나로 (2026-11-10)
+사용자: "jira나 notion하고도 연동되어서 jira의 스케줄 관리들이 이 터미널 하나로 관리될수 있도록".
+
+안 (추천, 사용자 확인 전):
+- **일감 ↔ 이슈 · 페이지 연결**: 일감에 `links`(Jira 이슈 키 `RND-56739` · Notion 페이지). 사이드바 둘째 줄 · 일감 머리 · 전체 보기 카드에 이슈 키 · **마감일** · 스프린트.
+- **Jira 에서 일감 만들기**: 저장한 JQL(기본: `assignee = currentUser() AND sprint in openSprints()`)의 이슈 목록 → 고르면 일감(이름 = 키 + 제목, 묶음 = 프로젝트, 폴더 = 프로젝트별 기본 폴더, 템플릿 = 프로젝트별 기본). Notion 은 데이터베이스(할 일 DB) 행에서 같은 방식.
+- **상태 맞추기**: 설정의 대응 표(진행 중 ↔ In Progress, 리뷰 중 ↔ In Review, 완료 ↔ Done). Taskminal 에서 옮기면 Jira 전환을 **물어본 뒤** 보냄(설정으로 '묻지 않고'), Jira 쪽 변경은 5분마다 · 창을 앞으로 가져올 때 가져옴. 둘 다 바뀌었으면 덮지 않고 '확인 필요' 에 올림.
+- **일정**: 사이드바 맨 위 '오늘 · 이번 주 마감' 칸 · 전체 보기에 마감순 정렬 · 마감 지난 일감은 빨간 날짜. macOS 알림(마감 하루 전 · 당일 아침).
+- **기록 남기기**: 일감에서 "Jira 에 댓글" · "Notion 페이지에 기록" — 마지막 출력이나 고른 글을 붙임(보내기 전 미리보기).
+- **CLI**(2번과 이어짐): `taskminal jira pull` · `taskminal task link RND-123` · `taskminal task move --status 완료`(연결된 이슈도 전환, `--no-sync` 로 끔) · `taskminal jira comment "…"` — Claude 가 작업 끝에 이슈를 옮기고 댓글을 단다.
+- **인증**: Jira API 토큰 · Notion 통합 토큰은 **macOS 키체인**에만(state.json 에 넣지 않음). 설정에서 입력 · 연결 확인 버튼.
+
+정할 것: Jira 사이트 · 프로젝트 · 기본 JQL · 상태 대응 표 · Jira → Taskminal 을 자동으로 받을지 · Notion 은 어떤 DB(할 일 DB 가 있는지) · 둘 중 먼저 할 것(추천: Jira 먼저 — 일정 · 스프린트가 거기 있음).
