@@ -76,10 +76,10 @@ describe('resolveCwd', () => {
 })
 
 describe('defaultSettings', () => {
-  test('상태 3개 · 템플릿 2개 · 글자 13 · 셸 null', () => {
+  test('상태 3개 · 템플릿 3개 · 글자 13 · 셸 null', () => {
     const s = defaultSettings()
     expect(s.statuses.map((x) => x.name)).toEqual(['진행 중', '대기', '완료'])
-    expect(s.templates.map((x) => x.name)).toEqual(['기본', 'Claude + 셸'])
+    expect(s.templates.map((x) => x.name)).toEqual(['기본', 'Claude + 셸', '개발 서버 + 셸'])
     expect(s.fontSize).toBe(13)
     expect(s.shell).toBeNull()
   })

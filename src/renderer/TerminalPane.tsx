@@ -21,7 +21,16 @@ interface Props {
   onClosed(): void
   /** 셸 통합 · 벨 · 알림이 알려 준 활동 (숨은 pane 도 계속 받는다) */
   onActivity(event: ActivityEvent): void
+  /** 템플릿의 시작 명령 — 셸이 처음 뜰 때 한 번 보낸다 (pane.pendingCommand) */
+  startCommand?: string | undefined
+  /** 시작 명령을 보냈다 — 저장된 pendingCommand 를 지워 다시 돌지 않게 */
+  onStartSent?(): void
 }
+
+/** 셸 통합이 꺼져 있거나 첫 프롬프트 신호가 오지 않을 때 시작 명령을 보내는 시각 */
+export const START_FALLBACK_MS = 4000
+// 시작 명령을 보낸 pane — 개발 모드 StrictMode 의 두 번 마운트 · 다시 마운트가 두 번 보내지 않게 (상태는 dispatch 뒤에야 바뀐다)
+const sentStarts = new Set<string>()
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
 /** 화면 폭에서 접힌 행(isWrapped)을 이어 붙인 논리 줄 — 접힌 자리에 걸친 글자도 찾게. line 은 시작 행 번호. */
@@ -40,13 +49,15 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
   onClosedRef.current = onClosed
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
+  const startRef = useRef({ command: startCommand, onSent: onStartSent })
+  startRef.current = { command: startCommand, onSent: onStartSent }
   // 셸을 띄울 때의 설정 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
   const settingsRef = useRef(settings)
   settingsRef.current = settings
@@ -73,9 +84,22 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     term.unicode.activeVersion = '11'
     term.open(host)
 
+    // 시작 명령: 첫 프롬프트(셸 통합의 OSC 133;A — 사용자 .zshrc 를 다 읽은 뒤)에 한 번. 신호가 없으면 START_FALLBACK_MS 뒤에
+    // (셸은 그 전에 온 입력도 줄 버퍼에 두었다 읽는다). 셸을 못 띄웠으면 보내지 않고 남겨 둔다.
+    let startTimer: ReturnType<typeof setTimeout> | undefined
+    const sendStart = () => {
+      const { command, onSent } = startRef.current
+      clearTimeout(startTimer)
+      if (!command || sentStarts.has(paneId)) return
+      sentStarts.add(paneId)
+      pty.write(paneId, command + '\r')
+      onSent?.()
+    }
+
     // 활동 신호 — 처리했다고(true) 알려 xterm 이 화면에 아무것도 하지 않게
     const emit = (ev: ActivityEvent | null) => {
       if (ev) onActivityRef.current(ev)
+      if (ev?.type === 'prompt') sendStart()
       return true
     }
     const oscs = [
@@ -119,9 +143,14 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
 
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
     fitNow()
-    pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).catch((error: unknown) => {
-      term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
-    })
+    pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
+      () => {
+        if (startRef.current.command) startTimer = setTimeout(sendStart, s.integration ? START_FALLBACK_MS : 0)
+      },
+      (error: unknown) => {
+        term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
+      },
+    )
 
     // 창 가장자리를 끄는 동안 프레임마다 SIGWINCH 를 보내지 않게, 한 프레임에 한 번만 맞춘다.
     const refit = () => {
@@ -168,6 +197,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     return () => {
       observer.disconnect()
       cancelAnimationFrame(frame)
+      clearTimeout(startTimer)
       input.dispose()
       selection.dispose()
       for (const d of oscs) d.dispose()

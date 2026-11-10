@@ -40,6 +40,11 @@ export function defaultSettings(): Settings {
         name: 'Claude + 셸',
         tabs: [{ layout: { split: 'right', ratio: 0.6, a: { pane: { command: 'claude' } }, b: { pane: {} } } }],
       },
+      {
+        id: 'tpl-dev',
+        name: '개발 서버 + 셸',
+        tabs: [{ title: '서버', layout: { split: 'down', ratio: 0.7, a: { pane: { command: 'npm run dev' } }, b: { pane: {} } } }],
+      },
     ],
     fontSize: FONT_DEFAULT,
     shell: null,
@@ -151,18 +156,36 @@ function toSpec(layout: Layout, task: Task): LayoutSpec {
   return { split: layout.dir, ratio: layout.ratio, a: toSpec(layout.a, task), b: toSpec(layout.b, task) }
 }
 
+function tabToSpec(tab: Tab, task: Task): TemplateTab {
+  const tt: TemplateTab = { layout: toSpec(tab.layout, task) }
+  if (tab.title !== undefined) tt.title = tab.title
+  return tt
+}
+
 /** 지금 일감의 탭 · 분할 · 시작 명령을 템플릿으로. 폴더는 일감 폴더 기준 상대 경로. */
 export function taskToTemplate(task: Task, name: string, newId: NewId): Template {
-  return {
-    id: newId(),
-    // 빈 이름 템플릿은 저장 파일 검증에서 버려진다
-    name: name.trim() || '새 템플릿',
-    tabs: task.tabs.map((tab) => {
-      const tt: TemplateTab = { layout: toSpec(tab.layout, task) }
-      if (tab.title !== undefined) tt.title = tab.title
-      return tt
-    }),
-  }
+  // 빈 이름 템플릿은 저장 파일 검증에서 버려진다
+  return { id: newId(), name: name.trim() || '새 템플릿', tabs: task.tabs.map((tab) => tabToSpec(tab, task)) }
+}
+
+/** 탭 하나를 템플릿으로 ("+ ▾" › 이 탭을 템플릿으로 저장). 없는 탭이면 null. */
+export function tabToTemplate(task: Task, tabId: Id, name: string, newId: NewId): Template | null {
+  const tab = task.tabs.find((t) => t.id === tabId)
+  return tab ? { id: newId(), name: name.trim() || '새 템플릿', tabs: [tabToSpec(tab, task)] } : null
+}
+
+/** addTemplateTabs 가 만드는 새 id 수 (탭 + pane) — reducer 에 id 를 미리 만들어 넘길 때 */
+export function templateIdCount(template: Template): number {
+  const count = (l: LayoutSpec): number => ('pane' in l ? 1 : count(l.a) + count(l.b))
+  return template.tabs.reduce((n, t) => n + 1 + count(t.layout), 0)
+}
+
+/** 템플릿의 탭들을 일감 끝에 붙인다 — 폴더는 일감 폴더 기준, 시작 명령은 셸이 뜰 때 한 번. 첫 새 탭이 활성. */
+export function addTemplateTabs(task: Task, template: Template, newId: NewId): Task {
+  if (template.tabs.length === 0) return task
+  const panes = { ...task.panes }
+  const tabs = template.tabs.map((tt) => expandTab(tt, task.cwd, newId, panes))
+  return { ...task, tabs: [...task.tabs, ...tabs], activeTabId: tabs[0]!.id, panes }
 }
 
 // ─── 탭 · 분할 · pane ───────────────────────────────────────
@@ -395,6 +418,18 @@ export function renameTemplate(state: AppState, id: Id, name: string): AppState 
   const cur = state.settings.templates.find((t) => t.id === id)
   if (!cur || !n || n === cur.name) return state
   return withSettings(state, { templates: state.settings.templates.map((t) => (t === cur ? { ...t, name: n } : t)) })
+}
+
+/** 템플릿 추가 (이 탭/일감을 템플릿으로 · JSON 편집기의 새 템플릿). 같은 id 가 있으면 그대로. */
+export function addTemplate(state: AppState, template: Template): AppState {
+  if (state.settings.templates.some((t) => t.id === template.id)) return state
+  return withSettings(state, { templates: [...state.settings.templates, template] })
+}
+
+/** JSON 편집기에서 고친 이름 · 탭으로 바꾼다. id · 목록 안 자리는 그대로. */
+export function replaceTemplate(state: AppState, id: Id, next: Pick<Template, 'name' | 'tabs'>): AppState {
+  if (!state.settings.templates.some((t) => t.id === id)) return state
+  return withSettings(state, { templates: state.settings.templates.map((t) => (t.id === id ? { id, name: next.name, tabs: next.tabs } : t)) })
 }
 
 /** 템플릿을 지운다. 기본 템플릿이었으면 기본은 없음(셸 하나). 이미 만든 일감은 그대로. */

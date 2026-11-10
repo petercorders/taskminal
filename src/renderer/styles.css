@@ -1185,3 +1185,49 @@ input[type='range'],
 input[type='checkbox'] {
   accent-color: var(--accent);
 }
+
+/* ─── 템플릿 (12단계) ─────────────────────────────── */
+.tab-add.more {
+  width: 22px;
+  font-size: 11px;
+}
+.dialog.wide {
+  width: 640px;
+}
+.template-help {
+  font-size: 12px;
+}
+.template-json {
+  min-height: 300px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.5 ui-monospace, Menlo, monospace;
+  tab-size: 2;
+}
+.template-json:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.template-json[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.template-errors {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.template-errors:empty {
+  display: none;
+}
+/* 막힌 버튼(편집기 오류 · 빈 템플릿 이름의 저장) — 누를 수 없음이 보이게 */
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

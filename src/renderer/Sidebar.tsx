@@ -19,12 +19,13 @@ interface Props {
   onEdit(id: Id, patch: TaskEdit): void
   onToggleGroup(id: Id): void
   onSettings(): void
+  onSaveTemplate(task: Task): void
   /** 메뉴 · 이름 바꾸기를 끝냈다 — 터미널이 포커스를 다시 가져가게 */
   onMenuClosed(): void
 }
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onMenuClosed }: Props) {
+export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed }: Props) {
   const sections = sidebarSections(state)
   const [menu, setMenu] = useState<{ taskId: Id; x: number; y: number } | null>(null)
   // 이름 바꾸기 중인 일감. ↩ · Esc 로 끝내면 입력칸이 사라지는데, Chromium 은 사라지는 입력칸에 blur 를 보내지 않는다
@@ -189,6 +190,10 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
           onRemove={() => {
             setMenu(null)
             onRemove(menuTask)
+          }}
+          onSaveTemplate={() => {
+            setMenu(null)
+            onSaveTemplate(menuTask)
           }}
           onClose={() => {
             setMenu(null)

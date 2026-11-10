@@ -5,6 +5,8 @@ import {
   addGroup,
   addStatus,
   addTab,
+  addTemplate,
+  addTemplateTabs,
   closePane,
   closeTab,
   cycleActivePane,
@@ -12,6 +14,7 @@ import {
   editTask,
   findPaneTask,
   focusPane,
+  markCommandSent,
   moveGroup,
   moveStatus,
   removeGroup,
@@ -20,6 +23,7 @@ import {
   renameGroup,
   renameTab,
   renameTemplate,
+  replaceTemplate,
   selectTab,
   selectTabAt,
   setTabRatio,
@@ -28,7 +32,7 @@ import {
   updateStatus,
   type TaskEdit,
 } from '../shared/model'
-import type { AppState, Id, Settings, SplitDir, Task } from '../shared/types'
+import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
 export type SettingsPatch = Partial<Omit<Settings, 'statuses' | 'groups' | 'templates'>>
@@ -64,6 +68,12 @@ export type Action =
   | { type: 'group/toggle'; id: Id }
   | { type: 'template/rename'; id: Id; name: string }
   | { type: 'template/remove'; id: Id }
+  | { type: 'template/add'; template: Template }
+  | { type: 'template/replace'; id: Id; name: string; tabs: Template['tabs'] }
+  /** 탭 "+ ▾" — 템플릿의 탭을 붙인다. ids 는 부르는 쪽이 templateIdCount 개 만들어 넘긴다 */
+  | { type: 'tab/add-template'; taskId: Id; templateId: Id; ids: Id[] }
+  /** 템플릿 시작 명령을 셸에 보냈다 → 다시 돌지 않게 */
+  | { type: 'pane/command-sent'; paneId: Id }
   | { type: 'task/edit'; id: Id; patch: TaskEdit }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
@@ -158,6 +168,26 @@ export function reducer(state: AppState, action: Action): AppState {
       return renameTemplate(state, action.id, action.name)
     case 'template/remove':
       return removeTemplate(state, action.id)
+    case 'template/add':
+      return addTemplate(state, action.template)
+    case 'template/replace':
+      return replaceTemplate(state, action.id, { name: action.name, tabs: action.tabs })
+    case 'tab/add-template': {
+      const template = state.settings.templates.find((t) => t.id === action.templateId)
+      if (!template) return state
+      const ids = [...action.ids]
+      return updateTask(state, action.taskId, (t) =>
+        addTemplateTabs(t, template, () => {
+          const id = ids.shift()
+          if (id === undefined) throw new Error('tab/add-template: id 가 모자랍니다 (templateIdCount)')
+          return id
+        }),
+      )
+    }
+    case 'pane/command-sent': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => markCommandSent(t, action.paneId)) : state
+    }
     case 'task/edit':
       return editTask(state, action.id, action.patch)
   }

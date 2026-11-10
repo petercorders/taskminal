@@ -99,7 +99,7 @@ describe('템플릿 고치기', () => {
     let s = renameTemplate(state(), 'tpl-claude', 'Claude')
     expect(s.settings.templates.find((t) => t.id === 'tpl-claude')!.name).toBe('Claude')
     s = removeTemplate(s, 'tpl-claude')
-    expect(s.settings.templates.map((t) => t.id)).toEqual(['tpl-basic'])
+    expect(s.settings.templates.map((t) => t.id)).toEqual(['tpl-basic', 'tpl-dev'])
     expect(s.settings.defaultTemplateId).toBeNull()
     const keep = removeTemplate(state(), 'tpl-basic')
     expect(keep.settings.defaultTemplateId).toBe('tpl-claude')

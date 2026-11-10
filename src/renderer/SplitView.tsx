@@ -21,6 +21,8 @@ interface Props {
   onRatio(path: SplitPath, ratio: number): void
   /** 깨끗하지 않게 끝난 셸을 본 뒤 키를 눌렀다 */
   onClosePane(paneId: Id): void
+  /** 템플릿 시작 명령을 보냈다 */
+  onStartSent(paneId: Id): void
   /** 마우스로 끄는 것이 끝났다(놓음 · 취소) — 터미널이 포커스를 다시 가져가게 */
   onDragEnd(): void
 }
@@ -32,7 +34,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onDragEnd }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -129,6 +131,8 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 settings={term}
                 onClosed={() => onClosePane(pane.id)}
                 onActivity={(ev) => onActivity(pane.id, ev)}
+                startCommand={pane.pendingCommand}
+                onStartSent={() => onStartSent(pane.id)}
               />
             )}
           </div>

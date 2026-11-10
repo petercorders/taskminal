@@ -5,7 +5,7 @@ import { commandForKey, isAppCommand, repeatable, shortcutTable, stepFontSize, t
 import { notifyKind } from '../shared/notify'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
-import { createTask, emptyState, findPaneTask } from '../shared/model'
+import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, NotifyKind, Task } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -15,6 +15,7 @@ import { Sidebar } from './Sidebar'
 import { adjacentTask, nextAttention } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
+import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
@@ -80,6 +81,8 @@ export function App() {
   // 팔레트에서 고른 출력 줄 — 그 pane 이 보이게 그린 뒤에 스크롤 · 선택한다(숨은 터미널에서 하면 스크롤이 맞지 않는다)
   const [pendingReveal, setPendingReveal] = useState<{ paneId: string; line: number; query: string } | null>(null)
   const [removing, setRemoving] = useState<Task | null>(null)
+  // 이 일감(tabId null) · 탭을 템플릿으로 저장 — 이름을 묻는 중
+  const [savingTemplate, setSavingTemplate] = useState<{ taskId: string; tabId: string | null } | null>(null)
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
   // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
   const [confirming, setConfirming] = useState<
@@ -260,6 +263,19 @@ export function App() {
   const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
 
   const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })
+  const addTemplateTab = (taskId: string, templateId: string) => {
+    const template = state.settings.templates.find((t) => t.id === templateId)
+    if (!template) return
+    dispatch({ type: 'tab/add-template', taskId, templateId, ids: Array.from({ length: templateIdCount(template) }, newId) })
+    refocus()
+  }
+  const saveTemplate = (name: string) => {
+    const target = savingTemplate
+    const task = state.tasks.find((t) => t.id === target?.taskId)
+    const template = task && (target!.tabId ? tabToTemplate(task, target!.tabId, name, newId) : taskToTemplate(task, name, newId))
+    if (template) dispatch({ type: 'template/add', template })
+    closeDialogs()
+  }
 
   const closeTab = (task: Task, tabId: string, confirmed = false) => {
     const tab = task.tabs.find((t) => t.id === tabId)
@@ -284,6 +300,7 @@ export function App() {
     setCreating(null)
     setRemoving(null)
     setConfirming(null)
+    setSavingTemplate(null)
     setPaletteOpen(false)
     refocus()
   }
@@ -296,7 +313,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || paletteOpen || settingsOpen
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
@@ -470,6 +487,7 @@ export function App() {
           onEdit={(id, patch) => dispatch({ type: 'task/edit', id, patch })}
           onToggleGroup={(id) => dispatch({ type: 'group/toggle', id })}
           onSettings={() => runCommand('settings')}
+          onSaveTemplate={(task) => setSavingTemplate({ taskId: task.id, tabId: null })}
           onMenuClosed={refocus}
         />
         <main className="workspace">
@@ -495,6 +513,9 @@ export function App() {
                   onRename={(tabId, title) => dispatch({ type: 'tab/rename', taskId: task.id, tabId, title })}
                   onDone={refocus}
                   onSplit={(dir) => dispatch({ type: 'pane/split', taskId: task.id, dir, paneId: newId() })}
+                  templates={state.settings.templates}
+                  onAddTemplate={(id) => addTemplateTab(task.id, id)}
+                  onSaveTemplate={(tabId) => setSavingTemplate({ taskId: task.id, tabId })}
                 />
                 {task.tabs.map((tab) => {
                   const tabActive = tab.id === task.activeTabId
@@ -522,6 +543,7 @@ export function App() {
                           onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
+                          onStartSent={(paneId) => dispatch({ type: 'pane/command-sent', paneId })}
                           onDragEnd={refocus}
                         />
                       )}
@@ -565,6 +587,20 @@ export function App() {
       )}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
       {paletteOpen && <Palette state={state} shortcuts={shortcuts} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {savingTemplate &&
+        (() => {
+          const task = state.tasks.find((t) => t.id === savingTemplate.taskId)
+          const tab = task?.tabs.find((t) => t.id === savingTemplate.tabId)
+          if (!task) return null
+          return (
+            <TemplateNameDialog
+              what={tab ? '탭' : '일감'}
+              initialName={tab ? tabLabel(task, tab) : task.name}
+              onSave={saveTemplate}
+              onCancel={closeDialogs}
+            />
+          )
+        })()}
       {removing && (
         <ConfirmDialog
           title="일감 지우기"

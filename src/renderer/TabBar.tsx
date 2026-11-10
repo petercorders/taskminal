@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { taskActivity, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
 import { tabLabel } from '../shared/model'
-import type { Id, SplitDir, Task } from '../shared/types'
+import type { Id, SplitDir, Task, Template } from '../shared/types'
+import { TemplateMenu } from './TemplateMenu'
 
 interface Props {
   task: Task
@@ -18,6 +19,10 @@ interface Props {
   onDone(): void
   /** 활성 pane 을 나눈다 (단축키 ⌘D · ⇧⌘D 는 8단계) */
   onSplit(dir: SplitDir): void
+  /** "▾" 메뉴: 템플릿 목록 · 그 템플릿의 탭 열기 · 이 탭/일감을 템플릿으로 저장 */
+  templates: Template[]
+  onAddTemplate(templateId: Id): void
+  onSaveTemplate(tabId: Id | null): void
 }
 
 export const tabElementId = (tabId: Id) => `tab-${tabId}`
@@ -25,8 +30,9 @@ export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit }: Props) {
+export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   // 탭이 넘쳐도 활성 탭(방금 만든 탭 포함)이 보이게 — 스크롤 막대를 숨겨 두었으므로 직접 데려온다
@@ -113,6 +119,44 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
       <button type="button" className="tab-add" aria-label="새 탭" title="새 탭" onClick={onAdd}>
         +
       </button>
+      <button
+        type="button"
+        className="tab-add more"
+        aria-label="템플릿 탭"
+        aria-haspopup="menu"
+        aria-expanded={menuAt !== null}
+        title="템플릿으로 탭 열기 · 템플릿으로 저장"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setMenuAt({ x: r.left, y: r.bottom + 2 })
+        }}
+      >
+        ▾
+      </button>
+      {menuAt && (
+        <TemplateMenu
+          templates={templates}
+          hasTab={task.activeTabId !== null}
+          x={menuAt.x}
+          y={menuAt.y}
+          onPick={(id) => {
+            setMenuAt(null)
+            onAddTemplate(id)
+          }}
+          onSaveTab={() => {
+            setMenuAt(null)
+            onSaveTemplate(task.activeTabId)
+          }}
+          onSaveTask={() => {
+            setMenuAt(null)
+            onSaveTemplate(null)
+          }}
+          onClose={() => {
+            setMenuAt(null)
+            onDone()
+          }}
+        />
+      )}
       <div className="tab-actions">
         {(['right', 'down'] as const).map((dir) => (
           <button

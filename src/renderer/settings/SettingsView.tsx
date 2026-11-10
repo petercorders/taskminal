@@ -4,6 +4,7 @@ import { ACCENTS, DIM, FONT_FAMILIES, LINE_HEIGHT, LONG_AFTER_CHOICES, NOTIFY_KI
 import type { AppState, NotifyKind } from '../../shared/types'
 import type { Action, SettingsPatch } from '../store'
 import { fontStack } from '../term-settings'
+import { TemplateEditor } from './TemplateEditor'
 
 type SectionId = 'general' | 'look' | 'term' | 'notify' | 'keys' | 'tasks'
 const SECTIONS: Array<{ id: SectionId; title: string }> = [
@@ -115,6 +116,9 @@ const NOTIFY_ROWS: Record<NotifyKind, { title: string; desc: string }> = {
 export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Props) {
   const s = state.settings
   const [section, setSection] = useState<SectionId>('general')
+  // JSON 편집기: 템플릿 id · 'new'(새 템플릿)
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
+  const editedTemplate = s.templates.find((t) => t.id === editingTemplate) ?? null
   const [query, setQuery] = useState('')
   const [capturing, setCapturing] = useState<AppCommand | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -508,6 +512,9 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
               <li key={t.id} className="manage-item" data-testid="template-item">
                 <TextField label="템플릿 이름" className="setting-input" value={t.name} onCommit={(v) => dispatch({ type: 'template/rename', id: t.id, name: v })} />
                 <span className="manage-count">탭 {t.tabs.length}</span>
+                <button type="button" className="button" aria-label={`${t.name} JSON 편집`} onClick={() => setEditingTemplate(t.id)}>
+                  편집
+                </button>
                 <button type="button" className="icon-button" aria-label={`${t.name} 지우기`} onClick={() => dispatch({ type: 'template/remove', id: t.id })}>
                   ×
                 </button>
@@ -515,6 +522,9 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
             ))}
             {s.templates.length === 0 && <li className="manage-empty">템플릿이 없습니다</li>}
           </ul>
+          <button type="button" className="button" onClick={() => setEditingTemplate('new')}>
+            + 새 템플릿
+          </button>
         </Row>
       </>
     ),
@@ -572,6 +582,17 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
           </div>
         </QueryContext.Provider>
       </div>
+      {editingTemplate && (
+        <TemplateEditor
+          template={editedTemplate}
+          onSave={(value) => {
+            if (editedTemplate) dispatch({ type: 'template/replace', id: editedTemplate.id, name: value.name, tabs: value.tabs })
+            else dispatch({ type: 'template/add', template: { id: newId(), ...value } })
+            setEditingTemplate(null)
+          }}
+          onCancel={() => setEditingTemplate(null)}
+        />
+      )}
     </div>
   )
 }

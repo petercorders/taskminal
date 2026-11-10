@@ -13,6 +13,8 @@ interface Props {
   /** 이름 바꾸기 · 지우기는 메뉴를 닫는 것까지 부르는 쪽이 한다 — 다음 포커스(입력칸 · 확인 대화상자)를 터미널에 뺏기지 않게 */
   onRename(): void
   onRemove(): void
+  /** 템플릿으로 저장 — 이름 대화상자가 포커스를 가져가게 메뉴를 닫는 것까지 부르는 쪽이 한다 */
+  onSaveTemplate(): void
   /** 그 밖의 항목 · Esc · 바깥 클릭 */
   onClose(): void
 }
@@ -21,7 +23,7 @@ interface Props {
  * 일감 우클릭 메뉴 — 이름 바꾸기 · 상태 · 묶음 · 색 · 지우기. 네이티브 팝업 대신 HTML(Playwright 가 누를 수 있게).
  * ↑↓ 로 항목 이동 · ↩/Space 실행 · Esc · 바깥 클릭으로 닫힘.
  */
-export function TaskMenu({ task, settings, x, y, onEdit, onRename, onRemove, onClose }: Props) {
+export function TaskMenu({ task, settings, x, y, onEdit, onRename, onRemove, onSaveTemplate, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const box = ref.current!
@@ -89,6 +91,10 @@ export function TaskMenu({ task, settings, x, y, onEdit, onRename, onRemove, onC
           {radio('색 없음', task.color === null, () => onEdit({ color: null }), null)}
         </div>
         <div className="menu-sep" role="separator" />
+        <button type="button" role="menuitem" className="menu-item" onClick={onSaveTemplate} tabIndex={-1}>
+          <span className="menu-check" aria-hidden />
+          템플릿으로 저장…
+        </button>
         <button type="button" role="menuitem" className="menu-item danger" onClick={onRemove} tabIndex={-1}>
           <span className="menu-check" aria-hidden />
           지우기…
