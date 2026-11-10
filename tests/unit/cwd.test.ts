@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cwdLike, parseLsofCwd, parseOsc7 } from '../../src/shared/cwd'
+import { cwdLike, expandHome, parseLsofCwd, parseOsc7 } from '../../src/shared/cwd'
 
 describe('parseOsc7 — 셸 통합이 알려 주는 작업 폴더', () => {
   it('퍼센트 인코딩(한글 · 공백)을 푼다', () => {
@@ -51,5 +51,14 @@ describe('cwdLike — 셸이 알려 준 절대 경로를 일감 폴더와 같은
   })
   it('홈을 모르면 그대로', () => {
     expect(cwdLike('/Users/x/proj', '~/proj', '')).toBe('/Users/x/proj')
+  })
+})
+
+describe('expandHome (15c 리뷰 — pty · git 이 같은 규칙)', () => {
+  it('~ · ~/x 만 풀고 나머지는 그대로', () => {
+    expect(expandHome('~', '/Users/a')).toBe('/Users/a')
+    expect(expandHome('~/p/q', '/Users/a')).toBe('/Users/a/p/q')
+    expect(expandHome('~other', '/Users/a')).toBe('~other')
+    expect(expandHome('/tmp', '/Users/a')).toBe('/tmp')
   })
 })

@@ -2,8 +2,8 @@ import type { WebContents } from 'electron'
 import { spawn, type IPty } from 'node-pty'
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { IPC, type PtyExit, type PtySpawnOptions } from '../shared/ipc'
+import { expandHome } from '../shared/cwd'
 import { integrationEnv, OutputBatcher, pickShell, shellEnv } from '../shared/pty'
 
 const KILL_AFTER_MS = 2000 // SIGHUP 뒤 이만큼 지나도 살아 있으면 SIGKILL
@@ -147,7 +147,7 @@ function signal(pty: IPty, sig: string): void {
 
 function resolveCwd(cwd: string): string {
   const home = homedir()
-  const path = cwd === '~' ? home : cwd.startsWith('~/') ? join(home, cwd.slice(2)) : cwd
+  const path = expandHome(cwd, home)
   try {
     if (statSync(path).isDirectory()) return path
   } catch {

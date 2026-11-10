@@ -41,7 +41,7 @@ const where = (name: string) => win.getByTestId('sidebar').getByRole('listitem')
 
 test('저장소 일감은 브랜치, 아닌 일감은 폴더 — 고정폭 글꼴', async () => {
   await expect(where('저장소 일감')).toHaveText('main')
-  await expect(where('그냥 폴더')).toHaveText(join(work, 'plain'))
+  await expect(where('그냥 폴더')).toHaveText(/\/plain$/) // 긴 임시 경로는 shortPath 가 '…/…/plain' 으로 줄인다 (15c 리뷰)
   expect(await where('저장소 일감').evaluate((el) => (globalThis as unknown as { getComputedStyle(e: unknown): { fontFamily: string } }).getComputedStyle(el).fontFamily)).toMatch(/JetBrains Mono|Menlo/)
   await win.screenshot({ path: 'test-results/branch-sidebar.png' })
 })
@@ -55,6 +55,7 @@ test('셸에서 브랜치를 바꾸면 몇 초 안에 따라간다', async () =>
 })
 
 test('창이 포커스를 받으면 바로 다시 읽는다', async () => {
+  await win.evaluate(() => (globalThis as unknown as { dispatchEvent(e: Event): void }).dispatchEvent(new Event('blur')))
   git(join(work, 'repo'), 'switch', '-q', '-c', 'from-outside')
   await win.evaluate(() => (globalThis as unknown as { dispatchEvent(e: Event): void }).dispatchEvent(new Event('focus')))
   await expect(where('저장소 일감')).toHaveText('from-outside', { timeout: 2_000 })

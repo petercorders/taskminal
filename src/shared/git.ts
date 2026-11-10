@@ -4,7 +4,8 @@
 export function parseHead(text: string): string | null {
   const t = text.trim()
   const ref = /^ref: refs\/heads\/(.+)$/.exec(t)
-  if (ref) return ref[1]!
+  // reftable 저장소의 HEAD 는 자리 표시 `refs/heads/.invalid` — 진짜 브랜치는 reftable 안에 있어 모른다
+  if (ref) return ref[1] === '.invalid' ? null : ref[1]!
   return /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(t) ? t.slice(0, 7) : null
 }
 

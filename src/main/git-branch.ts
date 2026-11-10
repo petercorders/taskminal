@@ -1,6 +1,7 @@
 // 15c: 폴더의 git 브랜치를 파일로 읽는다 — /usr/bin/git 은 Command Line Tools 가 없으면 설치 창을 띄우고, 주기마다 프로세스를 만들지 않으려고.
 import { open, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { expandHome } from '../shared/cwd'
 import { parseGitdir, parseHead } from '../shared/git'
 
 const MAX_FILE = 4096 // HEAD · .git 파일은 한 줄
@@ -16,7 +17,7 @@ async function readSmall(path: string): Promise<string | null> {
   } catch {
     return null
   } finally {
-    await f?.close()
+    await f?.close().catch(() => {}) // 닫기 실패가 다른 폴더의 결과까지 막지 않게
   }
 }
 
@@ -25,7 +26,15 @@ export async function branchOf(dir: string): Promise<string | null> {
   let d = resolve(dir)
   for (let i = 0; i < MAX_DEPTH; i++) {
     const dotGit = join(d, '.git')
-    const st = await stat(dotGit).catch(() => null)
+    let st
+    try {
+      st = await stat(dotGit)
+    } catch (e) {
+      // 없음(ENOENT · ENOTDIR)만 위로 — 권한 · 입출력 오류는 '모름' (위쪽 저장소의 브랜치로 잘못 보이지 않게)
+      const code = (e as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') return null
+      st = null
+    }
     if (st?.isDirectory()) return parseOr(await readSmall(join(dotGit, 'HEAD')))
     if (st?.isFile()) {
       // worktree: `.git` 파일이 진짜 git 폴더를 가리킨다 (상대 경로는 그 폴더 기준)
@@ -47,7 +56,7 @@ export async function branchesOf(dirs: readonly string[], home: string): Promise
   const out: Record<string, string | null> = {}
   await Promise.all(
     dirs.map(async (raw) => {
-      const path = raw === '~' ? home : raw.startsWith('~/') ? join(home, raw.slice(2)) : raw
+      const path = expandHome(raw, home)
       out[raw] = isAbsolute(path) ? await branchOf(path) : null
     }),
   )

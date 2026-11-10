@@ -43,3 +43,8 @@ export function cwdLike(path: string, taskCwd: string, home: string): string {
   if (path === home) return '~'
   return path.startsWith(home + '/') ? '~' + path.slice(home.length) : path
 }
+
+/** `~` · `~/…` 를 home 으로 푼다 — 셸을 여는 폴더(pty-manager)와 브랜치를 읽는 폴더(git-branch)가 같은 규칙을 쓴다 */
+export function expandHome(path: string, home: string): string {
+  return path === '~' ? home : path.startsWith('~/') ? home + '/' + path.slice(2) : path
+}

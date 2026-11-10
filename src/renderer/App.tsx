@@ -279,35 +279,35 @@ export function App() {
       window.removeEventListener('beforeunload', flush)
     }
   }, [scrollReady, restoreOn])
-  // 사이드바 둘째 줄의 git 브랜치 (15c) — 일감 폴더가 바뀔 때 · 5초마다 · 창 포커스 때 다시 읽는다.
-  // 늦게 온 옛 응답은 버리고(번호 · 정리 뒤 alive), 같은 결과면 다시 그리지 않는다.
+  // 사이드바 둘째 줄의 git 브랜치 (15c) — 일감 폴더가 바뀔 때 · 창이 포커스를 받을 때 읽고, 포커스가 있는 동안만 5초마다.
+  // 앞 요청이 안 끝났으면 건너뛴다(끊긴 NAS 같은 느린 폴더에서 요청이 쌓이지 않게). 정리 뒤 온 옛 응답은 버리고, 같으면 다시 그리지 않는다.
   const dirsKey = taskDirs(state.tasks.map((t) => t.cwd)).join('\n')
   useEffect(() => {
     const dirs = dirsKey ? dirsKey.split('\n') : []
     if (dirs.length === 0) return setBranches((prev) => keepIfSame(prev, {}))
     let alive = true
-    let sent = 0
-    let applied = 0
+    let busy = false
     const read = () => {
-      const mine = ++sent
-      void window.taskminal.gitBranches(dirs).then(
-        (found) => {
-          if (!alive || mine < applied) return
-          applied = mine
-          setBranches((prev) => keepIfSame(prev, found))
-        },
-        () => {},
-      )
+      if (busy) return
+      busy = true
+      void window.taskminal
+        .gitBranches(dirs)
+        .then(
+          (found) => {
+            if (alive) setBranches((prev) => keepIfSame(prev, found))
+          },
+          () => {},
+        )
+        .finally(() => (busy = false))
     }
-    read()
+    read() // 폴더가 바뀜 · 포커스를 받음(windowFocused 가 바뀌어 다시 돎)
+    if (!windowFocused) return () => void (alive = false)
     const timer = setInterval(read, BRANCH_POLL_MS)
-    window.addEventListener('focus', read)
     return () => {
       alive = false
       clearInterval(timer)
-      window.removeEventListener('focus', read)
     }
-  }, [dirsKey])
+  }, [dirsKey, windowFocused])
   // 셸 통합(OSC 7)이 없는 셸의 폴더는 lsof 로 — 마운트된 pane 중 OSC 7 을 한 번도 보내지 않은 것만
   useEffect(() => {
     if (!scrollReady) return

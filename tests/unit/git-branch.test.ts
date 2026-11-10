@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -13,12 +13,17 @@ const git = (cwd: string, ...args: string[]) =>
 beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-git-')))
 })
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+const locked: string[] = []
+afterEach(() => {
+  for (const d of locked) chmodSync(d, 0o755)
+  locked.length = 0
+  rmSync(root, { recursive: true, force: true })
+})
 
-function repo(name: string): string {
+function repo(name: string, ...initArgs: string[]): string {
   const dir = join(root, name)
   mkdirSync(dir, { recursive: true })
-  git(dir, 'init', '-q', '-b', 'main')
+  git(dir, 'init', '-q', '-b', 'main', ...initArgs)
   writeFileSync(join(dir, 'a.txt'), 'a')
   git(dir, 'add', 'a.txt')
   git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'first')
@@ -60,6 +65,21 @@ describe('branchOf (15c)', () => {
     mkdirSync(plain)
     expect(await branchOf(plain)).toBeNull()
     expect(await branchOf(join(root, 'nope'))).toBeNull()
+  })
+
+  it('reftable 저장소는 HEAD 가 자리 표시(.invalid)라 브랜치를 모른다 → null(폴더를 보인다) (15c 리뷰)', async () => {
+    const dir = repo('rt', '--ref-format=reftable')
+    expect(await branchOf(dir)).toBeNull()
+  })
+
+  it('.git 을 볼 수 없는 폴더(권한)는 위쪽 저장소의 브랜치로 잘못 보이지 않는다 (15c 리뷰)', async () => {
+    const outer = repo('outer')
+    const inner = join(outer, 'inner')
+    mkdirSync(join(inner, 'sub'), { recursive: true })
+    // inner 에 x 권한이 없으면 inner/sub/.git · inner/.git 의 stat 이 EACCES — '없음' 으로 보고 outer 까지 올라가면 안 된다
+    chmodSync(inner, 0o600)
+    locked.push(inner)
+    expect(await branchOf(join(inner, 'sub'))).toBeNull()
   })
 
   it('.git 파일이 깨졌으면 null (던지지 않는다)', async () => {

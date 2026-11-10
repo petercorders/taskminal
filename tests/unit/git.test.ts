@@ -13,7 +13,7 @@ describe('parseHead', () => {
     expect(parseHead('a'.repeat(64))).toBe('aaaaaaa')
   })
   it('깨진 글 · 빈 글 · 다른 ref 는 null', () => {
-    for (const t of ['', 'garbage', 'ref: ', 'ref: refs/heads/', 'ref: refs/tags/v1', '0123', 'g'.repeat(40)]) expect(parseHead(t)).toBeNull()
+    for (const t of ['ref: refs/heads/.invalid', '', 'garbage', 'ref: ', 'ref: refs/heads/', 'ref: refs/tags/v1', '0123', 'g'.repeat(40)]) expect(parseHead(t)).toBeNull()
   })
 })
 
