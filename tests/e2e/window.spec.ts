@@ -32,7 +32,8 @@ test('창이 뜨고 preload → main 왕복으로 앱 정보를 받는다', asyn
   const info = await win.evaluate(() =>
     (globalThis as unknown as { taskminal: { appInfo(): Promise<unknown> } }).taskminal.appInfo(),
   )
-  expect(info).toEqual({ name: 'Taskminal', version: '0.1.0' })
+  expect(info).toMatchObject({ name: 'Taskminal', version: '0.1.0' })
+  expect((info as { shells: string[] }).shells).toContain('/bin/zsh') // 설정에서 고를 수 있는 셸(/etc/shells)
 })
 
 test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', async () => {

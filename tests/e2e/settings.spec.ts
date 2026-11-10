@@ -343,3 +343,51 @@ test('끄기 전 확인: 실행 중이면 ⌘Q 가 묻고, 취소면 그대로 �
   await closed
   launched = undefined
 })
+
+test('리뷰 반영: 보고 있어도 알리기(설정 끔)면 보는 pane 의 벨도 알림', async () => {
+  await win.evaluate(`(() => {
+    const sent = []
+    window.__sent = sent
+    window.Notification = class { constructor(title, opts = {}) { this.onclick = null; sent.push({ title, body: opts.body ?? '' }) } }
+  })()`)
+  const sent = () => win.evaluate<Array<{ title: string }>>('window.__sent')
+  await waitText('pane-a', /%/)
+  await type(`printf '\\a'`) // 보고 있음 + 알리지 않기(기본) → 없음
+  await win.waitForTimeout(500)
+  expect(await sent()).toEqual([])
+  await openSettings('알림 · 활동')
+  await settings().getByRole('switch', { name: '보고 있는 일감은 알리지 않기' }).click()
+  await closeSettings()
+  await type(`printf '\\a'`)
+  await expect.poll(sent).toEqual([expect.objectContaining({ title: '입력을 기다립니다' })])
+})
+
+test('리뷰 반영: 접힌 묶음의 일감을 확인 필요 칸에서 이름 바꾸면 묶음이 펴지고 입력칸이 뜬다', async () => {
+  await win.keyboard.press('Meta+Alt+ArrowDown') // B 를 한 번 봐서 셸을 띄운다
+  await waitText('pane-b', /%/)
+  await type(`sleep 1; printf '\\a'`)
+  await win.keyboard.press('Meta+Alt+ArrowUp') // A 를 보는 사이 B 가 벨
+  const attentionRow = win.locator('[data-testid="attention-row"][data-task-name="B 일감"]')
+  await expect(attentionRow).toBeVisible({ timeout: 10_000 })
+  await win.locator('.group-toggle').click() // '서버' 접기
+  await expect(win.locator('.group-toggle')).toHaveAttribute('aria-expanded', 'false')
+  await attentionRow.click({ button: 'right' })
+  await win.getByTestId('task-menu').getByRole('menuitem', { name: '이름 바꾸기' }).click()
+  const input = win.getByRole('textbox', { name: '일감 이름' })
+  await expect(input).toBeFocused()
+  await expect(win.locator('.group-toggle')).toHaveAttribute('aria-expanded', 'true')
+  await input.fill('B 서버')
+  await input.press('Escape') // 취소 — 이름 그대로
+  await expect(taskRow('B 일감')).toBeVisible()
+})
+
+test('리뷰 반영: /etc/shells 에 없는 셸을 적으면 로그인 셸로 연다고 알린다', async () => {
+  await openSettings('터미널')
+  const shell = settings().getByRole('combobox', { name: '셸' })
+  await shell.fill('/tmp/not-a-shell')
+  await shell.press('Enter')
+  await expect(settings().getByTestId('shell-rejected')).toBeVisible()
+  await shell.fill('/bin/zsh')
+  await shell.press('Enter')
+  await expect(settings().getByTestId('shell-rejected')).toHaveCount(0)
+})

@@ -23,6 +23,8 @@ export const IPC = {
 export interface AppInfo {
   name: string
   version: string
+  /** 설정에서 고를 수 있는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 연다 */
+  shells: string[]
 }
 
 export interface PtySpawnOptions {

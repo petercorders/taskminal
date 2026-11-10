@@ -55,7 +55,9 @@ async function confirmEnd(win: BrowserWindow | null, what: '끝내기' | '닫기
     defaultId: 1,
     cancelId: 1,
   }
-  const r = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+  // 창에 붙는 시트라 창이 숨었거나(⌘H) 최소화돼 있으면 보이지 않는다 → 먼저 보여 준다
+  if (win && !win.isDestroyed() && (!win.isVisible() || win.isMinimized())) win.show()
+  const r = win && !win.isDestroyed() ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
   return r.response === 0
 }
 
@@ -156,16 +158,15 @@ function createWindow(): BrowserWindow {
     busyCommands = 0
     setBadge(0)
   }
-  wc.on('destroyed', forget)
-  wc.on('render-process-gone', forget)
+  const endOwner = () => {
+    ptys.killOwner(wc)
+    forget()
+  }
+  wc.on('destroyed', endOwner) // ① 창 닫기
   wc.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) forget()
+    if (details.isMainFrame && !details.isSameDocument) endOwner() // ② 새로 고침 — 새 페이지가 다시 띄운다(수 · 배지도 다시 보낸다)
   })
-  wc.on('destroyed', () => ptys.killOwner(wc)) // ① 창 닫기
-  wc.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) ptys.killOwner(wc) // ② 새로 고침 — 새 페이지가 다시 띄운다
-  })
-  wc.on('render-process-gone', () => ptys.killOwner(wc)) // ③ 렌더러 충돌
+  wc.on('render-process-gone', endOwner) // ③ 렌더러 충돌
 
   const load = devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(rendererFile)
   load.catch(() => {
@@ -201,7 +202,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion() }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells }
   })
 
   ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {

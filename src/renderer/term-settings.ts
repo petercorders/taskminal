@@ -56,6 +56,3 @@ export function xtermTheme(theme: 'dark' | 'light', accent: string): ITheme {
         brightYellow: '#7d4e00',
       }
 }
-
-/** xterm 의 cursorStyle 이름 */
-export const XTERM_CURSOR: Record<CursorStyle, 'bar' | 'block' | 'underline'> = { bar: 'bar', block: 'block', underline: 'underline' }

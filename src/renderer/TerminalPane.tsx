@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { cleanExit, splitForWrite } from '../shared/pty'
-import { fontStack, xtermTheme, XTERM_CURSOR, type TermSettings } from './term-settings'
+import { fontStack, xtermTheme, type TermSettings } from './term-settings'
 import { terminals } from './terminals'
 
 interface Props {
@@ -61,7 +61,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
       fontFamily: fontStack(s.fontFamily),
       fontSize: s.fontSize,
       lineHeight: s.lineHeight,
-      cursorStyle: XTERM_CURSOR[s.cursorStyle],
+      cursorStyle: s.cursorStyle, // 설정 이름이 xterm 이름과 같다
       cursorBlink: s.cursorBlink,
       scrollback: s.scrollback,
       macOptionIsMeta: s.optionAsMeta,
@@ -191,7 +191,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     o.fontSize = settings.fontSize
     o.lineHeight = settings.lineHeight
     o.fontFamily = family
-    o.cursorStyle = XTERM_CURSOR[settings.cursorStyle]
+    o.cursorStyle = settings.cursorStyle
     o.cursorBlink = settings.cursorBlink
     o.scrollback = settings.scrollback
     o.macOptionIsMeta = settings.optionAsMeta

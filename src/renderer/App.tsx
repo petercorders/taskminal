@@ -189,11 +189,12 @@ export function App() {
 
   const updateActivity = (paneId: string, ev: ActivityEvent) => {
     const prev = activityRef.current[paneId]
-    const next = applyActivity(prev, ev, { viewed: paneId === viewedRef.current, now: Date.now() })
-    if (next === prev) return
-    putActivity({ ...activityRef.current, [paneId]: next })
-    const kind = notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000)
-    if (kind) deliver(kind, paneId, next)
+    const viewed = paneId === viewedRef.current
+    const next = applyActivity(prev, ev, { viewed, now: Date.now() })
+    if (next !== prev) putActivity({ ...activityRef.current, [paneId]: next })
+    // 보고 있는 pane 의 벨 · 알림은 확인 필요가 되지 않지만(applyActivity), '보고 있어도 알리기'(muteViewed 끔)면 알린다 — deliver 가 설정을 본다
+    const kind = notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000) ?? (viewed && (ev.type === 'bell' || ev.type === 'notify') ? 'wait' : null)
+    if (kind) deliver(kind, paneId, ev.type === 'notify' ? { ...next, message: ev.text } : next)
   }
   const updateActivityRef = useRef(updateActivity)
   updateActivityRef.current = updateActivity
@@ -250,7 +251,12 @@ export function App() {
     root.style.setProperty('--running', settings.accent)
     root.style.setProperty('--dim-opacity', String(settings.dimOpacity))
   }, [theme, settings.accent, settings.dimOpacity])
-  const term = useMemo(() => termSettings(settings, theme), [settings, theme])
+  // 터미널 칸이 바뀔 때만 새 객체 — 상태 색 · 묶음 접기 같은 다른 설정이 모든 터미널의 옵션을 다시 넣지 않게
+  const term = useMemo(
+    () => termSettings(settings, theme),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.accent, settings.shell, settings.shellIntegration, theme],
+  )
   const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
 
   const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })

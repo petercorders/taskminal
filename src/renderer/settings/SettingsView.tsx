@@ -68,7 +68,7 @@ function Choices<T extends string | number>({ label, value, options, onChange, k
 }
 
 /** 글자 칸: 칠 때마다가 아니라 ↩ · 포커스를 잃을 때 한 번 반영(빈 이름 · 반쯤 친 경로가 저장되지 않게). Esc 는 되돌림 */
-function TextField({ label, value, onCommit, placeholder, className }: { label: string; value: string; onCommit(v: string): void; placeholder?: string; className?: string }) {
+function TextField({ label, value, onCommit, placeholder, className, list }: { label: string; value: string; onCommit(v: string): void; placeholder?: string; className?: string; list?: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   return (
@@ -77,6 +77,7 @@ function TextField({ label, value, onCommit, placeholder, className }: { label: 
       aria-label={label}
       value={draft}
       placeholder={placeholder}
+      list={list}
       spellCheck={false}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
@@ -118,6 +119,16 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
   const [capturing, setCapturing] = useState<AppCommand | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const conflicts = keyConflicts(shortcuts)
+  // main 이 받아 주는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 열리므로 칸 아래에 알린다
+  const [shells, setShells] = useState<string[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.taskminal.appInfo().then((info) => alive && setShells(info.shells))
+    return () => {
+      alive = false
+    }
+  }, [])
+  const shellRejected = s.shell !== null && shells !== null && !shells.includes(s.shell)
 
   useEffect(() => searchRef.current?.focus(), [])
 
@@ -295,9 +306,22 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
       <>
         <Row
           title="셸"
-          desc="비우면 로그인 셸($SHELL). /etc/shells 에 있는 셸만 · 새 터미널부터"
+          desc={
+            shellRejected ? (
+              <span className="conflict" data-testid="shell-rejected">
+                {s.shell} 은 /etc/shells 에 없어 로그인 셸($SHELL)로 열어요
+              </span>
+            ) : (
+              '비우면 로그인 셸($SHELL). /etc/shells 에 있는 셸만 · 새 터미널부터'
+            )
+          }
           keywords="zsh bash fish"
-          control={<TextField label="셸" value={s.shell ?? ''} placeholder="예: /bin/zsh" onCommit={(v) => patch({ shell: v.trim() || null })} />}
+          control={
+            <>
+              <TextField label="셸" value={s.shell ?? ''} placeholder="예: /bin/zsh" onCommit={(v) => patch({ shell: v.trim() || null })} list="allowed-shells" />
+              <datalist id="allowed-shells">{shells?.map((sh) => <option key={sh} value={sh} />)}</datalist>
+            </>
+          }
         />
         <Row
           title="스크롤 보관 줄 수"

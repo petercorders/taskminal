@@ -1,4 +1,5 @@
 // 설정 창의 값 — 고를 수 있는 것 · 기본값 · 저장 파일 검증. 순수 함수(renderer · main 모두 쓴다).
+import { isObj } from './guards'
 import { isAccel, isAppCommand } from './keymap'
 import type { CursorStyle, NotifyKind, NotifyWay, Settings, SidebarDensity, StartupMode, Theme } from './types'
 
@@ -53,8 +54,6 @@ export function defaultExtraSettings(): ExtraSettings {
   }
 }
 
-type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 const oneOf = <T>(v: unknown, list: readonly T[], fallback: T): T => (list.includes(v as T) ? (v as T) : fallback)
 const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback)
 const num = (v: unknown, min: number, max: number, step: number, fallback: number): number => {

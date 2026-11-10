@@ -27,6 +27,8 @@ interface Props {
 export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onMenuClosed }: Props) {
   const sections = sidebarSections(state)
   const [menu, setMenu] = useState<{ taskId: Id; x: number; y: number } | null>(null)
+  // 이름 바꾸기 중인 일감. ↩ · Esc 로 끝내면 입력칸이 사라지는데, Chromium 은 사라지는 입력칸에 blur 를 보내지 않는다
+  // (2026-11-10 변이로 확인: Esc 뒤 blur 가 왔다면 취소한 이름이 저장됐을 것) → blur 는 다른 곳을 눌렀을 때만 온다
   const [renaming, setRenaming] = useState<Id | null>(null)
   const statusOf = (task: Task) => state.settings.statuses.find((s) => s.id === task.statusId)
   const activityOf = (task: Task) => taskActivity(Object.keys(task.panes).map((id) => activity[id]))
@@ -44,6 +46,12 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
     }
   }
 
+  const startRename = (task: Task) => {
+    // 접힌 묶음의 일감(확인 필요 칸에서 고름)은 목록 행이 없어 입력칸이 안 보인다 → 묶음을 편다
+    const group = state.settings.groups.find((g) => g.id === task.groupId)
+    if (group?.collapsed) onToggleGroup(group.id)
+    setRenaming(task.id)
+  }
   const finishRename = (task: Task, value: string | null) => {
     setRenaming(null)
     if (value !== null) onEdit(task.id, { name: value })
@@ -79,7 +87,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
               if (e.key === 'Enter') finishRename(task, e.currentTarget.value)
               else if (e.key === 'Escape') finishRename(task, null)
             }}
-            onBlur={(e) => renaming === task.id && finishRename(task, e.currentTarget.value)}
+            onBlur={(e) => finishRename(task, e.currentTarget.value)}
           />
         ) : (
           <button
@@ -176,7 +184,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
           onEdit={(patch) => onEdit(menuTask.id, patch)}
           onRename={() => {
             setMenu(null)
-            setRenaming(menuTask.id)
+            startRename(menuTask)
           }}
           onRemove={() => {
             setMenu(null)

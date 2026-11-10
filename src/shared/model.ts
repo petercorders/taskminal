@@ -1,4 +1,5 @@
 import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
+import { isObj } from './guards'
 import { defaultExtraSettings, parseExtraSettings } from './settings'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
@@ -441,8 +442,6 @@ export function defaultTaskCwd(state: AppState): string {
 // ─── 저장 파일 검증 ─────────────────────────────────────────
 // 디스크에서 읽은 JSON 은 손상 · 옛 형식일 수 있다. 버릴 것은 버리고 참조는 고쳐 항상 쓸 수 있는 AppState 로.
 
-type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string'
 // '__proto__' 같은 이름을 id 로 받으면 일반 객체에 넣을 때 원형이 바뀐다
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype'])
