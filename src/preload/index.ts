@@ -13,6 +13,7 @@ const subscribe = <A extends unknown[]>(channel: string, listener: (...args: A) 
 const api: TaskminalApi = {
   appInfo: () => ipcRenderer.invoke(IPC.appInfo) as Promise<AppInfo>,
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | null>,
+  onCommand: (listener) => subscribe<[unknown]>(IPC.appCommand, listener),
   pty: {
     spawn: (paneId, opts) => ipcRenderer.invoke(IPC.ptySpawn, paneId, opts) as Promise<void>,
     write: (paneId, data) => ipcRenderer.send(IPC.ptyWrite, paneId, data),

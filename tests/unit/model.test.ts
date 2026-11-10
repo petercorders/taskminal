@@ -5,6 +5,8 @@ import {
   closePane,
   closeTab,
   createTask,
+  cycleActivePane,
+  cycleTab,
   defaultSettings,
   emptyState,
   findPaneTask,
@@ -16,6 +18,7 @@ import {
   renameTab,
   resolveCwd,
   selectTab,
+  selectTabAt,
   setTabRatio,
   splitActivePane,
   tabLabel,
@@ -548,5 +551,39 @@ describe('focusPane · setTabRatio · findPaneTask', () => {
     const pid = s.tasks[0].tabs[1].activePaneId
     expect(findPaneTask(s, pid)).toBe(s.tasks[0].id)
     expect(findPaneTask(s, 'ghost')).toBeNull()
+  })
+})
+
+describe('selectTabAt · cycleTab · cycleActivePane (단축키)', () => {
+  const threeTabs = () => addTab(addTab(flutterTask(), () => `t${Math.random()}`), () => `u${Math.random()}`)
+
+  test('selectTabAt: n번째(1부터), 9 는 마지막, 없는 번호 · 이미 활성이면 같은 객체', () => {
+    const t = threeTabs() // 탭 4개, 활성 = 마지막
+    expect(selectTabAt(t, 1).activeTabId).toBe(t.tabs[0].id)
+    expect(selectTabAt(t, 2).activeTabId).toBe(t.tabs[1].id)
+    const first = selectTabAt(t, 1)
+    expect(selectTabAt(first, 9).activeTabId).toBe(t.tabs[3].id)
+    expect(selectTabAt(first, 8)).toBe(first) // 탭이 4개뿐
+    expect(selectTabAt(t, 4)).toBe(t)
+  })
+
+  test('cycleTab: 다음 · 이전, 끝에서 돈다, 탭이 하나면 같은 객체', () => {
+    const t = threeTabs()
+    const first = selectTabAt(t, 1)
+    expect(cycleTab(first, 1).activeTabId).toBe(t.tabs[1].id)
+    expect(cycleTab(first, -1).activeTabId).toBe(t.tabs[3].id)
+    expect(cycleTab(t, 1).activeTabId).toBe(t.tabs[0].id)
+    const one = { ...t, tabs: [t.tabs[0]], activeTabId: t.tabs[0].id }
+    expect(cycleTab(one, 1)).toBe(one)
+  })
+
+  test('cycleActivePane: 활성 탭 안에서 화면 순서대로 돈다, pane 하나면 같은 객체', () => {
+    const t = flutterTask() // 개발: p1 | p2 / p3, 활성 p1
+    const [p1, p2, p3] = paneIds(t.tabs[0].layout)
+    expect(cycleActivePane(t, 1).tabs[0].activePaneId).toBe(p2)
+    expect(cycleActivePane(t, -1).tabs[0].activePaneId).toBe(p3)
+    expect(cycleActivePane(cycleActivePane(cycleActivePane(t, 1), 1), 1).tabs[0].activePaneId).toBe(p1)
+    const log = selectTabAt(t, 2) // 로그 탭은 pane 하나
+    expect(cycleActivePane(log, 1)).toBe(log)
   })
 })

@@ -6,6 +6,7 @@ import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
+import { installAppMenu } from './menu'
 import { PtyManager } from './pty-manager'
 import { StateFile } from './state-file'
 
@@ -200,6 +201,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(() => {
+    installAppMenu()
     mainWindow = createWindow()
     // macOS: Dock 아이콘을 누르면 창을 다시 만든다.
     app.on('activate', () => {

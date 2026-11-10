@@ -147,3 +147,27 @@ describe('reducer — 분할', () => {
     expect(tabOf(reducer(two, { type: 'pane/ratio', taskId: a, tabId: tab, path: [], ratio: 0.3 })).layout).toMatchObject({ ratio: 0.3 })
   })
 })
+
+describe('reducer — 단축키 동작', () => {
+  it('tab/nth · tab/cycle · pane/cycle 은 그 일감의 탭 · pane 을 옮기고, 바뀐 것 없으면 같은 상태', () => {
+    let s = withTasks('a')
+    const a = s.tasks[0]!.id
+    s = reducer(s, { type: 'tab/add', taskId: a, tabId: 'tab2', paneId: 'p2' })
+    const first = s.tasks[0]!.tabs[0]!.id
+    const toFirst = reducer(s, { type: 'tab/nth', taskId: a, n: 1 })
+    expect(toFirst.tasks[0]!.activeTabId).toBe(first)
+    expect(reducer(toFirst, { type: 'tab/cycle', taskId: a, step: 1 }).tasks[0]!.activeTabId).toBe('tab2')
+    expect(reducer(s, { type: 'tab/nth', taskId: a, n: 9 })).toBe(s)
+    s = reducer(s, { type: 'pane/split', taskId: a, dir: 'right', paneId: 'p3' })
+    const tab = s.tasks[0]!.tabs[1]!
+    expect(tab.activePaneId).toBe('p3')
+    expect(reducer(s, { type: 'pane/cycle', taskId: a, step: 1 }).tasks[0]!.tabs[1]!.activePaneId).toBe('p2')
+  })
+
+  it('settings/font 는 8~32 안으로, 같은 값이면 같은 상태', () => {
+    const s = emptyState()
+    expect(reducer(s, { type: 'settings/font', size: 15 }).settings.fontSize).toBe(15)
+    expect(reducer(s, { type: 'settings/font', size: 99 }).settings.fontSize).toBe(32)
+    expect(reducer(s, { type: 'settings/font', size: s.settings.fontSize })).toBe(s)
+  })
+})

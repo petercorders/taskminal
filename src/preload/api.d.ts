@@ -25,6 +25,8 @@ export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
   pickFolder(): Promise<string | null>
+  /** 앱 메뉴에서 고른 명령. 값은 renderer 가 isAppCommand 로 검사한다. 구독 해제 함수를 돌려준다. */
+  onCommand(listener: (command: unknown) => void): () => void
   pty: PtyApi
   state: StateApi
 }

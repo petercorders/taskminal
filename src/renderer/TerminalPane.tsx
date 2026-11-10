@@ -4,6 +4,11 @@ import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
 import { cleanExit, splitForWrite } from '../shared/pty'
+import { terminals } from './terminals'
+
+// 한글이 든 고정폭 글꼴(D2Coding)을 설치했으면 그것을, 아니면 한글만 Apple SD Gothic Neo 로 (지정하지 않으면 AppleGothic 이 잡힌다).
+// 한글이 없는 Menlo 와 섞이면 한글 칸 사이에 Terminal.app 과 같은 정도의 틈이 남는다 — 글꼴 고르기는 11단계 설정.
+const FONT_FAMILY = "'JetBrains Mono', D2Coding, Menlo, 'Apple SD Gothic Neo', monospace"
 
 interface Props {
   paneId: string
@@ -12,24 +17,30 @@ interface Props {
   active: boolean
   /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
   focusSignal: number
+  /** 설정의 글자 크기 (⌘= ⌘− ⌘0) */
+  fontSize: number
   /** 깨끗하지 않게 끝난 셸의 이유를 본 뒤 키를 눌렀다 — pane 을 닫는다 */
   onClosed(): void
 }
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
-export function TerminalPane({ paneId, cwd, active, focusSignal, onClosed }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClosed }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
   onClosedRef.current = onClosed
+  // 셸을 띄울 때의 글자 크기 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
+  const fontSizeRef = useRef(fontSize)
+  fontSizeRef.current = fontSize
+  const refitRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const host = hostRef.current!
     const pty = window.taskminal.pty
     const term = new Terminal({
       allowProposedApi: true, // unicode11 (한글 · 이모지 폭)
-      fontFamily: "'JetBrains Mono', Menlo, Monaco, monospace",
-      fontSize: 13,
+      fontFamily: FONT_FAMILY,
+      fontSize: fontSizeRef.current,
       cursorBlink: true,
       scrollback: 5000,
       theme: { background: '#0e0f11', foreground: '#e6e7ea', cursor: '#5b9cf5', selectionBackground: '#5b9cf540' },
@@ -84,6 +95,10 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, onClosed }: Pro
     })
     observer.observe(host)
     termRef.current = term
+    refitRef.current = () => {
+      if (fitNow()) pty.resize(paneId, term.cols, term.rows)
+    }
+    terminals.set(paneId, { clear: () => term.clear() })
 
     return () => {
       observer.disconnect()
@@ -91,10 +106,20 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, onClosed }: Pro
       input.dispose()
       offData()
       offExit()
+      terminals.delete(paneId)
+      refitRef.current = () => {}
       termRef.current = null
       term.dispose()
     }
   }, [paneId, cwd])
+
+  // 글자 크기가 바뀌면 칸 수가 바뀐다 → 셸에도 새 크기를 알린다 (숨은 pane 은 다시 보일 때 ResizeObserver 가 맞춘다)
+  useEffect(() => {
+    const term = termRef.current
+    if (!term || term.options.fontSize === fontSize) return
+    term.options.fontSize = fontSize
+    refitRef.current()
+  }, [fontSize])
 
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.

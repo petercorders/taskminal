@@ -1,4 +1,4 @@
-import { clampRatio, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
+import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
   Group,
@@ -189,6 +189,25 @@ export function addTab(task: Task, newId: NewId): Task {
 export function selectTab(task: Task, tabId: Id): Task {
   if (task.activeTabId === tabId || !task.tabs.some((t) => t.id === tabId)) return task
   return { ...task, activeTabId: tabId }
+}
+
+/** n번째 탭(1부터) — 9 는 탭 수와 상관없이 마지막 탭 (⌘1~9). 없는 번호면 그대로. */
+export function selectTabAt(task: Task, n: number): Task {
+  const tab = n === 9 ? task.tabs.at(-1) : task.tabs[n - 1]
+  return tab ? selectTab(task, tab.id) : task
+}
+
+/** 다음 · 이전 탭, 끝에서 돈다 (⇧⌘[ ]). */
+export function cycleTab(task: Task, step: 1 | -1): Task {
+  const i = task.tabs.findIndex((t) => t.id === task.activeTabId)
+  if (i < 0) return task
+  return selectTab(task, task.tabs[(i + step + task.tabs.length) % task.tabs.length].id)
+}
+
+/** 활성 탭 안에서 다음 · 이전 pane (⌘[ ]). */
+export function cycleActivePane(task: Task, step: 1 | -1): Task {
+  const tab = activeTab(task)
+  return tab ? focusPane(task, cyclePane(tab.layout, tab.activePaneId, step)) : task
 }
 
 /** 빈 이름이면 title 을 지워 기본 이름(tabLabel)으로 돌아간다. */

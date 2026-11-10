@@ -103,22 +103,3 @@ export interface NewTaskInput {
 export type MenuItemSpec =
   | { type: 'separator' }
   | { id?: string; label: string; checked?: boolean; enabled?: boolean; submenu?: MenuItemSpec[] }
-
-export type AppCommand =
-  | 'new-task'
-  | 'new-tab'
-  | 'split-right'
-  | 'split-down'
-  | 'close-pane'
-  | 'next-tab'
-  | 'prev-tab'
-  | 'next-pane'
-  | 'prev-pane'
-  | 'next-task'
-  | 'prev-task'
-  | 'clear'
-  | 'font-bigger'
-  | 'font-smaller'
-  | 'font-reset'
-  | 'settings'
-  | `task-${number}`

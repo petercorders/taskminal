@@ -20,6 +20,15 @@ export function sidebarSections(state: AppState): SidebarSection[] {
   return [...grouped, { title: '묶음 없음', group: null, tasks: loose }]
 }
 
+/** 사이드바에 보이는 순서로 다음 · 이전 일감 id (⌥⌘↑↓), 끝에서 돈다. 활성이 없으면 첫 일감, 일감이 없으면 null. */
+export function adjacentTask(state: AppState, step: 1 | -1): string | null {
+  const order = sidebarSections(state).flatMap((s) => s.tasks.map((t) => t.id))
+  if (order.length === 0) return null
+  const i = state.activeTaskId === null ? -1 : order.indexOf(state.activeTaskId)
+  if (i < 0) return order[0]!
+  return order[(i + step + order.length) % order.length]!
+}
+
 /** 사이드바 둘째 줄용: 세 칸 넘는 경로는 끝 두 칸만 (`~/code/jjikgyebu/flutter` → `…/jjikgyebu/flutter`). */
 export function shortPath(cwd: string): string {
   const trimmed = cwd.length > 1 ? cwd.replace(/\/+$/, '') : cwd

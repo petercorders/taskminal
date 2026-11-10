@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { paneIds } from '../shared/layout'
+import { commandForKey, isAppCommand, stepFontSize, type AppCommand } from '../shared/keymap'
 import { cleanExit } from '../shared/pty'
 import { createTask, emptyState } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
@@ -7,9 +8,11 @@ import type { NewTaskInput, Task } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog } from './NewTaskDialog'
 import { Sidebar } from './Sidebar'
+import { adjacentTask } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { SplitView } from './SplitView'
+import { terminals } from './terminals'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
 
@@ -128,6 +131,92 @@ export function App() {
     closeDialogs()
   }
 
+  const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
+  const dialogOpen = creating || removing !== null
+
+  // 앱 명령 하나 — 단축키(아래 keydown)와 앱 메뉴(main → onCommand)가 같은 길로 온다.
+  const runCommand = (command: AppCommand) => {
+    // 대화상자가 열려 있으면 뒤의 화면을 바꾸지 않는다 (⌘T 가 대화상자 뒤에서 탭을 만들지 않게)
+    if (dialogOpen || load.phase !== 'ready') return
+    const task = activeTask
+    const tab = task?.tabs.find((t) => t.id === task.activeTabId)
+    const font = (how: 'bigger' | 'smaller' | 'reset') =>
+      dispatch({ type: 'settings/font', size: stepFontSize(state.settings.fontSize, how) })
+    switch (command) {
+      case 'new-task':
+        return setCreating(true)
+      case 'font-bigger':
+        return font('bigger')
+      case 'font-smaller':
+        return font('smaller')
+      case 'font-reset':
+        return font('reset')
+      case 'next-task':
+      case 'prev-task': {
+        const id = adjacentTask(state, command === 'next-task' ? 1 : -1)
+        if (id) dispatch({ type: 'task/select', id })
+        return refocus()
+      }
+    }
+    if (!task) return
+    switch (command) {
+      case 'new-tab':
+        addTab(task.id)
+        return refocus()
+      case 'split-right':
+      case 'split-down':
+        return dispatch({ type: 'pane/split', taskId: task.id, dir: command === 'split-right' ? 'right' : 'down', paneId: newId() })
+      case 'next-tab':
+      case 'prev-tab':
+        dispatch({ type: 'tab/cycle', taskId: task.id, step: command === 'next-tab' ? 1 : -1 })
+        return refocus()
+      case 'last-tab':
+        dispatch({ type: 'tab/nth', taskId: task.id, n: 9 })
+        return refocus()
+      case 'next-pane':
+      case 'prev-pane':
+        dispatch({ type: 'pane/cycle', taskId: task.id, step: command === 'next-pane' ? 1 : -1 })
+        return refocus()
+    }
+    if (command.startsWith('tab-')) {
+      dispatch({ type: 'tab/nth', taskId: task.id, n: Number(command.slice(4)) })
+      return refocus()
+    }
+    if (!tab) return
+    switch (command) {
+      case 'close-pane':
+        // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도 (실행 중 확인은 9단계)
+        window.taskminal.pty.kill(tab.activePaneId)
+        dispatch({ type: 'pane/exited', paneId: tab.activePaneId })
+        return refocus()
+      case 'clear':
+        terminals.get(tab.activePaneId)?.clear()
+        return refocus()
+    }
+  }
+  const runCommandRef = useRef(runCommand)
+  runCommandRef.current = runCommand
+
+  useEffect(() => {
+    // capture 단계에서 받는다. xterm 은 ⌘ 가 눌린 키를 셸로 보내지 않으므로(@xterm Keyboard.ts) 전파는 막지 않는다.
+    const onKey = (e: KeyboardEvent) => {
+      const command = commandForKey(e)
+      if (!command) return
+      e.preventDefault()
+      // pane 닫기는 누르고 있어도 한 번만 — 키 반복으로 여러 pane 을 닫지 않게
+      if (command === 'close-pane' && e.repeat) return
+      runCommandRef.current(command)
+    }
+    window.addEventListener('keydown', onKey, true)
+    const offMenu = window.taskminal.onCommand((command) => {
+      if (isAppCommand(command)) runCommandRef.current(command)
+    })
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      offMenu()
+    }
+  }, [])
+
   const message =
     load.phase === 'failed'
       ? `저장 파일을 읽지 못해 이번 실행에서는 저장하지 않습니다: ${load.error}`
@@ -195,6 +284,7 @@ export function App() {
                           panes={task.panes}
                           visible={taskActive && tabActive}
                           focusSignal={focusSignal}
+                          fontSize={state.settings.fontSize}
                           onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}

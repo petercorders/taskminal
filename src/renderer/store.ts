@@ -1,13 +1,17 @@
 // 화면 상태의 주인. 순수 reducer — 새 id · 시각은 부르는 쪽이 만들어 넘긴다.
+import { clampFontSize } from '../shared/keymap'
 import type { SplitPath } from '../shared/layout'
 import {
   addTab,
   closePane,
   closeTab,
+  cycleActivePane,
+  cycleTab,
   findPaneTask,
   focusPane,
   renameTab,
   selectTab,
+  selectTabAt,
   setTabRatio,
   splitActivePane,
 } from '../shared/model'
@@ -22,6 +26,11 @@ export type Action =
   | { type: 'tab/select'; taskId: Id; tabId: Id }
   | { type: 'tab/close'; taskId: Id; tabId: Id }
   | { type: 'tab/rename'; taskId: Id; tabId: Id; title: string }
+  /** n번째 탭(1부터), 9 = 마지막 */
+  | { type: 'tab/nth'; taskId: Id; n: number }
+  | { type: 'tab/cycle'; taskId: Id; step: 1 | -1 }
+  | { type: 'pane/cycle'; taskId: Id; step: 1 | -1 }
+  | { type: 'settings/font'; size: number }
   | { type: 'pane/split'; taskId: Id; dir: SplitDir; paneId: Id }
   | { type: 'pane/focus'; taskId: Id; paneId: Id }
   | { type: 'pane/ratio'; taskId: Id; tabId: Id; path: SplitPath; ratio: number }
@@ -73,6 +82,16 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateTask(state, action.taskId, (t) => closeTab(t, action.tabId))
     case 'tab/rename':
       return updateTask(state, action.taskId, (t) => renameTab(t, action.tabId, action.title))
+    case 'tab/nth':
+      return updateTask(state, action.taskId, (t) => selectTabAt(t, action.n))
+    case 'tab/cycle':
+      return updateTask(state, action.taskId, (t) => cycleTab(t, action.step))
+    case 'pane/cycle':
+      return updateTask(state, action.taskId, (t) => cycleActivePane(t, action.step))
+    case 'settings/font': {
+      const fontSize = clampFontSize(action.size)
+      return fontSize === state.settings.fontSize ? state : { ...state, settings: { ...state.settings, fontSize } }
+    }
     case 'pane/split':
       return updateTask(state, action.taskId, (t) => splitActivePane(t, action.dir, () => action.paneId))
     case 'pane/focus':

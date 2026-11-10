@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTask, emptyState } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
-import { shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
+import { adjacentTask, shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
 
 let n = 0
 const newId = () => `id${++n}`
@@ -59,5 +59,28 @@ describe('shortPath', () => {
     expect(shortPath('/tmp')).toBe('/tmp')
     expect(shortPath('/Users/me/a/b')).toBe('…/a/b')
     expect(shortPath('/Users/me/a/b/')).toBe('…/a/b')
+  })
+})
+
+describe('adjacentTask', () => {
+  it('사이드바에 보이는 순서(묶음 순)로 다음 · 이전, 끝에서 돈다', () => {
+    const s = stateWith(['b', 'a'], [
+      ['x', null],
+      ['a1', 'a'],
+      ['b1', 'b'],
+    ]) // 보이는 순서: b1, a1, x
+    const id = (name: string) => s.tasks.find((t) => t.name === name)!.id
+    s.activeTaskId = id('b1')
+    expect(adjacentTask(s, 1)).toBe(id('a1'))
+    expect(adjacentTask(s, -1)).toBe(id('x'))
+    s.activeTaskId = id('x')
+    expect(adjacentTask(s, 1)).toBe(id('b1'))
+  })
+
+  it('일감이 없으면 null, 활성이 없으면 첫 일감', () => {
+    expect(adjacentTask(emptyState(), 1)).toBeNull()
+    const s = stateWith([], [['a', null], ['b', null]])
+    s.activeTaskId = null
+    expect(adjacentTask(s, 1)).toBe(s.tasks[0]!.id)
   })
 })

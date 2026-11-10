@@ -13,6 +13,7 @@ export const IPC = {
   stateSave: 'state:save', // send (main 이 디바운스)
   stateError: 'state:error', // main → renderer: 저장 실패
   pickFolder: 'dialog:pick-folder', // invoke → 경로 또는 null
+  appCommand: 'app:command', // main → renderer: 메뉴에서 고른 명령 (AppCommand)
 } as const
 
 export interface AppInfo {
