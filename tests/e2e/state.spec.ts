@@ -1,3 +1,4 @@
+import { firstWindow } from './helpers'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -20,7 +21,7 @@ const statePath = () => join(userData, 'state.json')
 
 async function launch(): Promise<{ app: ElectronApplication; win: Page }> {
   const app = (launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } }))
-  const win = await app.firstWindow()
+  const win = await firstWindow(app)
   return { app, win }
 }
 

@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { seedState } from './helpers'
+import { firstWindow, seedState } from './helpers'
 
 // 9단계: 셸 통합(OSC 133)으로 pane 활동 · 벨/알림 → 확인 필요 · 실행 중이면 닫기 전 확인.
 // 셸은 사용자 실제 HOME 의 zsh 설정을 읽는다 — 통합이 그 환경을 깨지 않는지도 본다.
@@ -19,7 +19,7 @@ test.beforeEach(async () => {
   ])
   launched = undefined
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
   await term('pane-a').click()
 })
 test.afterEach(async () => {
@@ -158,4 +158,21 @@ test('분할하면 포커스 아닌 pane 은 흐리고, 포커스 pane 머리에
   await expect(other).not.toHaveClass(/dimmed/)
   await expect(other.getByTestId('pane-head')).toHaveClass(/focused/)
   await win.screenshot({ path: 'test-results/activity-split.png' })
+})
+
+test('확인 대화상자가 떠 있는 사이 셸이 스스로 끝나 탭이 사라지면, 닫기는 대화상자만 닫는다', async () => {
+  await waitText('pane-a', /%/)
+  await win.keyboard.press('Meta+KeyT') // 두 번째 탭 — 첫 탭이 사라져도 화면이 남게
+  await expect(win.locator('[data-task-name="A 일감"] [data-testid="tab"]')).toHaveCount(2)
+  await win.keyboard.press('Meta+Digit1')
+  await term('pane-a').click()
+  await type('sleep 1; exit')
+  await expect(headOf('pane-a')).toHaveAttribute('data-activity', 'running')
+  await win.getByRole('button', { name: /탭 닫기/ }).first().click()
+  const dialog = win.getByRole('alertdialog')
+  await expect(dialog).toBeVisible()
+  await expect(win.locator('[data-task-name="A 일감"] [data-testid="tab"]')).toHaveCount(1, { timeout: 10_000 }) // 셸이 끝나 탭이 닫힘
+  await dialog.getByRole('button', { name: '닫기' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(win.locator('[data-task-name="A 일감"] [data-testid="tab"]')).toHaveCount(1) // 남은 탭은 그대로
 })

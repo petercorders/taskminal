@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { seedState } from './helpers'
+import { firstWindow, seedState } from './helpers'
 
 // 임시 userData 에 일감 하나(탭 하나 · pane 하나, 폴더 /tmp)를 깔고 시작한다.
 let userData: string
@@ -12,7 +12,7 @@ let win: Page
 
 async function launch(): Promise<void> {
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
 }
 
 test.beforeEach(async () => {

@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { seedState } from './helpers'
+import { firstWindow, seedState } from './helpers'
 
 // 임시 userData 로만 띄운다. 셸은 사용자의 실제 HOME · .zshrc 로 뜬다(로그인 셸).
 let userData: string
@@ -15,7 +15,7 @@ test.beforeEach(async () => {
   seedState(userData, [{ id: 'task-1', name: '터미널 시험', paneId: 'pane-1' }]) // 5단계부터 터미널은 일감 안에 있다
   launched = undefined
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
 })
 
 test.afterEach(async () => {
@@ -146,7 +146,7 @@ test('앱을 끝낸 뒤 다시 띄우면 새 셸이 곧바로 응답한다', asy
   await waitFor(/FIRST_9/)
   await app.close()
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
   const t0 = Date.now()
   await run('echo AGAIN_$((4*4))')
   await waitFor(/AGAIN_16/)

@@ -19,10 +19,11 @@ const devServerUrl = process.env['ELECTRON_RENDERER_URL']
 const rendererFile = join(__dirname, '../renderer/index.html')
 
 let mainWindow: BrowserWindow | null = null
-// 셸 통합 시작 파일 — zsh 가 직접 읽으므로 실제 폴더여야 한다(패키징 때 asar 밖으로: 14단계)
+// 셸 통합 시작 파일 — zsh 가 직접 읽으므로 asar 안이면 안 된다(Electron fs 는 asar 안도 '있다'고 한다).
+// 패키징하면 extraResources 로 Resources/shell/zsh 에 둔다(14단계 설정), 개발 · e2e 는 저장소의 resources/shell/zsh.
 const zshIntegrationDir = ((): string | null => {
-  const dir = join(app.getAppPath(), 'resources', 'shell', 'zsh')
-  return existsSync(join(dir, '.zshrc')) ? dir : null
+  const dir = app.isPackaged ? join(process.resourcesPath, 'shell', 'zsh') : join(app.getAppPath(), 'resources', 'shell', 'zsh')
+  return !dir.includes('.asar') && existsSync(join(dir, '.zshrc')) ? dir : null
 })()
 const ptys = new PtyManager(zshIntegrationDir)
 

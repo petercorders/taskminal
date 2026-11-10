@@ -44,11 +44,6 @@ function orderedPanes(state: AppState): PaneTarget[] {
   )
 }
 
-/** 확인 필요(주의)가 있는 pane 들, 사이드바에 보이는 순서로. */
-export function attentionTargets(state: AppState, activity: Readonly<Record<Id, PaneActivity>>): PaneTarget[] {
-  return orderedPanes(state).filter((p) => activity[p.paneId]?.attention)
-}
-
 /** ⇧⌘A: 지금 보는 pane 다음의 확인 필요 pane, 끝이면 처음으로. 없으면 null. */
 export function nextAttention(state: AppState, activity: Readonly<Record<Id, PaneActivity>>, current: Id | null): PaneTarget | null {
   const all = orderedPanes(state)

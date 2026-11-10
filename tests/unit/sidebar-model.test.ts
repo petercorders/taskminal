@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTask, emptyState } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
-import { adjacentTask, attentionTargets, nextAttention, shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
+import { adjacentTask, nextAttention, shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
 
 let n = 0
 const newId = () => `id${++n}`
@@ -85,7 +85,7 @@ describe('adjacentTask', () => {
   })
 })
 
-describe('attentionTargets · nextAttention (⇧⌘A)', () => {
+describe('nextAttention (⇧⌘A)', () => {
   const att = { state: 'waiting' as const, attention: true, busy: true }
   it('사이드바 순서 → 탭 순서 → 화면 순서로, 주의 있는 pane 만', () => {
     const s = stateWith(['b', 'a'], [
@@ -95,8 +95,9 @@ describe('attentionTargets · nextAttention (⇧⌘A)', () => {
     ]) // 보이는 순서: b1, a1, x
     const pane = (name: string) => s.tasks.find((t) => t.name === name)!.tabs[0]!.activePaneId
     const activity = { [pane('x')]: att, [pane('b1')]: att, [pane('a1')]: { ...att, attention: false } }
-    expect(attentionTargets(s, activity).map((t) => t.paneId)).toEqual([pane('b1'), pane('x')])
-    expect(attentionTargets(s, activity)[0]).toMatchObject({ taskId: s.tasks.find((t) => t.name === 'b1')!.id })
+    const first = nextAttention(s, activity, null)!
+    expect(first).toMatchObject({ paneId: pane('b1'), taskId: s.tasks.find((t) => t.name === 'b1')!.id })
+    expect(nextAttention(s, activity, first.paneId)!.paneId).toBe(pane('x')) // a1 은 주의가 없어 건너뛴다
   })
 
   it('지금 보는 pane 다음 것, 끝이면 처음, 없으면 null', () => {

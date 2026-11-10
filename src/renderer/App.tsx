@@ -3,7 +3,7 @@ import { applyActivity, type ActivityEvent, type PaneActivity } from '../shared/
 import { paneIds } from '../shared/layout'
 import { commandForKey, isAppCommand, repeatable, stepFontSize, type AppCommand } from '../shared/keymap'
 import { cleanExit } from '../shared/pty'
-import { createTask, emptyState } from '../shared/model'
+import { createTask, emptyState, findPaneTask } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, Task } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -52,7 +52,10 @@ export function App() {
   const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<Task | null>(null)
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
-  const [confirming, setConfirming] = useState<{ title: string; message: string; label: string; run(): void } | null>(null)
+  // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
+  const [confirming, setConfirming] = useState<
+    { kind: 'pane'; paneId: string; command?: string } | { kind: 'tab'; taskId: string; tabId: string; busy: number } | null
+  >(null)
   // pane 의 활동 — 저장하지 않는 런타임 값 (shared/activity.ts)
   const [activity, setActivity] = useState<Readonly<Record<string, PaneActivity>>>({})
   const [windowFocused, setWindowFocused] = useState(() => document.hasFocus())
@@ -150,13 +153,7 @@ export function App() {
     const tab = task.tabs.find((t) => t.id === tabId)
     if (!tab) return
     const busy = busyPanes(paneIds(tab.layout))
-    if (busy > 0 && !confirmed)
-      return setConfirming({
-        title: '탭 닫기',
-        message: `이 탭에서 명령 ${busy}개가 실행 중입니다. 닫으면 함께 끝납니다.`,
-        label: '닫기',
-        run: () => closeTab(task, tabId, true),
-      })
+    if (busy > 0 && !confirmed) return setConfirming({ kind: 'tab', taskId: task.id, tabId, busy })
     setConfirming(null)
     // 그 탭의 셸만 끝낸다 — 다른 탭 · 일감의 셸은 그대로.
     for (const paneId of paneIds(tab.layout)) window.taskminal.pty.kill(paneId)
@@ -189,13 +186,8 @@ export function App() {
   const dialogOpen = creating || removing !== null || confirming !== null
 
   const closePane = (paneId: string, confirmed = false) => {
-    if (!confirmed && activity[paneId]?.busy)
-      return setConfirming({
-        title: 'pane 닫기',
-        message: `실행 중인 명령${activity[paneId]?.command ? ` ‘${activity[paneId]!.command}’` : ''}이 함께 끝납니다.`,
-        label: '닫기',
-        run: () => closePane(paneId, true),
-      })
+    const act = activity[paneId]
+    if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: act.command } : {}) })
     setConfirming(null)
     // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도
     window.taskminal.pty.kill(paneId)
@@ -406,10 +398,25 @@ export function App() {
       )}
       {confirming && (
         <ConfirmDialog
-          title={confirming.title}
-          message={confirming.message}
-          confirmLabel={confirming.label}
-          onConfirm={confirming.run}
+          title={confirming.kind === 'pane' ? 'pane 닫기' : '탭 닫기'}
+          message={
+            confirming.kind === 'pane'
+              ? `실행 중인 명령${confirming.command ? ` ‘${confirming.command}’` : ''}이 함께 끝납니다.`
+              : `이 탭에서 명령 ${confirming.busy}개가 실행 중입니다. 닫으면 함께 끝납니다.`
+          }
+          confirmLabel="닫기"
+          onConfirm={() => {
+            // 지금 상태에서 다시 찾는다 — 없어졌으면(셸이 스스로 끝남) 대화상자만 닫는다
+            const c = confirming
+            if (c.kind === 'pane') {
+              if (findPaneTask(state, c.paneId)) closePane(c.paneId, true)
+              else closeDialogs()
+            } else {
+              const task = state.tasks.find((t) => t.id === c.taskId)
+              if (task?.tabs.some((t) => t.id === c.tabId)) closeTab(task, c.tabId, true)
+              else closeDialogs()
+            }
+          }}
           onCancel={closeDialogs}
         />
       )}

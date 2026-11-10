@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { seedState } from './helpers'
+import { firstWindow, seedState } from './helpers'
 
 // 임시 userData 로만 띄운다. 묶음 만들기 화면(11단계) 전이라 묶음은 저장 파일에 미리 깐다.
 let userData: string
@@ -12,7 +12,7 @@ let win: Page
 
 async function launch(): Promise<void> {
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
 }
 
 test.beforeEach(async () => {

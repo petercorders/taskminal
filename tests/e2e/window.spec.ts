@@ -1,3 +1,4 @@
+import { firstWindow } from './helpers'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -15,7 +16,7 @@ test.beforeEach(async () => {
   // 'out/main/index.js' 를 직접 주면 package.json 을 못 찾아 앱 이름 · 버전이 Electron 것이 된다 → 폴더로 띄운다.
   launched = undefined
   app = launched = await launch()
-  win = await app.firstWindow()
+  win = await firstWindow(app)
 })
 
 const launch = () => electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })

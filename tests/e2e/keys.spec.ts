@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SHORTCUTS } from '../../src/shared/keymap'
-import { seedState } from './helpers'
+import { firstWindow, seedState } from './helpers'
 
 // 8단계: 단축키 · 앱 메뉴 · 복사/붙여넣기 · 한글 조합.
 // 단축키는 renderer 가 처리한다 — Playwright 의 합성 키는 네이티브 메뉴 단축키를 부르지 않는다(2026-11-10 측정).
@@ -21,7 +21,7 @@ test.beforeEach(async () => {
   ])
   launched = undefined
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-  win = await app.firstWindow()
+  win = await firstWindow(app)
   await term('pane-a').click()
 })
 test.afterEach(async () => {
@@ -256,7 +256,7 @@ test('저장 파일을 읽지 못한 실행에서도 단축키는 된다', async
   chmodSync(join(userData, 'state.json'), 0o000) // 읽기 실패 → 이번 실행은 저장하지 않음
   try {
     app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
-    win = await app.firstWindow()
+    win = await firstWindow(app)
     await expect(win.getByTestId('state-notice')).toContainText('읽지 못해')
     await win.keyboard.press('Meta+KeyN')
     await expect(win.getByRole('dialog')).toBeVisible()
