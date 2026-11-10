@@ -12,6 +12,7 @@ import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
 import { lsofCwds } from './cwd-probe'
+import { branchesOf } from './git-branch'
 import { PtyManager } from './pty-manager'
 import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
@@ -70,6 +71,7 @@ const MAX_STATE_BYTES = 5 * 1024 * 1024
 let scrollbackStore: ScrollbackStore | null = null
 const scrollback = () => (scrollbackStore ??= new ScrollbackStore(join(app.getPath('userData'), 'scrollback')))
 const MAX_LIVE_PANES = 2000
+const MAX_BRANCH_DIRS = 200 // 사이드바 일감 폴더 (15c)
 const cwdPollMs = ((): number => {
   const v = Number(process.env['TASKMINAL_CWD_POLL_MS'])
   return Number.isInteger(v) && v >= 100 ? v : 15_000
@@ -285,6 +287,12 @@ if (!app.requestSingleInstanceLock()) {
     } finally {
       event.returnValue = true // 돌려주지 않으면 renderer 가 멈춘다
     }
+  })
+  ipcMain.handle(IPC.gitBranches, async (event, dirs: unknown): Promise<Record<string, string | null>> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!Array.isArray(dirs) || dirs.length > MAX_BRANCH_DIRS) return {}
+    const ok = dirs.filter((d): d is string => typeof d === 'string' && d.length > 0 && d.length <= 4096)
+    return branchesOf(ok, homedir())
   })
   ipcMain.handle(IPC.ptyCwds, async (event, paneIds: unknown): Promise<Record<string, string>> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')

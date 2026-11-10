@@ -90,9 +90,10 @@ test('일감 두 개를 오가도 각 터미널의 출력과 폴더가 남는다
   expect(b).not.toMatch(/MARK_A_2/)
   expect(b).toContain(`PWD_B ${userData}`)
 
-  // 묶음 칸과 둘째 줄(폴더 · 상태)
+  // 묶음 칸과 둘째 줄(브랜치 또는 폴더 · 상태 — 15c 부터 점 없이 6px 틈, 디자인과 같게)
   await expect(win.getByTestId('sidebar').getByRole('heading', { name: '서버' })).toBeVisible()
-  await expect(row('A 일감')).toContainText('/tmp · 진행 중')
+  await expect(row('A 일감').locator('.task-where')).toHaveText('/tmp')
+  await expect(row('A 일감').locator('.task-sub')).toContainText('진행 중')
   await win.screenshot({ path: 'test-results/sidebar.png' })
 })
 

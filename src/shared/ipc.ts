@@ -22,6 +22,7 @@ export const IPC = {
   scrollbackLoad: 'scrollback:load', // invoke(paneId) → { text, savedAt } | null
   scrollbackSave: 'scrollback:save', // send: 주기 저장 { live, panes }
   scrollbackSaveSync: 'scrollback:save-sync', // sendSync: 페이지가 내려갈 때(앱 종료 · 창 닫기 · 새로 고침) — main 이 다 쓴 뒤 돌아온다
+  gitBranches: 'git:branches', // invoke(폴더[]) → { 폴더: 브랜치 | null } — 사이드바 일감 둘째 줄 (15c)
   ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
 } as const
 

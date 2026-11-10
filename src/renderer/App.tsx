@@ -6,6 +6,7 @@ import { notifyKind } from '../shared/notify'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
+import { keepIfSame, taskDirs, type Branches } from '../shared/git'
 import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
 import type { LoadedState } from '../shared/ipc'
 import type { NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
@@ -70,6 +71,7 @@ function collectScrollback(): Record<string, string> {
 
 /** 스크롤 주기 저장 — 렌더러 충돌 · 강제 종료 때 잃는 것을 이만큼으로 줄인다 */
 const SCROLLBACK_SAVE_MS = 30_000
+const BRANCH_POLL_MS = 5_000 // 셸에서 git switch 한 것을 따라가는 주기 (파일 몇 개 읽기)
 
 const newId = () => crypto.randomUUID()
 
@@ -112,6 +114,7 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, undefined, emptyState)
   const [load, setLoad] = useState<LoadStatus>({ phase: 'loading' })
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [branches, setBranches] = useState<Branches>({})
   // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -276,6 +279,35 @@ export function App() {
       window.removeEventListener('beforeunload', flush)
     }
   }, [scrollReady, restoreOn])
+  // 사이드바 둘째 줄의 git 브랜치 (15c) — 일감 폴더가 바뀔 때 · 5초마다 · 창 포커스 때 다시 읽는다.
+  // 늦게 온 옛 응답은 버리고(번호 · 정리 뒤 alive), 같은 결과면 다시 그리지 않는다.
+  const dirsKey = taskDirs(state.tasks.map((t) => t.cwd)).join('\n')
+  useEffect(() => {
+    const dirs = dirsKey ? dirsKey.split('\n') : []
+    if (dirs.length === 0) return setBranches((prev) => keepIfSame(prev, {}))
+    let alive = true
+    let sent = 0
+    let applied = 0
+    const read = () => {
+      const mine = ++sent
+      void window.taskminal.gitBranches(dirs).then(
+        (found) => {
+          if (!alive || mine < applied) return
+          applied = mine
+          setBranches((prev) => keepIfSame(prev, found))
+        },
+        () => {},
+      )
+    }
+    read()
+    const timer = setInterval(read, BRANCH_POLL_MS)
+    window.addEventListener('focus', read)
+    return () => {
+      alive = false
+      clearInterval(timer)
+      window.removeEventListener('focus', read)
+    }
+  }, [dirsKey])
   // 셸 통합(OSC 7)이 없는 셸의 폴더는 lsof 로 — 마운트된 pane 중 OSC 7 을 한 번도 보내지 않은 것만
   useEffect(() => {
     if (!scrollReady) return
@@ -581,6 +613,7 @@ export function App() {
           onSettings={() => runCommand('settings')}
           onSaveTemplate={(task) => openSaveTemplate(task, null)}
           onMenuClosed={refocus}
+          branches={branches}
         />
         <main className="workspace">
           {/* 전환해도 셸 · 화면이 남도록 본 탭의 pane 은 모두 마운트해 두고, 활성이 아닌 일감 · 탭은 숨긴다. */}

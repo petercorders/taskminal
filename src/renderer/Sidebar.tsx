@@ -4,6 +4,7 @@ import type { TaskEdit } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 import { ActivityIcon, ACTIVITY_LABEL } from './activity-ui'
 import { shortPath, sidebarSections } from './sidebar-model'
+import type { Branches } from '../shared/git'
 import { TaskMenu } from './TaskMenu'
 
 interface Props {
@@ -22,10 +23,12 @@ interface Props {
   onSaveTemplate(task: Task): void
   /** 메뉴 · 이름 바꾸기를 끝냈다 — 터미널이 포커스를 다시 가져가게 */
   onMenuClosed(): void
+  /** 일감 폴더 → git 브랜치 (저장소가 아니면 null · 아직 모르면 없음) — 둘째 줄 (15c) */
+  branches: Branches
 }
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed }: Props) {
+export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches }: Props) {
   const sections = sidebarSections(state)
   const [menu, setMenu] = useState<{ taskId: Id; x: number; y: number } | null>(null)
   // 이름 바꾸기 중인 일감. ↩ · Esc 로 끝내면 입력칸이 사라지는데, Chromium 은 사라지는 입력칸에 blur 를 보내지 않는다
@@ -102,13 +105,13 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
             <span className="task-text">
               <span className="task-name">{task.name}</span>
               {!compact && (
-                <span className="task-sub">
-                  {shortPath(task.cwd)}
+                // 디자인 '사이드바 일감 줄': 브랜치(저장소가 아니면 폴더) 고정폭 · 6px 틈 · 상태 색
+                <span className="task-sub" title={task.cwd}>
+                  <span className="task-where">{branches[task.cwd] ?? shortPath(task.cwd)}</span>
                   {status && (
-                    <>
-                      {' · '}
-                      <span style={{ color: status.color }}>{status.name}</span>
-                    </>
+                    <span className="task-status" style={{ color: status.color }}>
+                      {status.name}
+                    </span>
                   )}
                 </span>
               )}

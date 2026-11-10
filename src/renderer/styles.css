@@ -187,6 +187,20 @@ select {
 .task-sub {
   font-size: 11px;
   color: var(--muted);
+  display: flex;
+  gap: 6px;
+}
+
+/* 디자인: 브랜치 · 폴더는 고정폭, 넘치면 말줄임 — 상태 이름은 줄지 않는다 (15c) */
+.task-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', Menlo, monospace;
+}
+
+.task-status {
+  flex: none;
 }
 
 .task-activity {

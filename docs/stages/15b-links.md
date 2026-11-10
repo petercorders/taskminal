@@ -39,7 +39,7 @@ e2e 미실행(사용자 지시 2026-11-10) — 돌려야 할 목록: `tests/e2e/
 |---|---|
 | `@xterm/addon-search` 를 아무도 안 씀 | 15d(⌘F)에서 씀 — 같은 설치에 묶여 이 커밋에 들어감(커밋 메시지에 적음) |
 | 공유 `openExternalIfWeb` 에 2048자 상한이 붙어 window.open · 이동 길의 긴 주소(OAuth 등)를 조용히 버림 | 상한을 `webUrl` 에서 빼고 새 IPC 에만(8192) |
-| 문서의 채널 이름 `app:openLink` ≠ 코드 `app:open-link` | 문서 고침 |
+| 문서의 채널 이름 `app:openLink` ≠ 코드 `app:open-link` | 문서 고침 | <!-- refs-ignore -->
 | 검사한 값이 아니라 원본 글자를 엶 | 정규화한 `href` 를 돌려줌 |
 
 계획과 다르게 한 것: 길이 상한 2048 → 8192 이고 IPC 길에만(리뷰 반영).
