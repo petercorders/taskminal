@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from '@playwright/test'
-import { writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // e2e 가 미리 깔아 두는 저장 파일. 앱이 쓰는 모양(AppState version 1)과 같아야 normalizeState 를 통과한다.
@@ -69,6 +69,10 @@ export async function firstWindow(app: ElectronApplication): Promise<Page> {
         BrowserWindow.getAllWindows().map((w) => ({ visible: w.isVisible(), url: w.webContents.getURL(), loading: w.webContents.isLoading(), crashed: w.webContents.isCrashed() })),
       )
       .catch((e: unknown) => `main 응답 없음: ${String(e)}`)
-    throw new Error(`창이 뜨지 않음 (pid ${app.process().pid}) 창=${JSON.stringify(windows)} 출력=${out.slice(-1500)} 원래 오류=${String(error)}`)
+    const report = `창이 뜨지 않음 (pid ${app.process().pid}) 창=${JSON.stringify(windows)} 출력=${out.slice(-1500)} 원래 오류=${String(error)}`
+    // Playwright 가 다음 실행 때 지우는 outputDir(test-results/playwright) 밖에 쌓아 둔다 — 다시 돌리다 진단을 잃지 않게(2026-11-10 11단계에서 한 번 잃음)
+    mkdirSync('test-results/launch-hangs', { recursive: true })
+    appendFileSync('test-results/launch-hangs/log.txt', `${new Date().toISOString()} ${report}\n`)
+    throw new Error(report)
   }
 }
