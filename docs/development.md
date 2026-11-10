@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (e2e 고침 병합 — 13~15 e2e 전체 통과 115개 · 14단계 .app 임시 데이터 폴더 실행 확인, 16단계 진행 중)
+마지막 갱신: 2026-11-11 (16단계 셸 지킴이 병합 — 단위 383 · e2e 123, 다음은 17단계 데이터 안전)
 
 ## 1. 지금 어디까지
 
@@ -12,7 +12,8 @@
 | 14 패키징 · 설치 | main 에 병합(브랜치 `stage-14-package`). `npm run package` 로 `dist/mac-arm64/Taskminal.app` + 정적 검사. 2026-11-11 임시 데이터 폴더로 .app 실행 확인(셸 · 한글 · 최소 환경 `which node` · 아이콘 · 패키지 node-pty) — Finder 더블클릭 · /Applications 설치는 사용자 확인 대상. `docs/stages/14-package.md` 결과 절 '실행 확인' |
 | 15 다듬기 | **단위까지 확인 · e2e 미실행** — main 에 병합(브랜치 `stage-15-polish`). 15a~15f 항목별 문서(`docs/stages/15a-notify.md` ~ `15f-worktree.md`) 결과 절에 돌려야 할 e2e. playwright 설정이 기본 `TASKMINAL_RENDERER=dom`(15e) — 기존 e2e 전체도 다시 |
 | 13~15 e2e | 2026-11-11 브랜치 `stage-15-e2e-fix`(e2e 고침 3커밋) 로 전체 검사 통과(e2e 115개) → main ff 병합 `73c70cd` |
-| 16~25 1차 출시 | 16 진행 중 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 16 셸 지킴이 | main 에 병합(브랜치 `stage-16-persist`). 단위 383 · e2e 123 통과 · .app 에서 지킴이 확인. 계획 · 결과 `docs/stages/16-persist.md` |
+| 17~25 1차 출시 | 17 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -76,6 +77,14 @@
 
 ### 15 다듬기
 항목마다 따로 계획(`docs/stages/15a-…` 처럼): 보이는 pane 만 WebGL · ⌘F 검색 · 명령 끝 macOS 알림 · git worktree 일감 · 링크 열기 · 일감 브랜치 표시. 11단계에 알림 설정이 이미 있으니 '명령 끝 알림' 은 겹치는지 먼저 본다.
+
+### 16 셸 지킴이
+계획 `docs/stages/16-persist.md`. 구조: `src/main/ptyhost/`(host-entry = 지킴이 진입 · host-core = 세션 · headless · client = 앱 쪽 손님) · `src/main/host-control.ts`(상태 · 끝내기 · 메모리 · 옛 버전) · `src/main/pty-manager.ts`(지킴이에 요청). 짚어 둔 함정:
+- 패키지에서 node-pty 는 `app.asar` 경로로 require 한다 — `app.asar.unpacked` 로 주면 helper 경로가 `.unpacked.unpacked` 가 되어 `posix_spawnp failed`.
+- e2e 는 `TASKMINAL_QUIT_NOTICE=seen` 이 기본(playwright 설정) — 처음 ⌘Q 안내가 시험 정리를 막지 않게. 그 안내를 보는 시험만 지운다.
+- 지킴이는 userData 폴더 · 소켓이 사라지면 2초 안에 스스로 끝난다(e2e 임시 폴더 정리 = 지킴이 정리). 손님 · 살아 있는 셸이 없으면 60초 뒤 끝남.
+- ⌥⌘Q 는 `ptys.clear()` 뒤 지킴이를 끈다 — 먼저 끄면 셸 exit 가 창으로 가서 pane 이 지워지거나 '셸이 끝났습니다' 가 저장된다.
+- 키 없는 명령(⌘P 전용)은 메뉴에 없다 — 메뉴 대조 시험은 키 있는 명령만.
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
