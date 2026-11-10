@@ -1,32 +1,10 @@
-import { useEffect, useState } from 'react'
+import { TerminalPane } from './TerminalPane'
 
-// 2단계: 빈 화면. 사이드바 · 탭 · 터미널은 3·5·6단계에서 채운다.
+// 3단계: 창 전체에 셸 하나. 사이드바 · 탭 · 분할은 5·6·7단계에서.
 export function App() {
-  const [version, setVersion] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    window.taskminal.appInfo().then(
-      (info) => {
-        if (alive) setVersion(info.version)
-      },
-      (error: unknown) => {
-        console.error('앱 정보를 읽지 못함', error)
-        if (alive) setVersion('버전을 읽지 못함')
-      },
-    )
-    return () => {
-      alive = false
-    }
-  }, [])
-
   return (
-    <main className="empty">
-      <h1>Taskminal</h1>
-      <p className="version" data-testid="app-version">
-        {version ?? ''}
-      </p>
-      <p className="hint">일감이 없습니다</p>
+    <main className="app">
+      <TerminalPane paneId="pane-1" cwd="~" />
     </main>
   )
 }

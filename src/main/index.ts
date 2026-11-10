@@ -1,6 +1,8 @@
-import { app, BrowserWindow, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
+import { isPaneId, validSize, validWrite } from '../shared/pty'
+import { PtyManager } from './pty-manager'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -10,6 +12,7 @@ const devServerUrl = process.env['ELECTRON_RENDERER_URL']
 const rendererFile = join(__dirname, '../renderer/index.html')
 
 let mainWindow: BrowserWindow | null = null
+const ptys = new PtyManager()
 
 const isOurPage = (url: string): boolean => {
   try {
@@ -68,6 +71,14 @@ function createWindow(): BrowserWindow {
     if (mainWindow === win) mainWindow = null
   })
 
+  // 셸 정리 — 종료 경로 4개 중 창에 딸린 3개 (앱 종료는 will-quit).
+  const wc = win.webContents
+  wc.on('destroyed', () => ptys.killOwner(wc)) // ① 창 닫기
+  wc.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) ptys.killOwner(wc) // ② 새로 고침 — 새 페이지가 다시 띄운다
+  })
+  wc.on('render-process-gone', () => ptys.killOwner(wc)) // ③ 렌더러 충돌
+
   const load = devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(rendererFile)
   load.catch(() => {
     // did-fail-load 가 처리한다
@@ -76,7 +87,7 @@ function createWindow(): BrowserWindow {
 }
 
 // 우리 창의 맨 위 프레임이 우리 페이지를 띄우고 있을 때만 받는다 (창이 여러 개여도 같은 규칙).
-const fromOurWindow = (event: IpcMainInvokeEvent): boolean => {
+const fromOurWindow = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
   const frame = event.senderFrame
   return (
     frame !== null &&
@@ -104,6 +115,31 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     return { name: app.getName(), version: app.getVersion() }
   })
+
+  ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const o = (opts ?? {}) as Record<string, unknown>
+    if (!isPaneId(paneId) || typeof o['cwd'] !== 'string' || !validSize(o['cols'], o['rows'])) {
+      throw new Error('잘못된 pty 인자')
+    }
+    ptys.spawn(event.sender, paneId, { cwd: o['cwd'], cols: o['cols'] as number, rows: o['rows'] as number })
+  })
+  // 고빈도 입력은 send(응답 없음). 틀린 인자는 조용히 버린다.
+  ipcMain.on(IPC.ptyWrite, (event, paneId: unknown, data: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId) && validWrite(data)) ptys.write(event.sender, paneId, data)
+  })
+  ipcMain.on(IPC.ptyResize, (event, paneId: unknown, cols: unknown, rows: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId) && validSize(cols, rows)) {
+      ptys.resize(event.sender, paneId, cols as number, rows as number)
+    }
+  })
+  ipcMain.on(IPC.ptyKill, (event, paneId: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId)) ptys.kill(event.sender, paneId)
+  })
+
+  // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다
+  // (변이 확인으로 확인: e2e ① 은 이 줄 없이도 통과). 13단계의 종료 전 저장이 이 순서에 붙는다.
+  app.on('will-quit', () => ptys.killAll())
 
   void app.whenReady().then(() => {
     mainWindow = createWindow()

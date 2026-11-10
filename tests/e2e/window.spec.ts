@@ -26,11 +26,12 @@ test.afterEach(async () => {
   rmSync(userData, { recursive: true, force: true })
 })
 
-test('창이 뜨고 preload → main 왕복으로 버전을 보여 준다', async () => {
+test('창이 뜨고 preload → main 왕복으로 앱 정보를 받는다', async () => {
   await expect(win).toHaveTitle('Taskminal')
-  await expect(win.getByRole('heading', { name: 'Taskminal' })).toBeVisible()
-  await expect(win.getByTestId('app-version')).toHaveText('0.1.0')
-  await win.screenshot({ path: 'test-results/window.png' })
+  const info = await win.evaluate(() =>
+    (globalThis as unknown as { taskminal: { appInfo(): Promise<unknown> } }).taskminal.appInfo(),
+  )
+  expect(info).toEqual({ name: 'Taskminal', version: '0.1.0' })
 })
 
 test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', async () => {
@@ -40,7 +41,7 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     // contextBridge 는 contextIsolation 이 꺼져 있으면 노출에 실패하므로 키가 보이는 것 자체가 격리의 증거다.
     apiKeys: Object.keys((globalThis as unknown as { taskminal: object }).taskminal),
   }))
-  expect(inPage).toEqual({ require: 'undefined', process: 'undefined', apiKeys: ['appInfo'] })
+  expect(inPage).toEqual({ require: 'undefined', process: 'undefined', apiKeys: ['appInfo', 'pty'] })
 
   // 설정값이 아니라 실제로 돌고 있는 renderer 프로세스가 OS 샌드박스 안인지 본다.
   const sandboxed = await app.evaluate(({ app, BrowserWindow }) => {
