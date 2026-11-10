@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { accelLabel, SHORTCUTS } from '../shared/keymap'
-import { nextScope, paletteItems, SCOPE_LABEL, type PaletteItem, type PaletteScope } from '../shared/palette'
+import { markSegments, nextScope, paletteItems, SCOPE_LABEL, type PaletteInput, type PaletteItem, type PaletteScope } from '../shared/palette'
 import type { AppState } from '../shared/types'
 import { shortPath, sidebarSections } from './sidebar-model'
 import { terminals } from './terminals'
@@ -19,6 +19,8 @@ const COMMANDS = SHORTCUTS.filter((s) => !/^tab-|^last-tab$|^palette$/.test(s.co
   hint: accelLabel(s.accel),
 }))
 
+const OUTPUT_BUDGET = 20
+
 const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', template: '템플릿', output: '출력', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
@@ -26,6 +28,12 @@ export function Palette({ state, onRun, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<PaletteScope>('all')
   const [selected, setSelected] = useState(0)
+  // 출력 찾기는 스크롤 버퍼를 다 훑으므로 치는 동안은 쉬었다가(150ms) 한 번 — 다른 항목은 바로 찾는다
+  const [outputQuery, setOutputQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setOutputQuery(query.trim()), 150)
+    return () => clearTimeout(t)
+  }, [query])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
 
@@ -33,16 +41,17 @@ export function Palette({ state, onRun, onClose }: Props) {
 
   const items = useMemo(() => {
     const ordered = sidebarSections(state).flatMap((s) => s.tasks)
-    const q = query.trim()
-    // 출력: 셸이 떠 있는(마운트된) pane 의 스크롤 버퍼 — 사이드바 순서, 숨은 pane 포함
-    const outputs =
-      q.length >= 2 && (scope === 'all' || scope === 'output')
-        ? ordered.flatMap((task) =>
-            Object.keys(task.panes).flatMap((paneId) =>
-              (terminals.get(paneId)?.search(q, 20) ?? []).map((r) => ({ paneId, taskName: task.name, line: r.line, text: r.text.trim() })),
-            ),
-          )
-        : []
+    // 출력: 셸이 떠 있는(마운트된) pane 의 스크롤 버퍼 — 사이드바 순서, 숨은 pane 포함, 모두 합쳐 20줄까지
+    const outputs: PaletteInput['outputs'] = []
+    if (outputQuery.length >= 2 && (scope === 'all' || scope === 'output')) {
+      for (const task of ordered)
+        for (const paneId of Object.keys(task.panes)) {
+          const left = OUTPUT_BUDGET - outputs.length
+          if (left <= 0) break
+          for (const r of terminals.get(paneId)?.search(outputQuery, left) ?? [])
+            outputs.push({ paneId, taskName: task.name, line: r.line, text: r.text.trim() })
+        }
+    }
     return paletteItems({
       tasks: ordered.map((t) => ({ id: t.id, name: t.name, detail: shortPath(t.cwd) })),
       commands: COMMANDS,
@@ -51,7 +60,7 @@ export function Palette({ state, onRun, onClose }: Props) {
       query,
       scope,
     })
-  }, [state, query, scope])
+  }, [state, query, scope, outputQuery])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {
@@ -136,11 +145,9 @@ export function Palette({ state, onRun, onClose }: Props) {
 
 /** 맞은 글자를 굵게 */
 function Marked({ text, marks }: { text: string; marks: number[] }) {
-  if (marks.length === 0) return <>{text}</>
-  const set = new Set(marks)
   return (
     <>
-      {[...text].map((ch, i) => (set.has(i) ? <mark key={i}>{ch}</mark> : ch))}
+      {markSegments(text, marks).map((seg, i) => (seg.mark ? <mark key={i}>{seg.text}</mark> : seg.text))}
     </>
   )
 }

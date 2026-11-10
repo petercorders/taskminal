@@ -54,6 +54,8 @@ export function App() {
   // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // 팔레트에서 고른 출력 줄 — 그 pane 이 보이게 그린 뒤에 스크롤 · 선택한다(숨은 터미널에서 하면 스크롤이 맞지 않는다)
+  const [pendingReveal, setPendingReveal] = useState<{ paneId: string; line: number; query: string } | null>(null)
   const [removing, setRemoving] = useState<Task | null>(null)
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
   // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
@@ -278,6 +280,7 @@ export function App() {
         if (newTab) addTab(item.id)
         return refocus()
       case 'command':
+        // 대화상자를 여는 명령(새 일감)이어도 대화상자가 포커스를 갖는다 — 대화상자의 마운트 효과가 터미널보다 나중에 돈다(e2e 로 확인)
         if (isAppCommand(item.id)) runCommand(item.id, true)
         return refocus()
       case 'template':
@@ -290,11 +293,19 @@ export function App() {
         if (!taskId) return refocus()
         dispatch({ type: 'task/select', id: taskId })
         dispatch({ type: 'pane/focus', taskId, paneId })
-        terminals.get(paneId)?.reveal(item.line!, query)
+        setPendingReveal({ paneId, line: item.line!, query })
         return refocus()
       }
     }
   }
+
+  useEffect(() => {
+    if (!pendingReveal) return
+    const { paneId, line, query } = pendingReveal
+    // 보이게 된 다음 프레임(크기 맞춤 뒤)에. 아래 setPendingReveal(null) 의 다시 그리기가 이 프레임을 취소하지 않게 정리 함수는 두지 않는다
+    requestAnimationFrame(() => terminals.get(paneId)?.reveal(line, query))
+    setPendingReveal(null)
+  }, [pendingReveal])
 
   const runCommandRef = useRef(runCommand)
   runCommandRef.current = runCommand

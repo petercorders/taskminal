@@ -90,7 +90,10 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
     }
   }
 
-  if (items.length === 0 && query !== '' && (input.scope === 'all' || input.scope === 'task')) {
+  // 글자 순서(퍼지)는 거의 무엇이든 맞으므로 '아무것도 안 맞을 때' 만으로는 새 일감에 닿기 어렵다 →
+  // 이름이 꼭 같은 일감(대소문자 무시)이 없으면 맨 끝에 늘 둔다
+  const exists = input.tasks.some((t) => t.name.trim().toLowerCase() === query.toLowerCase())
+  if (query !== '' && !exists && (input.scope === 'all' || input.scope === 'task')) {
     items.push({ kind: 'create', id: query, label: query, marks: [], score: 0 })
   }
   return items
@@ -99,4 +102,19 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
 export function nextScope(scope: PaletteScope, step: 1 | -1): PaletteScope {
   const i = SCOPES.indexOf(scope)
   return SCOPES[(i + step + SCOPES.length) % SCOPES.length]!
+}
+
+/** 강조 조각: marks 는 UTF-16 위치(matchScore 가 indexOf 로 잰 것) — 이모지 같은 두 칸 글자를 한 글자로 세지 않는다 */
+export function markSegments(text: string, marks: readonly number[]): Array<{ text: string; mark: boolean }> {
+  const set = new Set(marks)
+  const out: Array<{ text: string; mark: boolean }> = []
+  let i = 0
+  for (const ch of text) {
+    const mark = set.has(i)
+    const last = out[out.length - 1]
+    if (last && last.mark === mark) last.text += ch
+    else out.push({ text: ch, mark })
+    i += ch.length
+  }
+  return out
 }

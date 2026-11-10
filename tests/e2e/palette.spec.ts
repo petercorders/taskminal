@@ -113,10 +113,10 @@ test('맞는 게 없으면 그 이름으로 새 일감 · 템플릿을 고르면
 test('⇥ 로 범위: 전체 → 일감 → 명령', async () => {
   await open('일감')
   const kinds = () => items().evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('data-kind')))])
-  expect(await kinds()).toEqual(['task', 'command'])
+  expect(await kinds()).toEqual(['task', 'command', 'create']) // 이름이 '일감' 인 일감은 없으니 맨 끝에 새 일감
   await win.keyboard.press('Tab')
   await expect(palette().getByTestId('palette-scope')).toHaveText('일감')
-  expect(await kinds()).toEqual(['task'])
+  expect(await kinds()).toEqual(['task', 'create'])
   await win.keyboard.press('Tab')
   await expect(palette().getByTestId('palette-scope')).toHaveText('명령')
   expect(await kinds()).toEqual(['command'])
@@ -165,4 +165,40 @@ test('한글을 조합하는 중의 ↩ 는 글자 확정 — 실행하지 않�
   await expect(selected()).toContainText('아래로 나누기')
   await win.keyboard.press('Enter')
   await expect(visibleSlots()).toHaveCount(2)
+})
+
+test('화면 폭에서 접힌 줄에 걸친 글자도 찾고, 찾은 뒤 출력이 넘쳐 옛 줄이 버려져도 그 줄로 간다', async () => {
+  // 접힌 자리에 걸치게: 칸 수 - 5 개의 x 뒤에 표식
+  const cols = Number(await term('pane-a').getAttribute('data-cols'))
+  await win.keyboard.type(`seq 1 3000; printf 'x%.0s' {1..${cols - 5}}; echo WRAPPEDMARK_$((5*5))`)
+  await win.keyboard.press('Enter')
+  await waitText('pane-a', /^EDMARK_25/m) // 접혀서 둘째 행에 'EDMARK_25'
+  await win.keyboard.press('Meta+Alt+ArrowDown') // B 로
+  await open('WRAPPEDMARK_25')
+  await expect(items().filter({ hasText: /^출력/ })).toHaveCount(1) // 접힌 두 행을 이어 찾았다
+
+  // 팔레트가 열린 사이 A 에서 3000줄이 더 나와 5000줄 스크롤 버퍼의 앞이 버려진다 → 찾을 때 잰 줄 번호가 밀린다
+  // (숨은 터미널은 다시 그리지 않으므로 A 를 보이게 둔 채 그 위에 팔레트를 연다)
+  await win.keyboard.press('Escape')
+  await win.keyboard.press('Meta+Alt+ArrowUp')
+  await win.keyboard.type('sleep 1; seq 5001 8000')
+  await win.keyboard.press('Enter')
+  await open('WRAPPEDMARK_25')
+  await expect(items().filter({ hasText: /^출력/ })).toHaveCount(1)
+  await expect.poll(async () => /^8000$/m.test(await screenOf('pane-a')), { timeout: 15_000 }).toBe(true) // 넘친 뒤
+  expect(await screenOf('pane-a')).not.toMatch(/EDMARK_25/) // 맨 아래를 보는 중이라 그 줄은 화면 밖
+  while ((await selected().getAttribute('data-kind')) !== 'output') await win.keyboard.press('ArrowDown')
+  await win.keyboard.press('Enter')
+  await expect(visibleTask()).toHaveAttribute('data-task-name', 'A 일감')
+  await expect.poll(async () => /EDMARK_25/.test(await screenOf('pane-a'))).toBe(true) // 그 줄이 화면에 보인다
+})
+
+test('팔레트에서 대화상자를 여는 명령(새 일감)을 고르면 포커스는 대화상자에 — 터미널이 가져가지 않는다', async () => {
+  await open('새 일감')
+  await expect(selected()).toHaveAttribute('data-kind', 'command')
+  await win.keyboard.press('Enter')
+  const dialog = win.getByRole('dialog', { name: '새 일감' })
+  await expect(dialog.getByLabel('이름')).toBeFocused()
+  await win.waitForTimeout(200)
+  await expect(dialog.getByLabel('이름')).toBeFocused()
 })

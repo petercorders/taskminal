@@ -27,6 +27,22 @@ interface Props {
 }
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
+/** 화면 폭에서 접힌 행(isWrapped)을 이어 붙인 논리 줄 — 접힌 자리에 걸친 글자도 찾게. line 은 시작 행 번호. */
+function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
+  const buf = term.buffer.active
+  const out: Array<{ line: number; text: string }> = []
+  for (let i = 0; i < buf.length; i++) {
+    const row = buf.getLine(i)
+    if (!row) continue
+    const text = row.translateToString(false) // 끝 공백을 남겨야 다음 행과 이을 때 칸이 맞는다
+    const last = out[out.length - 1]
+    if (row.isWrapped && last) last.text += text
+    else out.push({ line: i, text })
+  }
+  for (const l of out) l.text = l.text.trimEnd()
+  return out
+}
+
 export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClosed, onActivity }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
@@ -121,19 +137,26 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
       clear: () => term.clear(),
       search: (query, limit) => {
         const q = query.toLowerCase()
-        const buf = term.buffer.active
+        const lines = logicalLines(term)
         const found: Array<{ line: number; text: string }> = []
-        for (let i = buf.length - 1; i >= 0 && found.length < limit; i--) {
-          const text = buf.getLine(i)?.translateToString(true) ?? ''
-          if (text.toLowerCase().includes(q)) found.push({ line: i, text })
+        for (let i = lines.length - 1; i >= 0 && found.length < limit; i--) {
+          if (lines[i]!.text.toLowerCase().includes(q)) found.push(lines[i]!)
         }
         return found
       },
       reveal: (line, query) => {
-        const text = term.buffer.active.getLine(line)?.translateToString(true) ?? ''
-        const at = text.toLowerCase().indexOf(query.toLowerCase())
-        term.scrollToLine(Math.max(0, line - Math.floor(term.rows / 2)))
-        if (at >= 0) term.select(at, line, query.length)
+        // 찾은 뒤 스크롤 버퍼가 넘쳐 옛 줄이 버려지면 줄 번호가 밀린다 → 그 번호에서 가장 가까운, 찾기 글자가 든 줄로
+        const q = query.toLowerCase()
+        let best: { line: number; at: number } | null = null
+        for (const l of logicalLines(term)) {
+          const at = l.text.toLowerCase().indexOf(q)
+          if (at >= 0 && (!best || Math.abs(l.line - line) < Math.abs(best.line - line))) best = { line: l.line, at }
+        }
+        if (!best) return
+        // 접힌 줄이면 맞은 자리가 몇째 행인지 (넓은 글자(한글)는 칸이 둘이라 어긋날 수 있다)
+        const row = best.line + Math.floor(best.at / term.cols)
+        term.scrollToLine(Math.max(0, row - Math.floor(term.rows / 2)))
+        term.select(best.at % term.cols, row, query.length)
       },
     })
 

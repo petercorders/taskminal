@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchScore, nextScope, paletteItems, type PaletteInput } from '../../src/shared/palette'
+import { markSegments, matchScore, nextScope, paletteItems, type PaletteInput } from '../../src/shared/palette'
 
 describe('matchScore', () => {
   it('앞부분 일치 > 낱말 시작 > 중간 일치 > 글자 순서만 맞음, 안 맞으면 null', () => {
@@ -48,7 +48,7 @@ describe('paletteItems', () => {
 
   it('점수순, 같으면 종류 순서(일감 > 명령 > 템플릿 > 출력)', () => {
     const items = paletteItems(input({ query: '일감' }))
-    expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(['task:t1', 'task:t2', 'command:next-task'])
+    expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(['task:t1', 'task:t2', 'command:next-task', 'create:일감'])
   })
 
   it('범위를 고르면 그 종류만', () => {
@@ -62,17 +62,39 @@ describe('paletteItems', () => {
     const items = paletteItems(input({ query: '일감', outputs }))
     const out = items.filter((i) => i.kind === 'output')
     expect(out).toHaveLength(20)
-    expect(items.at(-1)!.kind).toBe('output')
+    expect(items.filter((i) => i.kind !== 'create').at(-1)!.kind).toBe('output') // 새 일감 줄만 그 뒤
     expect(out[0]).toMatchObject({ paneId: 'p', line: 0, detail: 'A 일감' })
     expect(out[0]!.marks).toEqual([0, 1])
   })
 
   it('아무것도 안 맞으면 ‘그 이름으로 새 일감’ 하나 (명령 · 템플릿 · 출력 범위에서는 없음)', () => {
     expect(paletteItems(input({ query: '  새 서버 ' }))).toEqual([expect.objectContaining({ kind: 'create', label: '새 서버' })])
+  })
+
+  it('글자 순서만 맞는 것들이 있어도, 이름이 꼭 같은 일감이 없으면 맨 끝에 ‘새 일감’', () => {
+    const items = paletteItems(input({ query: '다일' })) // '다음 일감' 이 글자 순서로 맞는다
+    expect(items.map((i) => i.kind)).toEqual(['command', 'create'])
+    expect(paletteItems(input({ query: 'a 일감' })).some((i) => i.kind === 'create')).toBe(false) // 이름이 같은 일감(대소문자 무시)이 있으면 없음
+  })
+
+  it('새 일감은 전체 · 일감 범위에서만, 공백뿐이면 없음', () => {
     expect(paletteItems(input({ query: 'zzz', scope: 'task' }))).toEqual([expect.objectContaining({ kind: 'create' })])
     expect(paletteItems(input({ query: 'zzz', scope: 'command' }))).toEqual([])
     expect(paletteItems(input({ query: '   ' })).some((i) => i.kind === 'create')).toBe(false)
     expect(paletteItems(input({ tasks: [], query: '  ', scope: 'task' }))).toEqual([]) // 공백뿐이면 빈 이름의 새 일감을 내지 않는다
+  })
+})
+
+describe('markSegments', () => {
+  it('맞은 자리를 강조 조각으로 — 위치는 UTF-16 기준이라 이모지 뒤도 맞는다', () => {
+    const text = '🚀 deploy'
+    const m = matchScore(text, 'dep')!
+    expect(markSegments(text, m.marks)).toEqual([
+      { text: '🚀 ', mark: false },
+      { text: 'dep', mark: true },
+      { text: 'loy', mark: false },
+    ])
+    expect(markSegments('abc', [])).toEqual([{ text: 'abc', mark: false }])
   })
 })
 
