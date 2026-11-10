@@ -44,6 +44,8 @@ export interface TaskminalApi {
   setBadge(count: number): void
   /** 알림 소리만 (macOS 알림 없이) */
   beep(): void
+  /** 터미널 링크를 바깥 브라우저로 — http(s) 가 아니면 main 이 무시 */
+  openLink(url: string): void
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi

@@ -7,6 +7,7 @@ import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
 import { isAccel, isAppCommand } from '../shared/keymap'
+import { webUrl } from '../shared/links'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
@@ -100,13 +101,9 @@ const isOurPage = (url: string): boolean => {
   }
 }
 
-const openExternalIfWeb = (url: string): void => {
-  try {
-    const { protocol } = new URL(url)
-    if (protocol === 'http:' || protocol === 'https:') void shell.openExternal(url)
-  } catch {
-    // 주소가 아니면 무시
-  }
+const openExternalIfWeb = (url: unknown): void => {
+  const web = webUrl(url) // http(s) 가 아니면 무시
+  if (web) void shell.openExternal(web)
 }
 
 function createWindow(): BrowserWindow {
@@ -316,6 +313,9 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.on(IPC.beep, (event) => {
     if (fromOurWindow(event)) shell.beep()
+  })
+  ipcMain.on(IPC.openLink, (event, url: unknown) => {
+    if (fromOurWindow(event)) openExternalIfWeb(url)
   })
   ipcMain.on(IPC.menuKeys, (event, keys: unknown) => {
     if (!fromOurWindow(event) || typeof keys !== 'object' || keys === null) return

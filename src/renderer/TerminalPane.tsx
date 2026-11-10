@@ -1,11 +1,13 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { parseOsc7 } from '../shared/cwd'
+import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
@@ -37,6 +39,12 @@ interface Props {
 export const START_FALLBACK_MS = 4000
 // 시작 명령을 보낸 pane — 개발 모드 StrictMode 의 두 번 마운트 · 다시 마운트가 두 번 보내지 않게 (상태는 dispatch 뒤에야 바뀐다)
 const sentStarts = new Set<string>()
+
+/** 터미널 링크(글 속 주소 · OSC 8): ⌘+클릭 · http(s) 만 main 에 넘긴다 (main 도 다시 거른다) */
+const openLink = (event: MouseEvent, uri: string): void => {
+  const url = linkToOpen(uri, event.metaKey)
+  if (url) window.taskminal.openLink(url)
+}
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
 /** 화면 폭에서 접힌 행(isWrapped)을 이어 붙인 논리 줄 — 접힌 자리에 걸친 글자도 찾게. line 은 시작 행 번호. */
@@ -88,10 +96,13 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
       scrollback: s.scrollback,
       macOptionIsMeta: s.optionAsMeta,
       theme: xtermTheme(s.theme, s.accent),
+      // OSC 8 링크 — 글 속 주소(WebLinksAddon)와 같이 ⌘+클릭만, http(s) 만
+      linkHandler: { activate: openLink, allowNonHttpProtocols: false },
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.loadAddon(new Unicode11Addon())
+    term.loadAddon(new WebLinksAddon(openLink))
     const serializer = new SerializeAddon()
     term.loadAddon(serializer)
     term.unicode.activeVersion = '11'

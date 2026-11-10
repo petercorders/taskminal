@@ -17,6 +17,7 @@ export const IPC = {
   quitGuard: 'app:quit-guard', // send: 실행 중 명령 수 (끄기 전 확인이 꺼져 있으면 0)
   badge: 'app:badge', // send: Dock 배지 수 (0 = 지움)
   beep: 'app:beep', // send: 알림 소리만
+  openLink: 'app:open-link', // send: 터미널 링크(⌘+클릭) — main 이 http(s) 만 바깥 브라우저로
   menuKeys: 'menu:keys', // send: 바꾼 단축키 (settings.keys) → 메뉴 표시를 다시 만든다
   scrollbackLoad: 'scrollback:load', // invoke(paneId) → { text, savedAt } | null
   scrollbackSave: 'scrollback:save', // send: 주기 저장 { live, panes }

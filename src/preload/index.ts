@@ -17,6 +17,7 @@ const api: TaskminalApi = {
   setQuitGuard: (busy) => ipcRenderer.send(IPC.quitGuard, busy),
   setBadge: (count) => ipcRenderer.send(IPC.badge, count),
   beep: () => ipcRenderer.send(IPC.beep),
+  openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   setMenuKeys: (keys) => ipcRenderer.send(IPC.menuKeys, keys),
   pty: {
     spawn: (paneId, opts) => ipcRenderer.invoke(IPC.ptySpawn, paneId, opts) as Promise<void>,
