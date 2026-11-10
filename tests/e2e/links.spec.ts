@@ -40,18 +40,19 @@ test('글 속 https 주소: 그냥 클릭은 안 열고 ⌘+클릭은 바깥 브
   await run('echo LINK https://example.com/x$((1+1))')
   const link = screen().getByText('https://example.com/x2').last()
   await expect(link).toBeVisible()
-  await link.click()
+  // 글 줄은 xterm-screen 아래에 깔려 있어 실제 마우스도 xterm-screen 이 받는다 → 그 자리를 누르도록 force (Playwright 의 '가려짐' 검사 생략)
+  await link.click({ force: true })
   await win.waitForTimeout(300) // 열리지 않아야 하는 것을 보는 자리 — 기다릴 신호가 없다
   expect(await opened()).toEqual([])
-  await link.click({ modifiers: ['Meta'] })
+  await link.click({ modifiers: ['Meta'], force: true })
   await expect.poll(opened).toEqual(['https://example.com/x2'])
 })
 
 test('OSC 8 링크도 ⌘+클릭으로 연다 · file: 링크는 열지 않는다', async () => {
   await run(`printf '\\e]8;;https://example.com/osc8\\e\\\\OSCLINK\\e]8;;\\e\\\\ \\e]8;;file:///etc/passwd\\e\\\\FILELINK\\e]8;;\\e\\\\\\n'`)
   await expect(screen()).toContainText('OSCLINK')
-  await screen().getByText('FILELINK').last().click({ modifiers: ['Meta'] })
-  await screen().getByText('OSCLINK').last().click({ modifiers: ['Meta'] })
+  await screen().getByText('FILELINK').last().click({ modifiers: ['Meta'], force: true })
+  await screen().getByText('OSCLINK').last().click({ modifiers: ['Meta'], force: true })
   await expect.poll(opened).toEqual(['https://example.com/osc8'])
 })
 
