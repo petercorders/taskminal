@@ -1,4 +1,4 @@
-# Ilgam
+# Taskminal
 
 일감별로 터미널 세션을 묶는 macOS 터미널 (Electron + xterm.js + node-pty). 단계 계획 · 결정: `docs/plan.md`
 
@@ -9,7 +9,7 @@
 ## 명령
 - 단계 끝 검증: `npm run typecheck && npx vitest run && npm run e2e`
 - 개발 실행: `npm run dev`
-- e2e 는 `ILGAM_USER_DATA=<임시 폴더>` 로만 앱을 띄운다 (실제 `~/Library/Application Support/Ilgam` 금지).
+- e2e 는 `TASKMINAL_USER_DATA=<임시 폴더>` 로만 앱을 띄운다 (실제 `~/Library/Application Support/Taskminal` 금지).
 
 ## 구조
 - `src/shared` 순수 로직(시험 대상) · `src/main` pty · 파일 · 메뉴 · `src/preload` 좁은 API(`api.d.ts` = renderer 가 보는 타입) · `src/renderer` React 화면

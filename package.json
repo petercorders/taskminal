@@ -1,6 +1,6 @@
 {
-  "name": "ilgam",
-  "productName": "Ilgam",
+  "name": "taskminal",
+  "productName": "Taskminal",
   "version": "0.1.0",
   "description": "일감별로 터미널 세션을 묶어 쓰는 macOS 터미널",
   "private": true,

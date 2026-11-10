@@ -1,4 +1,4 @@
-# Ilgam — 단계 계획
+# Taskminal — 단계 계획
 
 일감(작업 단위)별로 터미널 세션을 묶어 쓰는 macOS 터미널. 매일 쓰는 도구가 목표 (2026-11-10 결정).
 진행: 단계마다 `/harness-run electron N단계` → 계획 → 구현 · 검증 → 커밋, 끝나면 `/harness-gc electron retro`.
@@ -9,8 +9,16 @@
 - 일감 = 이름 · 작업 폴더 · 상태 · 색 · 묶음 · 탭들(탭마다 분할 트리). 일감을 바꿔도 다른 일감의 터미널은 뒤에서 계속 돈다.
 - 복원 때 실행 중이던 명령(`flutter run` 등)은 다시 돌리지 않는다 — 시작 명령은 일감을 만들 때 한 번만 (`pendingCommand`).
 - 렌더러는 xterm DOM 렌더러로 시작 (WebGL 컨텍스트는 창당 ~16개 한도라 일감이 많으면 깨진다 → 13단계에서 보이는 것만 WebGL).
-- e2e 는 `ILGAM_USER_DATA` 임시 폴더만 쓴다 — 실제 사용자 데이터를 건드리지 않는다.
+- e2e 는 `TASKMINAL_USER_DATA` 임시 폴더만 쓴다 — 실제 사용자 데이터를 건드리지 않는다.
 - node-pty 1.1.0 npm 패키지는 `spawn-helper` 실행 권한이 빠져 있다 → `scripts/fix-node-pty.mjs` (postinstall).
+
+## 디자인 (2026-11-10, Claude 디자인 캔버스)
+https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 · 설정 3장. 화면을 만드는 단계(5 · 6 · 7 · 9 · 10)는 이 캔버스를 기준으로 한다.
+- 어두운 바탕(#0e0f11) · 강조 파랑(#5b9cf5) · Inter + Noto Sans KR / 터미널 JetBrains Mono
+- 사이드바: 묶음별 일감 · 색 네모 · 상태 점과 이름 · 출력 중 표시 · '완료'는 접힌 묶음 · ⌘P 찾기 · 아래에 설정
+- 본문: 일감 머리(이름 · 폴더 · 상태 칩 · 묶음 칩) → 탭 줄 → 분할 pane, pane 마다 얇은 머리(명령 · 폴더) · 포커스 pane 은 강조색 테두리
+- 새 일감: 이름 · 폴더(최근 폴더) · 템플릿 카드(분할 미리보기 + 명령) · 상태 · 묶음 · 색, "시작 명령은 한 번만" 안내
+- 설정: 상태(색 · 이름 · 순서 · 일감 수 · 지우기) · 묶음 · 템플릿(요약 + JSON 편집, 줄 단위 검증 오류)
 
 ## 단계
 
@@ -20,7 +28,7 @@
 | 1 | 공통 모델 | `src/shared`: 타입 · 분할 트리(split/remove/ratio/cycle) · 일감 만들기 · 템플릿 펼치기 · 저장 파일 검증(normalize) · 기본 상태/템플릿 | vitest 단위 시험 + 핵심 줄 변이 확인 |
 | 2 | Electron 창 | electron-vite 설정 · main 창(sandbox · contextIsolation) · preload API 골격 · React 빈 화면 · Playwright e2e 골격 | `npm run e2e` 가 창을 띄워 제목 확인 + 스크린샷 |
 | 3 | 터미널 하나 | main PtyManager(spawn · write · resize · kill · 출력 묶어 보내기) · xterm pane · 로그인 셸 · LANG/TERM 환경 · 종료 경로 4개(창 닫기 · 앱 종료 · 새로 고침 · 렌더러 충돌)에서 pty 정리 | e2e: `echo 안녕` 출력 · `stty size` 가 창 크기와 맞음 · 앱 종료 후 고아 셸 0개(`pgrep`) |
-| 4 | 상태 저장 | main: state.json 원자적 저장 · 손상 파일 백업 후 기본값 · `ILGAM_USER_DATA` · renderer 상태 저장소(reducer) · 변경 시 디바운스 저장 | 단위(reducer · normalize) + e2e: 손상 파일로 시작해도 뜨고 `.bak` 남음 |
+| 4 | 상태 저장 | main: state.json 원자적 저장 · 손상 파일 백업 후 기본값 · `TASKMINAL_USER_DATA` · renderer 상태 저장소(reducer) · 변경 시 디바운스 저장 | 단위(reducer · normalize) + e2e: 손상 파일로 시작해도 뜨고 `.bak` 남음 |
 | 5 | 일감 사이드바 | 일감 목록 · 새 일감 대화상자(이름 · 폴더 선택 · 상태 · 묶음 · 색) · 전환 시 터미널 유지 · 일감 삭제(확인) | e2e: 일감 2개 만들고 오가도 각 셸 출력 유지 · 삭제 시 그 pty 종료 |
 | 6 | 탭 | 탭 바 · 새 탭 · 닫기 · 전환 · 탭 이름 바꾸기 | e2e: 탭 3개 · 가운데 닫기 · 활성 탭 이동 규칙 |
 | 7 | 분할 | 오른쪽/아래 분할 · 드래그로 비율 · pane 포커스 이동 · 셸 `exit` 시 pane 닫힘 · 마지막 pane 닫으면 탭 닫힘 | 단위(트리) + e2e: 분할 후 각 pane 의 `stty size` 가 실제 크기와 맞음 |
