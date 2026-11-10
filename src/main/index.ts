@@ -1,10 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
+import { isAccel, isAppCommand } from '../shared/keymap'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
@@ -25,7 +26,38 @@ const zshIntegrationDir = ((): string | null => {
   const dir = app.isPackaged ? join(process.resourcesPath, 'shell', 'zsh') : join(app.getAppPath(), 'resources', 'shell', 'zsh')
   return !dir.includes('.asar') && existsSync(join(dir, '.zshrc')) ? dir : null
 })()
-const ptys = new PtyManager(zshIntegrationDir)
+// 설정에서 고를 수 있는 셸 — 시스템이 로그인 셸로 인정한 것만
+const allowedShells = ((): string[] => {
+  try {
+    return readFileSync('/etc/shells', 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith('/'))
+  } catch {
+    return []
+  }
+})()
+const ptys = new PtyManager(zshIntegrationDir, allowedShells)
+
+// renderer 가 알려 주는 값: 실행 중 명령 수(끄기 전 확인이 꺼져 있으면 0) — renderer 가 사라지면 0
+let busyCommands = 0
+let quitConfirmed = false
+let asking = false
+const setBadge = (n: number) => app.dock?.setBadge(n > 0 ? String(n) : '')
+
+/** 실행 중인 명령이 있으면 끄기 · 닫기 전에 묻는다. true = 그대로 진행 */
+async function confirmEnd(win: BrowserWindow | null, what: '끝내기' | '닫기'): Promise<boolean> {
+  const options = {
+    type: 'warning' as const,
+    message: `명령 ${busyCommands}개가 실행 중입니다`,
+    detail: what === '끝내기' ? '끝내면 모든 터미널이 함께 종료됩니다.' : '창을 닫으면 모든 터미널이 함께 종료됩니다.',
+    buttons: [what, '취소'],
+    defaultId: 1,
+    cancelId: 1,
+  }
+  const r = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+  return r.response === 0
+}
 
 const MAX_STATE_BYTES = 5 * 1024 * 1024
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
@@ -101,9 +133,34 @@ function createWindow(): BrowserWindow {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
+  // 창 닫기(⇧⌘W · 빨간 단추)도 셸을 모두 끝낸다 → 실행 중이면 묻는다. 끝내기 중(이미 물음)이면 묻지 않는다.
+  let closeConfirmed = false
+  win.on('close', (event) => {
+    if (closeConfirmed || quitConfirmed || busyCommands === 0) return
+    event.preventDefault()
+    if (asking) return
+    asking = true
+    void confirmEnd(win, '닫기')
+      .then((ok) => {
+        if (!ok || win.isDestroyed()) return
+        closeConfirmed = true
+        win.close()
+      })
+      .finally(() => (asking = false))
+  })
 
   // 셸 정리 — 종료 경로 4개 중 창에 딸린 3개 (앱 종료는 will-quit).
   const wc = win.webContents
+  // renderer 가 사라지면(창 닫기 · 새로 고침 · 충돌) 그 renderer 가 알려 준 수도 버린다 — 새 페이지가 다시 보낸다
+  const forget = () => {
+    busyCommands = 0
+    setBadge(0)
+  }
+  wc.on('destroyed', forget)
+  wc.on('render-process-gone', forget)
+  wc.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) forget()
+  })
   wc.on('destroyed', () => ptys.killOwner(wc)) // ① 창 닫기
   wc.on('did-start-navigation', (details) => {
     if (details.isMainFrame && !details.isSameDocument) ptys.killOwner(wc) // ② 새로 고침 — 새 페이지가 다시 띄운다
@@ -153,7 +210,13 @@ if (!app.requestSingleInstanceLock()) {
     if (!isPaneId(paneId) || typeof o['cwd'] !== 'string' || !validSize(o['cols'], o['rows'])) {
       throw new Error('잘못된 pty 인자')
     }
-    ptys.spawn(event.sender, paneId, { cwd: o['cwd'], cols: o['cols'] as number, rows: o['rows'] as number })
+    ptys.spawn(event.sender, paneId, {
+      cwd: o['cwd'],
+      cols: o['cols'] as number,
+      rows: o['rows'] as number,
+      shell: typeof o['shell'] === 'string' ? o['shell'] : null, // 경로 검사는 PtyManager(pickShell)
+      integration: o['integration'] !== false,
+    })
   })
   // 고빈도 입력은 send(응답 없음). 틀린 인자는 조용히 버린다.
   ipcMain.on(IPC.ptyWrite, (event, paneId: unknown, data: unknown) => {
@@ -195,6 +258,38 @@ if (!app.requestSingleInstanceLock()) {
     const options = { title: '작업 폴더 선택', properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'> }
     const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+
+  const isCount = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 10_000
+  ipcMain.on(IPC.quitGuard, (event, busy: unknown) => {
+    if (fromOurWindow(event) && isCount(busy)) busyCommands = busy
+  })
+  ipcMain.on(IPC.badge, (event, count: unknown) => {
+    if (fromOurWindow(event) && isCount(count)) setBadge(count)
+  })
+  ipcMain.on(IPC.beep, (event) => {
+    if (fromOurWindow(event)) shell.beep()
+  })
+  ipcMain.on(IPC.menuKeys, (event, keys: unknown) => {
+    if (!fromOurWindow(event) || typeof keys !== 'object' || keys === null) return
+    const safe: Record<string, string> = {}
+    for (const [command, accel] of Object.entries(keys)) if (isAppCommand(command) && isAccel(accel)) safe[command] = accel
+    installAppMenu(safe)
+  })
+
+  // ⌘Q · Dock 의 끝내기: 실행 중인 명령이 있으면 묻는다 (설정 '끄기 전에 묻기'가 꺼져 있으면 renderer 가 0 을 보낸다)
+  app.on('before-quit', (event) => {
+    if (quitConfirmed || busyCommands === 0) return
+    event.preventDefault()
+    if (asking) return
+    asking = true
+    void confirmEnd(mainWindow, '끝내기')
+      .then((ok) => {
+        if (!ok) return
+        quitConfirmed = true
+        app.quit()
+      })
+      .finally(() => (asking = false))
   })
 
   // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다

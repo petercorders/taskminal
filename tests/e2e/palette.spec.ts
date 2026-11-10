@@ -107,7 +107,7 @@ test('맞는 게 없으면 그 이름으로 새 일감 · 템플릿을 고르면
   await open('기본')
   await expect(selected()).toHaveAttribute('data-kind', 'template')
   await win.keyboard.press('Enter')
-  await expect(dialog.getByTestId('new-task-template')).toContainText('기본')
+  await expect(dialog.getByTestId('new-task-template')).toHaveValue('tpl-basic') // 고른 템플릿이 골라져 있다
 })
 
 test('⇥ 로 범위: 전체 → 일감 → 명령', async () => {

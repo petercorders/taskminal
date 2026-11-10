@@ -27,6 +27,14 @@ export interface TaskminalApi {
   pickFolder(): Promise<string | null>
   /** 앱 메뉴에서 고른 명령. 값은 renderer 가 isAppCommand 로 검사한다. 구독 해제 함수를 돌려준다. */
   onCommand(listener: (command: unknown) => void): () => void
+  /** 실행 중인 명령 수 — 0 이 아니면 main 이 앱 끝내기 · 창 닫기 전에 묻는다. 끄기 전 확인이 꺼져 있으면 0 을 보낸다 */
+  setQuitGuard(busy: number): void
+  /** Dock 배지 수 (0 = 지움) */
+  setBadge(count: number): void
+  /** 알림 소리만 (macOS 알림 없이) */
+  beep(): void
+  /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
+  setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi
   state: StateApi
 }

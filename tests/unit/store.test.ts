@@ -171,3 +171,28 @@ describe('reducer — 단축키 동작', () => {
     expect(reducer(s, { type: 'settings/font', size: s.settings.fontSize })).toBe(s)
   })
 })
+
+describe('설정 동작 (11단계)', () => {
+  it('settings/patch: 바뀐 칸만 덮고, 같은 값이면 같은 상태(저장 안 함)', () => {
+    const s0 = emptyState()
+    const s1 = reducer(s0, { type: 'settings/patch', patch: { theme: 'light', cursorStyle: 'block' } })
+    expect(s1.settings).toMatchObject({ theme: 'light', cursorStyle: 'block', accent: s0.settings.accent })
+    expect(reducer(s1, { type: 'settings/patch', patch: { theme: 'light' } })).toBe(s1)
+  })
+
+  it('상태 지우기는 그 상태의 일감을 첫 상태로 (reducer 경유)', () => {
+    const s0 = reducer(emptyState(), { type: 'task/create', task: { ...makeTask(emptyState(), 't1'), statusId: 'wait' } })
+    const s1 = reducer(s0, { type: 'status/remove', id: 'wait' })
+    expect(s1.tasks[0]!.statusId).toBe('doing')
+  })
+
+  it('task/edit · group/toggle', () => {
+    let s = reducer(emptyState(), { type: 'group/add', id: 'g1', name: '서버' })
+    const t = makeTask(s, 't1')
+    s = reducer(s, { type: 'task/create', task: t })
+    s = reducer(s, { type: 'task/edit', id: t.id, patch: { groupId: 'g1', name: '배포' } })
+    expect(s.tasks[0]).toMatchObject({ groupId: 'g1', name: '배포' })
+    s = reducer(s, { type: 'group/toggle', id: 'g1' })
+    expect(s.settings.groups[0]!.collapsed).toBe(true)
+  })
+})

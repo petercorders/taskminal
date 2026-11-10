@@ -2,20 +2,36 @@
 import { clampFontSize } from '../shared/keymap'
 import type { SplitPath } from '../shared/layout'
 import {
+  addGroup,
+  addStatus,
   addTab,
   closePane,
   closeTab,
   cycleActivePane,
   cycleTab,
+  editTask,
   findPaneTask,
   focusPane,
+  moveGroup,
+  moveStatus,
+  removeGroup,
+  removeStatus,
+  removeTemplate,
+  renameGroup,
   renameTab,
+  renameTemplate,
   selectTab,
   selectTabAt,
   setTabRatio,
   splitActivePane,
+  toggleGroup,
+  updateStatus,
+  type TaskEdit,
 } from '../shared/model'
-import type { AppState, Id, SplitDir, Task } from '../shared/types'
+import type { AppState, Id, Settings, SplitDir, Task } from '../shared/types'
+
+/** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
+export type SettingsPatch = Partial<Omit<Settings, 'statuses' | 'groups' | 'templates'>>
 
 export type Action =
   | { type: 'loaded'; state: AppState }
@@ -36,6 +52,19 @@ export type Action =
   | { type: 'pane/ratio'; taskId: Id; tabId: Id; path: SplitPath; ratio: number }
   /** 셸이 스스로 끝났다 → 그 pane 을 닫는다 (마지막 pane 이면 탭도). 우리가 끝낸 셸은 main 이 알리지 않는다. */
   | { type: 'pane/exited'; paneId: Id }
+  | { type: 'settings/patch'; patch: SettingsPatch }
+  | { type: 'status/add'; id: Id; name: string; color: string }
+  | { type: 'status/update'; id: Id; name?: string; color?: string }
+  | { type: 'status/move'; id: Id; step: 1 | -1 }
+  | { type: 'status/remove'; id: Id }
+  | { type: 'group/add'; id: Id; name: string }
+  | { type: 'group/rename'; id: Id; name: string }
+  | { type: 'group/move'; id: Id; step: 1 | -1 }
+  | { type: 'group/remove'; id: Id }
+  | { type: 'group/toggle'; id: Id }
+  | { type: 'template/rename'; id: Id; name: string }
+  | { type: 'template/remove'; id: Id }
+  | { type: 'task/edit'; id: Id; patch: TaskEdit }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
 function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
@@ -102,5 +131,34 @@ export function reducer(state: AppState, action: Action): AppState {
       const taskId = findPaneTask(state, action.paneId)
       return taskId ? updateTask(state, taskId, (t) => closePane(t, action.paneId)) : state
     }
+    case 'settings/patch': {
+      const cur = state.settings as unknown as Record<string, unknown>
+      const changed = Object.entries(action.patch).some(([k, v]) => cur[k] !== v)
+      return changed ? { ...state, settings: { ...state.settings, ...action.patch } } : state
+    }
+    case 'status/add':
+      return addStatus(state, action.id, action.name, action.color)
+    case 'status/update':
+      return updateStatus(state, action.id, { ...(action.name !== undefined ? { name: action.name } : {}), ...(action.color !== undefined ? { color: action.color } : {}) })
+    case 'status/move':
+      return moveStatus(state, action.id, action.step)
+    case 'status/remove':
+      return removeStatus(state, action.id)
+    case 'group/add':
+      return addGroup(state, action.id, action.name)
+    case 'group/rename':
+      return renameGroup(state, action.id, action.name)
+    case 'group/move':
+      return moveGroup(state, action.id, action.step)
+    case 'group/remove':
+      return removeGroup(state, action.id)
+    case 'group/toggle':
+      return toggleGroup(state, action.id)
+    case 'template/rename':
+      return renameTemplate(state, action.id, action.name)
+    case 'template/remove':
+      return removeTemplate(state, action.id)
+    case 'task/edit':
+      return editTask(state, action.id, action.patch)
   }
 }

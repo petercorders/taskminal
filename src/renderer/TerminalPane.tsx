@@ -5,11 +5,8 @@ import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { cleanExit, splitForWrite } from '../shared/pty'
+import { fontStack, xtermTheme, XTERM_CURSOR, type TermSettings } from './term-settings'
 import { terminals } from './terminals'
-
-// 한글이 든 고정폭 글꼴(D2Coding)을 설치했으면 그것을, 아니면 한글만 Apple SD Gothic Neo 로 (지정하지 않으면 AppleGothic 이 잡힌다).
-// 한글이 없는 Menlo 와 섞이면 한글 칸 사이에 Terminal.app 과 같은 정도의 틈이 남는다 — 글꼴 고르기는 11단계 설정.
-const FONT_FAMILY = "'JetBrains Mono', D2Coding, Menlo, 'Apple SD Gothic Neo', monospace"
 
 interface Props {
   paneId: string
@@ -18,8 +15,8 @@ interface Props {
   active: boolean
   /** 값이 바뀌면(대화상자가 닫힘 등) 보이는 pane 이 포커스를 다시 가져간다 */
   focusSignal: number
-  /** 설정의 글자 크기 (⌘= ⌘− ⌘0) */
-  fontSize: number
+  /** 설정 창 · ⌘= ⌘− 의 터미널 설정 — 바뀌면 바로 적용(셸 · 셸 통합은 띄울 때만) */
+  settings: TermSettings
   /** 깨끗하지 않게 끝난 셸의 이유를 본 뒤 키를 눌렀다 — pane 을 닫는다 */
   onClosed(): void
   /** 셸 통합 · 벨 · 알림이 알려 준 활동 (숨은 pane 도 계속 받는다) */
@@ -43,28 +40,32 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClosed, onActivity }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
   onClosedRef.current = onClosed
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
-  // 셸을 띄울 때의 글자 크기 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
-  const fontSizeRef = useRef(fontSize)
-  fontSizeRef.current = fontSize
+  // 셸을 띄울 때의 설정 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   const refitRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     const host = hostRef.current!
     const pty = window.taskminal.pty
+    const s = settingsRef.current
     const term = new Terminal({
       allowProposedApi: true, // unicode11 (한글 · 이모지 폭)
-      fontFamily: FONT_FAMILY,
-      fontSize: fontSizeRef.current,
-      cursorBlink: true,
-      scrollback: 5000,
-      theme: { background: '#0e0f11', foreground: '#e6e7ea', cursor: '#5b9cf5', selectionBackground: '#5b9cf540' },
+      fontFamily: fontStack(s.fontFamily),
+      fontSize: s.fontSize,
+      lineHeight: s.lineHeight,
+      cursorStyle: XTERM_CURSOR[s.cursorStyle],
+      cursorBlink: s.cursorBlink,
+      scrollback: s.scrollback,
+      macOptionIsMeta: s.optionAsMeta,
+      theme: xtermTheme(s.theme, s.accent),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -107,6 +108,10 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
       term.write(`\r\n\x1b[2m[셸이 끝났습니다 — ${how} · 아무 키나 누르면 이 pane 을 닫습니다]\x1b[0m\r\n`)
     })
     // 큰 붙여넣기는 main 의 입력 상한(1MB) 이하로 나눠 보낸다 — 넘으면 main 이 통째로 버린다.
+    // 선택하면 바로 복사 (설정) — 끄면 ⌘C
+    const selection = term.onSelectionChange(() => {
+      if (settingsRef.current.copyOnSelect && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+    })
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
       for (const part of splitForWrite(data)) pty.write(paneId, part)
@@ -114,7 +119,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
 
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
     fitNow()
-    pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows }).catch((error: unknown) => {
+    pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).catch((error: unknown) => {
       term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
     })
 
@@ -164,6 +169,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
       observer.disconnect()
       cancelAnimationFrame(frame)
       input.dispose()
+      selection.dispose()
       for (const d of oscs) d.dispose()
       offData()
       offExit()
@@ -174,13 +180,34 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
     }
   }, [paneId, cwd])
 
-  // 글자 크기가 바뀌면 칸 수가 바뀐다 → 셸에도 새 크기를 알린다 (숨은 pane 은 다시 보일 때 ResizeObserver 가 맞춘다)
+  // 설정이 바뀌면 바로. 글꼴 · 크기 · 줄 간격은 칸 수를 바꾼다 → 셸에도 새 크기를 알린다 (숨은 pane 은 다시 보일 때 ResizeObserver 가 맞춘다)
   useEffect(() => {
     const term = termRef.current
-    if (!term || term.options.fontSize === fontSize) return
-    term.options.fontSize = fontSize
-    refitRef.current()
-  }, [fontSize])
+    const host = hostRef.current
+    if (!term || !host) return
+    const o = term.options
+    const family = fontStack(settings.fontFamily)
+    const resize = o.fontSize !== settings.fontSize || o.lineHeight !== settings.lineHeight || o.fontFamily !== family
+    o.fontSize = settings.fontSize
+    o.lineHeight = settings.lineHeight
+    o.fontFamily = family
+    o.cursorStyle = XTERM_CURSOR[settings.cursorStyle]
+    o.cursorBlink = settings.cursorBlink
+    o.scrollback = settings.scrollback
+    o.macOptionIsMeta = settings.optionAsMeta
+    o.theme = xtermTheme(settings.theme, settings.accent)
+    // e2e 가 xterm 안을 들여다보지 않고 실제로 xterm 에 들어간 값을 읽게 (설정값이 아니라 o 에서)
+    Object.assign(host.dataset, {
+      fontFamily: o.fontFamily === family ? settings.fontFamily : '',
+      lineHeight: String(o.lineHeight),
+      cursorStyle: String(o.cursorStyle),
+      cursorBlink: String(o.cursorBlink),
+      scrollback: String(o.scrollback),
+      optionMeta: String(o.macOptionIsMeta),
+      theme: o.theme?.background === '#ffffff' ? 'light' : 'dark',
+    })
+    if (resize) refitRef.current()
+  }, [settings])
 
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.

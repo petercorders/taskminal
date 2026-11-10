@@ -1,4 +1,5 @@
 import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
+import { defaultExtraSettings, parseExtraSettings } from './settings'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
@@ -41,6 +42,7 @@ export function defaultSettings(): Settings {
     ],
     fontSize: FONT_DEFAULT,
     shell: null,
+    ...defaultExtraSettings(),
   }
 }
 
@@ -329,6 +331,113 @@ export function removeGroup(state: AppState, groupId: Id): AppState {
   }
 }
 
+/** 목록에서 id 항목을 한 칸 옮긴다. 끝이거나 없으면 같은 배열. */
+function moveItem<T extends { id: Id }>(list: T[], id: Id, step: 1 | -1): T[] {
+  const i = list.findIndex((x) => x.id === id)
+  const j = i + step
+  if (i < 0 || j < 0 || j >= list.length) return list
+  const out = [...list]
+  ;[out[i], out[j]] = [out[j]!, out[i]!]
+  return out
+}
+
+function withSettings(state: AppState, patch: Partial<Settings>): AppState {
+  return { ...state, settings: { ...state.settings, ...patch } }
+}
+
+export function addStatus(state: AppState, id: Id, name: string, color: string): AppState {
+  return withSettings(state, { statuses: [...state.settings.statuses, { id, name: name.trim() || '새 상태', color }] })
+}
+
+/** 이름 · 색 바꾸기. 빈 이름은 무시한다. 바뀐 것이 없으면 같은 상태. */
+export function updateStatus(state: AppState, id: Id, patch: { name?: string; color?: string }): AppState {
+  const cur = state.settings.statuses.find((s) => s.id === id)
+  if (!cur) return state
+  const name = patch.name?.trim() || cur.name
+  const color = patch.color ?? cur.color
+  if (name === cur.name && color === cur.color) return state
+  return withSettings(state, { statuses: state.settings.statuses.map((s) => (s === cur ? { ...s, name, color } : s)) })
+}
+
+export function moveStatus(state: AppState, id: Id, step: 1 | -1): AppState {
+  const statuses = moveItem(state.settings.statuses, id, step)
+  return statuses === state.settings.statuses ? state : withSettings(state, { statuses })
+}
+
+export function addGroup(state: AppState, id: Id, name: string): AppState {
+  return withSettings(state, { groups: [...state.settings.groups, { id, name: name.trim() || '새 묶음' }] })
+}
+
+export function renameGroup(state: AppState, id: Id, name: string): AppState {
+  const n = name.trim()
+  const cur = state.settings.groups.find((g) => g.id === id)
+  if (!cur || !n || n === cur.name) return state
+  return withSettings(state, { groups: state.settings.groups.map((g) => (g === cur ? { ...g, name: n } : g)) })
+}
+
+export function moveGroup(state: AppState, id: Id, step: 1 | -1): AppState {
+  const groups = moveItem(state.settings.groups, id, step)
+  return groups === state.settings.groups ? state : withSettings(state, { groups })
+}
+
+/** 사이드바 묶음 접기 · 펴기 */
+export function toggleGroup(state: AppState, id: Id): AppState {
+  const cur = state.settings.groups.find((g) => g.id === id)
+  if (!cur) return state
+  const { collapsed, ...rest } = cur
+  const next: Group = collapsed ? rest : { ...rest, collapsed: true }
+  return withSettings(state, { groups: state.settings.groups.map((g) => (g === cur ? next : g)) })
+}
+
+export function renameTemplate(state: AppState, id: Id, name: string): AppState {
+  const n = name.trim()
+  const cur = state.settings.templates.find((t) => t.id === id)
+  if (!cur || !n || n === cur.name) return state
+  return withSettings(state, { templates: state.settings.templates.map((t) => (t === cur ? { ...t, name: n } : t)) })
+}
+
+/** 템플릿을 지운다. 기본 템플릿이었으면 기본은 없음(셸 하나). 이미 만든 일감은 그대로. */
+export function removeTemplate(state: AppState, id: Id): AppState {
+  if (!state.settings.templates.some((t) => t.id === id)) return state
+  return withSettings(state, {
+    templates: state.settings.templates.filter((t) => t.id !== id),
+    defaultTemplateId: state.settings.defaultTemplateId === id ? null : state.settings.defaultTemplateId,
+  })
+}
+
+export interface TaskEdit {
+  name?: string
+  statusId?: Id
+  groupId?: Id | null
+  color?: string | null
+}
+
+/** 일감 이름 · 상태 · 묶음 · 색 (우클릭 메뉴). 빈 이름 · 없는 상태 · 묶음은 거절(같은 상태). */
+export function editTask(state: AppState, taskId: Id, patch: TaskEdit): AppState {
+  const task = state.tasks.find((t) => t.id === taskId)
+  if (!task) return state
+  if (patch.name !== undefined && !patch.name.trim()) return state
+  if (patch.statusId !== undefined && !state.settings.statuses.some((s) => s.id === patch.statusId)) return state
+  if (patch.groupId != null && !state.settings.groups.some((g) => g.id === patch.groupId)) return state
+  const next: Task = {
+    ...task,
+    ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+    ...(patch.statusId !== undefined ? { statusId: patch.statusId } : {}),
+    ...(patch.groupId !== undefined ? { groupId: patch.groupId } : {}),
+    ...(patch.color !== undefined ? { color: patch.color } : {}),
+  }
+  const same = next.name === task.name && next.statusId === task.statusId && next.groupId === task.groupId && next.color === task.color
+  return same ? state : { ...state, tasks: state.tasks.map((t) => (t === task ? next : t)) }
+}
+
+/** 새 일감 대화상자의 처음 폴더: 설정한 폴더 → 가장 나중에 만든 일감의 폴더 → ~ */
+export function defaultTaskCwd(state: AppState): string {
+  const set = state.settings.defaultCwd.trim()
+  if (set) return set
+  const last = state.tasks.reduce<Task | null>((a, t) => (!a || t.createdAt >= a.createdAt ? t : a), null)
+  return last?.cwd ?? '~'
+}
+
 // ─── 저장 파일 검증 ─────────────────────────────────────────
 // 디스크에서 읽은 JSON 은 손상 · 옛 형식일 수 있다. 버릴 것은 버리고 참조는 고쳐 항상 쓸 수 있는 AppState 로.
 
@@ -357,7 +466,8 @@ function parseStatus(v: unknown): Status | null {
 }
 
 function parseGroup(v: unknown): Group | null {
-  return isObj(v) && isId(v.id) && isStr(v.name) ? { id: v.id, name: v.name } : null
+  if (!isObj(v) || !isId(v.id) || !isStr(v.name)) return null
+  return v.collapsed === true ? { id: v.id, name: v.name, collapsed: true } : { id: v.id, name: v.name }
 }
 
 function parseLayoutSpec(v: unknown): LayoutSpec | null {
@@ -408,12 +518,14 @@ function parseSettings(v: unknown): Settings {
   if (!isObj(v)) return d
   const statuses = Array.isArray(v.statuses) ? uniqueById(v.statuses.map(parseStatus)) : []
   const fs = v.fontSize
+  const templates = parseTemplates(v.templates, d.templates)
   return {
     statuses: statuses.length ? statuses : d.statuses,
     groups: Array.isArray(v.groups) ? uniqueById(v.groups.map(parseGroup)) : d.groups,
-    templates: parseTemplates(v.templates, d.templates),
+    templates,
     fontSize: Number.isInteger(fs) && (fs as number) >= FONT_MIN && (fs as number) <= FONT_MAX ? (fs as number) : d.fontSize,
     shell: isId(v.shell) ? v.shell : null,
+    ...parseExtraSettings(v, templates.map((t) => t.id)),
   }
 }
 

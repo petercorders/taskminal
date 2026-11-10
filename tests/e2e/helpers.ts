@@ -39,14 +39,16 @@ const defaultSettings = (groups: Array<{ id: string; name: string }>) => ({
   templates: [{ id: 'tpl-basic', name: '기본', tabs: [{ layout: { pane: {} } }] }],
   fontSize: 13,
   shell: null,
+  // 실행 중인 명령이 있으면 끄기 전에 묻는 설정(기본 켜짐)은 시험 정리(app.close)를 대화상자에서 멈추게 한다 → 그것을 보는 시험만 켠다
+  confirmQuit: false,
 })
 
-export function seedState(userData: string, tasks: SeedTask[], groups: Array<{ id: string; name: string }> = []): void {
+export function seedState(userData: string, tasks: SeedTask[], groups: Array<{ id: string; name: string }> = [], settings: Record<string, unknown> = {}): void {
   const state = {
     version: 1,
     tasks: tasks.map(taskJson),
     activeTaskId: tasks[0]?.id ?? null,
-    settings: defaultSettings(groups),
+    settings: { ...defaultSettings(groups), ...settings },
   }
   writeFileSync(join(userData, 'state.json'), JSON.stringify(state))
 }

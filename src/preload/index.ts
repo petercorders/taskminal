@@ -14,6 +14,10 @@ const api: TaskminalApi = {
   appInfo: () => ipcRenderer.invoke(IPC.appInfo) as Promise<AppInfo>,
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | null>,
   onCommand: (listener) => subscribe<[unknown]>(IPC.appCommand, listener),
+  setQuitGuard: (busy) => ipcRenderer.send(IPC.quitGuard, busy),
+  setBadge: (count) => ipcRenderer.send(IPC.badge, count),
+  beep: () => ipcRenderer.send(IPC.beep),
+  setMenuKeys: (keys) => ipcRenderer.send(IPC.menuKeys, keys),
   pty: {
     spawn: (paneId, opts) => ipcRenderer.invoke(IPC.ptySpawn, paneId, opts) as Promise<void>,
     write: (paneId, data) => ipcRenderer.send(IPC.ptyWrite, paneId, data),

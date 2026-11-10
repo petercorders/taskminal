@@ -46,6 +46,22 @@ describe('readStateText', () => {
     const tasksNotArray = { ...emptyState(), tasks: { a: { id: 'a' } } }
     expect(readStateText(JSON.stringify(tasksNotArray), newId)).toMatchObject({ kind: 'ok', lossy: true })
   })
+
+  it('정규화가 기본값을 더하기만 했으면 lossy 가 아니다 — 옛 앱의 파일(새 설정 칸 없음)에 백업 · 경고를 내지 않는다', () => {
+    const { theme: _t, notify: _n, keys: _k, confirmQuit: _c, ...oldSettings } = emptyState().settings
+    const old = { ...emptyState(), settings: oldSettings }
+    const r = readStateText(JSON.stringify(old), newId)
+    expect(r).toMatchObject({ kind: 'ok', lossy: false })
+    expect(r.kind === 'ok' && r.state.settings.theme).toBe('dark')
+  })
+
+  it('있던 값이 바뀌었으면 lossy (틀린 값 → 기본값, 배열 항목이 빠짐)', () => {
+    const bad = { ...emptyState(), settings: { ...emptyState().settings, theme: 'blue' } }
+    expect(readStateText(JSON.stringify(bad), newId)).toMatchObject({ lossy: true })
+    const s = emptyState()
+    const dupStatus = { ...s, settings: { ...s.settings, statuses: [...s.settings.statuses, s.settings.statuses[0]] } }
+    expect(readStateText(JSON.stringify(dupStatus), newId)).toMatchObject({ lossy: true })
+  })
 })
 
 function fakeClock() {

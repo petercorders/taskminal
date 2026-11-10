@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { accelLabel, SHORTCUTS } from '../shared/keymap'
+import { accelLabel, type Shortcut } from '../shared/keymap'
 import { markSegments, nextScope, paletteItems, SCOPE_LABEL, type PaletteInput, type PaletteItem, type PaletteScope } from '../shared/palette'
 import type { AppState } from '../shared/types'
 import { shortPath, sidebarSections } from './sidebar-model'
@@ -7,24 +7,25 @@ import { terminals } from './terminals'
 
 interface Props {
   state: AppState
+  /** 바꾼 단축키가 반영된 표 — 명령 이름 · 키 표시 */
+  shortcuts: readonly Shortcut[]
   /** 고른 항목을 실행 — newTab 은 ⌘↩ */
   onRun(item: PaletteItem, query: string, newTab: boolean): void
   onClose(): void
 }
 
 // 팔레트에 보일 명령 — 탭 번호(⌘1~9)와 팔레트 자신은 뺀다
-const COMMANDS = SHORTCUTS.filter((s) => !/^tab-|^last-tab$|^palette$/.test(s.command)).map((s) => ({
-  id: s.command,
-  label: s.label,
-  hint: accelLabel(s.accel),
-}))
+const commandsOf = (shortcuts: readonly Shortcut[]) =>
+  shortcuts
+    .filter((s) => !/^tab-|^last-tab$|^palette$/.test(s.command))
+    .map((s) => ({ id: s.command, label: s.label, hint: s.accel ? accelLabel(s.accel) : '' }))
 
 const OUTPUT_BUDGET = 20
 
 const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', template: '템플릿', output: '출력', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
-export function Palette({ state, onRun, onClose }: Props) {
+export function Palette({ state, shortcuts, onRun, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<PaletteScope>('all')
   const [selected, setSelected] = useState(0)
@@ -54,13 +55,13 @@ export function Palette({ state, onRun, onClose }: Props) {
     }
     return paletteItems({
       tasks: ordered.map((t) => ({ id: t.id, name: t.name, detail: shortPath(t.cwd) })),
-      commands: COMMANDS,
+      commands: commandsOf(shortcuts),
       templates: state.settings.templates.map((t) => ({ id: t.id, name: t.name })),
       outputs,
       query,
       scope,
     })
-  }, [state, query, scope, outputQuery])
+  }, [state, shortcuts, query, scope, outputQuery])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {

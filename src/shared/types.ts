@@ -11,6 +11,8 @@ export interface Status {
 export interface Group {
   id: Id
   name: string
+  /** 사이드바에서 접어 둠 */
+  collapsed?: boolean
 }
 
 /** 템플릿 안의 터미널 하나 */
@@ -74,6 +76,18 @@ export interface Task {
   createdAt: number
 }
 
+export type StartupMode = 'restore' | 'list' | 'blank'
+export type Theme = 'dark' | 'light' | 'system'
+export type CursorStyle = 'bar' | 'block' | 'underline'
+export type SidebarDensity = 'two' | 'one'
+/** 알릴 일: 입력 기다림 · 오래 걸린 명령 끝 · 명령 실패 · 셸 닫힘 */
+export type NotifyKind = 'wait' | 'long' | 'fail' | 'exit'
+export interface NotifyWay {
+  /** macOS 알림 */
+  banner: boolean
+  sound: boolean
+}
+
 export interface Settings {
   statuses: Status[]
   groups: Group[]
@@ -81,6 +95,38 @@ export interface Settings {
   fontSize: number
   /** null 이면 로그인 셸($SHELL) */
   shell: string | null
+  // 일반
+  startup: StartupMode
+  /** 새 일감 기본 폴더. '' 이면 마지막에 만든 일감의 폴더 */
+  defaultCwd: string
+  defaultTemplateId: Id | null
+  /** 실행 중인 명령이 있으면 끄기 전에 묻기 */
+  confirmQuit: boolean
+  /** Dock 아이콘에 확인 필요 일감 수 */
+  dockBadge: boolean
+  // 모양
+  theme: Theme
+  accent: string
+  fontFamily: string
+  lineHeight: number
+  /** 포커스 아닌 분할 pane 의 밝기 (1 = 흐리지 않음) */
+  dimOpacity: number
+  sidebarDensity: SidebarDensity
+  // 터미널
+  shellIntegration: boolean
+  scrollback: number
+  cursorStyle: CursorStyle
+  cursorBlink: boolean
+  optionAsMeta: boolean
+  copyOnSelect: boolean
+  // 알림 · 활동
+  notify: Record<NotifyKind, NotifyWay>
+  /** '오래 걸린 명령' 기준 (초) */
+  longAfterSec: number
+  /** 앱이 앞에 있고 그 pane 을 보고 있으면 알리지 않기 */
+  muteViewed: boolean
+  // 단축키: 명령 → 바꾼 키(accel). '' 은 키 없음. 없는 명령은 기본 키
+  keys: Record<string, string>
 }
 
 export interface AppState {

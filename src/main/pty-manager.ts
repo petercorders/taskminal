@@ -4,7 +4,7 @@ import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { IPC, type PtyExit, type PtySpawnOptions } from '../shared/ipc'
-import { integrationEnv, OutputBatcher, shellEnv } from '../shared/pty'
+import { integrationEnv, OutputBatcher, pickShell, shellEnv } from '../shared/pty'
 
 const KILL_AFTER_MS = 2000 // SIGHUP 뒤 이만큼 지나도 살아 있으면 SIGKILL
 
@@ -15,8 +15,14 @@ interface Session {
 
 /** 셸 프로세스의 주인. renderer 는 paneId 로만 가리키고, 프로세스는 여기서만 만들고 끝낸다. */
 export class PtyManager {
-  /** @param zshIntegrationDir 셸 통합 시작 파일 폴더(resources/shell/zsh). null 이면 통합 없이 띄운다. */
-  constructor(private readonly zshIntegrationDir: string | null = null) {}
+  /**
+   * @param zshIntegrationDir 셸 통합 시작 파일 폴더(resources/shell/zsh). null 이면 통합 없이 띄운다.
+   * @param allowedShells 설정에서 고를 수 있는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 띄운다.
+   */
+  constructor(
+    private readonly zshIntegrationDir: string | null = null,
+    private readonly allowedShells: readonly string[] = [],
+  ) {}
 
   private readonly sessions = new Map<string, Session>()
   /** SIGHUP 을 보냈지만 아직 끝나지 않은 셸 — trap '' HUP 등. 목록에서 빠져도 여기서 끝까지 쫓는다. */
@@ -43,13 +49,14 @@ export class PtyManager {
       existing.pty.resize(opts.cols, opts.rows)
       return
     }
-    const shell = process.env['SHELL'] || '/bin/zsh'
+    const shell = pickShell(opts.shell, process.env['SHELL'], this.allowedShells)
+    const env = shellEnv(process.env)
     const pty = spawn(shell, ['-l'], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,
       cwd: resolveCwd(opts.cwd),
-      env: integrationEnv(shellEnv(process.env), shell, this.zshIntegrationDir),
+      env: opts.integration === false ? env : integrationEnv(env, shell, this.zshIntegrationDir),
     })
     const session: Session = { pty, owner }
     this.sessions.set(paneId, session)

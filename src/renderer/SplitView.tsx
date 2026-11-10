@@ -4,6 +4,7 @@ import type { ActivityEvent, PaneActivity } from '../shared/activity'
 import type { Id, Pane, Tab } from '../shared/types'
 import { PaneHead } from './activity-ui'
 import { shortPath } from './sidebar-model'
+import type { TermSettings } from './term-settings'
 import { TerminalPane } from './TerminalPane'
 
 interface Props {
@@ -12,7 +13,7 @@ interface Props {
   /** 일감 · 탭이 모두 보이는 중 — 그때만 활성 pane 이 포커스를 가져간다 */
   visible: boolean
   focusSignal: number
-  fontSize: number
+  term: TermSettings
   /** paneId → 활동 (저장하지 않는 런타임 값) */
   activity: Readonly<Record<Id, PaneActivity>>
   onActivity(paneId: Id, event: ActivityEvent): void
@@ -31,7 +32,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, fontSize, activity, onActivity, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -125,7 +126,7 @@ export function SplitView({ tab, panes, visible, focusSignal, fontSize, activity
                 cwd={pane.cwd}
                 active={visible && focused}
                 focusSignal={focusSignal}
-                fontSize={fontSize}
+                settings={term}
                 onClosed={() => onClosePane(pane.id)}
                 onActivity={(ev) => onActivity(pane.id, ev)}
               />

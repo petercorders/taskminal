@@ -29,16 +29,21 @@ export function readStateText(text: string | null, newId: NewId): ReadResult {
     return { kind: 'newer', version: (raw as { version: unknown }).version }
   }
   const state = normalizeState(raw, newId)
-  return { kind: 'ok', state, lossy: canonical(state) !== canonical(raw) }
+  return { kind: 'ok', state, lossy: !keeps(state, raw) }
 }
 
-/** 키 순서와 상관없는 JSON 문자열 — 원본과 정규화 결과가 같은 내용인지 비교한다. */
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  )
+/**
+ * 원본(raw)의 모든 값이 결과(out)에 그대로 남았나 — 키 순서는 상관없고, 결과에만 있는 칸(새 버전이 더한 기본값)은 괜찮다.
+ * 원본의 칸이 빠지거나 값이 바뀌었으면(틀린 값 → 기본값) 다음 저장이 지우므로 lossy.
+ */
+function keeps(out: unknown, raw: unknown): boolean {
+  if (Array.isArray(raw)) return Array.isArray(out) && raw.every((v, i) => keeps(out[i], v))
+  if (raw && typeof raw === 'object') {
+    if (!out || typeof out !== 'object' || Array.isArray(out)) return false
+    const o = out as Record<string, unknown>
+    return Object.entries(raw as Record<string, unknown>).every(([k, v]) => Object.hasOwn(o, k) && keeps(o[k], v))
+  }
+  return Object.is(out, raw)
 }
 
 /** 마지막 값만 남겨 ms 뒤 한 번 쓴다. flush 는 남은 값을 바로 쓴다(앱 종료). */

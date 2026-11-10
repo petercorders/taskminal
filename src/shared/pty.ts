@@ -101,3 +101,9 @@ export function integrationEnv(env: Record<string, string>, shellPath: string, d
   if (env['ZDOTDIR']) out['TASKMINAL_USER_ZDOTDIR'] = env['ZDOTDIR']
   return out
 }
+
+/** 설정의 셸 경로 — /etc/shells 에 있는 절대 경로만 받는다(renderer 가 보낸 값을 그대로 실행하지 않게). 아니면 $SHELL → /bin/zsh. */
+export function pickShell(requested: string | null | undefined, envShell: string | undefined, allowed: readonly string[]): string {
+  if (requested && requested.startsWith('/') && allowed.includes(requested)) return requested
+  return envShell || '/bin/zsh'
+}

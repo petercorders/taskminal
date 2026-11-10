@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Modal } from './Modal'
-import type { NewTaskInput, Settings } from '../shared/types'
+import { defaultTaskCwd } from '../shared/model'
+import type { AppState, NewTaskInput } from '../shared/types'
 
 export const TASK_COLORS = ['#5b9cf5', '#7ccf8a', '#e5b567', '#e07a7a', '#b48ef0', '#5ec4c4']
 
@@ -11,17 +12,19 @@ export interface NewTaskInitial {
 }
 
 interface Props {
-  settings: Settings
+  state: AppState
   initial?: NewTaskInitial
   onCreate(input: NewTaskInput): void
   onCancel(): void
 }
 
-/** 새 일감: 이름 · 작업 폴더 · 상태 · 묶음 · 색. 템플릿 카드는 12단계, 새 묶음 만들기는 11단계. */
-export function NewTaskDialog({ settings, initial, onCreate, onCancel }: Props) {
+/** 새 일감: 이름 · 작업 폴더 · 템플릿 · 상태 · 묶음 · 색. 폴더 · 템플릿의 처음 값은 설정(일반). 템플릿 카드는 12단계. */
+export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
+  const { settings } = state
   const [name, setName] = useState(initial?.name ?? '')
-  const template = settings.templates.find((t) => t.id === initial?.templateId)
-  const [cwd, setCwd] = useState('~')
+  const [templateId, setTemplateId] = useState<string>(initial?.templateId ?? settings.defaultTemplateId ?? '')
+  const template = settings.templates.find((t) => t.id === templateId)
+  const [cwd, setCwd] = useState(() => defaultTaskCwd(state))
   const [statusId, setStatusId] = useState(settings.statuses[0]?.id ?? '')
   const [groupId, setGroupId] = useState<string>('')
   const [color, setColor] = useState<string | null>(TASK_COLORS[0]!)
@@ -54,11 +57,6 @@ export function NewTaskDialog({ settings, initial, onCreate, onCancel }: Props) 
     <Modal role="dialog" labelledBy="new-task-title" onCancel={onCancel}>
       <form className="dialog-form" onSubmit={submit} onKeyDown={onKeyDown}>
         <h1 id="new-task-title">새 일감</h1>
-        {template && (
-          <p className="dialog-message" data-testid="new-task-template">
-            템플릿: {template.name} — 탭 · 분할 · 시작 명령(한 번만)이 이 템플릿대로 만들어집니다
-          </p>
-        )}
 
         <label className="field">
           <span>이름</span>
@@ -74,6 +72,18 @@ export function NewTaskDialog({ settings, initial, onCreate, onCancel }: Props) 
             </button>
           </div>
         </div>
+
+        <label className="field">
+          <span>템플릿</span>
+          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} data-testid="new-task-template">
+            <option value="">없음 — 셸 하나</option>
+            {settings.templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div className="field-pair">
           <label className="field">

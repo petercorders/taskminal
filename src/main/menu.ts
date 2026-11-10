@@ -1,15 +1,15 @@
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { IPC } from '../shared/ipc'
-import { SHORTCUTS, type AppCommand } from '../shared/keymap'
+import { shortcutTable, type AppCommand, type Shortcut } from '../shared/keymap'
 
 /** 우리 명령 항목: 단축키는 보여 주기만 한다(registerAccelerator: false) — 실제 키는 renderer 가 같은 표로 처리한다.
  *  네이티브로도 등록하면 키 하나에 명령이 두 번 돈다. 누르면 그 창의 renderer 에 명령을 보낸다. */
-function item(command: AppCommand): MenuItemConstructorOptions {
-  const s = SHORTCUTS.find((x) => x.command === command)!
+function itemOf(table: readonly Shortcut[], command: AppCommand): MenuItemConstructorOptions {
+  const s = table.find((x) => x.command === command)!
   return {
     id: command,
     label: s.label,
-    accelerator: s.accel,
+    ...(s.accel ? { accelerator: s.accel } : {}),
     registerAccelerator: false,
     click: (_item, win) => {
       // 창이 하나뿐인 앱 — 포커스된 창이 없으면(다른 앱이 앞) 그 창으로
@@ -20,9 +20,26 @@ function item(command: AppCommand): MenuItemConstructorOptions {
 }
 
 /** 앱 메뉴. Electron 기본 메뉴에 있던 새로 고침(⌘R)은 모든 셸을 끝내므로 넣지 않는다. */
-export function buildAppMenu(dev: boolean): Menu {
+export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>> = {}): Menu {
+  const table = shortcutTable(keys)
+  const item = (command: AppCommand) => itemOf(table, command)
   const template: MenuItemConstructorOptions[] = [
-    { role: 'appMenu' },
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        item('settings'),
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
     {
       label: '셸',
       submenu: [
@@ -90,6 +107,7 @@ export function buildAppMenu(dev: boolean): Menu {
   return Menu.buildFromTemplate(template)
 }
 
-export function installAppMenu(): void {
-  Menu.setApplicationMenu(buildAppMenu(!app.isPackaged && Boolean(process.env['ELECTRON_RENDERER_URL'])))
+/** keys: 설정에서 바꾼 단축키 — 바뀔 때마다 다시 만든다(메뉴는 표시만, 실제 키는 renderer) */
+export function installAppMenu(keys: Readonly<Record<string, string>> = {}): void {
+  Menu.setApplicationMenu(buildAppMenu(!app.isPackaged && Boolean(process.env['ELECTRON_RENDERER_URL']), keys))
 }
