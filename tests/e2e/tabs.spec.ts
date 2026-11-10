@@ -193,6 +193,41 @@ test('키보드: F2 로 이름 바꾸기 → 확정하면 터미널로, Tab 으�
   await expect(close).toHaveCSS('opacity', '1')
 })
 
+test('탭이 넘쳐도 새 탭 · 고른 탭이 보이는 곳으로 온다', async () => {
+  for (let n = 2; n <= 16; n++) {
+    await win.getByRole('button', { name: '새 탭' }).click()
+    await expect(tabs()).toHaveCount(n)
+  }
+  await expect(tab(15)).toBeInViewport({ ratio: 1 })
+  await expect(tab(0)).not.toBeInViewport({ ratio: 1 })
+  // 왼쪽 끝 탭으로 가면(← 로 포커스를 옮기고 Enter) 그 탭이 다시 보인다
+  await tab(15).getByRole('tab').focus()
+  await win.keyboard.press('ArrowRight') // 끝에서 → 는 처음으로 돈다
+  await expect(tab(0).getByRole('tab')).toBeFocused()
+  await win.keyboard.press('Enter')
+  await expect(tab(0).getByRole('tab')).toHaveAttribute('aria-selected', 'true')
+  await expect(tab(0)).toBeInViewport({ ratio: 1 })
+  await win.screenshot({ path: 'test-results/tabs-overflow.png' })
+})
+
+test('← → 는 탭 사이 포커스만 옮기고, 탭과 내용이 aria 로 이어져 있다', async () => {
+  await win.getByRole('button', { name: '새 탭' }).click()
+  await expect(tabs()).toHaveCount(2)
+  await tab(1).getByRole('tab').focus()
+  await win.keyboard.press('ArrowLeft')
+  await expect(tab(0).getByRole('tab')).toBeFocused()
+  await expect(tab(1).getByRole('tab')).toHaveAttribute('aria-selected', 'true') // 아직 고르지 않음
+  await win.keyboard.press('Space')
+  await expect(tab(0).getByRole('tab')).toHaveAttribute('aria-selected', 'true')
+
+  const id = await tabId(0)
+  await expect(win.getByRole('tabpanel', { name: (await tab(0).getByRole('tab').innerText()).trim() })).toHaveAttribute(
+    'data-tab-id',
+    id,
+  )
+  await expect(tab(0).getByRole('tab')).toHaveAttribute('aria-controls', `tabpanel-${id}`)
+})
+
 test('마지막 탭을 닫아도 일감은 남고, 새 탭 버튼으로 셸이 다시 뜬다', async () => {
   const id = await tabId(0)
   await runIn(id, 'echo PIDL $$')

@@ -7,7 +7,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog } from './NewTaskDialog'
 import { Sidebar } from './Sidebar'
 import { reducer } from './store'
-import { TabBar } from './TabBar'
+import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TerminalPane } from './TerminalPane'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
@@ -157,6 +157,7 @@ export function App() {
               >
                 <TabBar
                   task={task}
+                  visible={taskActive}
                   onSelect={(tabId) => dispatch({ type: 'tab/select', taskId: task.id, tabId })}
                   onAdd={() => addTab(task.id)}
                   onClose={(tabId) => closeTab(task, tabId)}
@@ -173,6 +174,8 @@ export function App() {
                       key={tab.id}
                       className="tab-view"
                       role="tabpanel"
+                      id={tabPanelId(tab.id)}
+                      aria-labelledby={tabElementId(tab.id)}
                       style={{ display: tabActive ? 'flex' : 'none' }}
                       data-testid="tab-view"
                       data-tab-id={tab.id}

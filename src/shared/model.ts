@@ -184,14 +184,18 @@ export function addTab(task: Task, newId: NewId): Task {
   }
 }
 
+// 바뀐 것이 없으면 같은 객체를 돌려준다 — reducer 가 같은 상태를 돌려줘 저장을 건너뛰게.
+
 export function selectTab(task: Task, tabId: Id): Task {
-  return task.tabs.some((t) => t.id === tabId) ? { ...task, activeTabId: tabId } : task
+  if (task.activeTabId === tabId || !task.tabs.some((t) => t.id === tabId)) return task
+  return { ...task, activeTabId: tabId }
 }
 
 /** 빈 이름이면 title 을 지워 기본 이름(tabLabel)으로 돌아간다. */
 export function renameTab(task: Task, tabId: Id, title: string): Task {
-  if (!task.tabs.some((t) => t.id === tabId)) return task
+  const tab = task.tabs.find((t) => t.id === tabId)
   const name = title.trim()
+  if (!tab || (tab.title ?? '') === name) return task
   return {
     ...task,
     tabs: task.tabs.map((t) => {

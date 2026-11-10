@@ -38,8 +38,18 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, tasks, activeTaskId }
     }
     case 'tab/add': {
+      // addTab 은 탭 id → pane id 순서로 두 번 묻는다. 그 약속이 바뀌면 조용히 undefined id 를 쓰지 않고 멈춘다.
       const ids = [action.tabId, action.paneId]
-      return updateTask(state, action.taskId, (t) => addTab(t, () => ids.shift()!))
+      const next = () => {
+        const id = ids.shift()
+        if (id === undefined) throw new Error('tab/add: addTab 이 id 를 두 개보다 많이 요청했습니다')
+        return id
+      }
+      return updateTask(state, action.taskId, (t) => {
+        const out = addTab(t, next)
+        if (ids.length > 0 || out.activeTabId !== action.tabId) throw new Error('tab/add: id 순서가 바뀌었습니다')
+        return out
+      })
     }
     case 'tab/select':
       return updateTask(state, action.taskId, (t) => selectTab(t, action.tabId))

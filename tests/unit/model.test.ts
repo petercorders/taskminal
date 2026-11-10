@@ -240,6 +240,15 @@ describe('selectTab · renameTab · tabLabel', () => {
     const t = flutterTask()
     expect(selectTab(t, t.tabs[1].id).activeTabId).toBe(t.tabs[1].id)
     expect(selectTab(t, 'zz')).toBe(t)
+    // 이미 활성인 탭을 다시 골라도 같은 객체 — 바뀐 것이 없으면 저장하지 않게
+    expect(selectTab(t, t.activeTabId!)).toBe(t)
+  })
+
+  test('renameTab: 이름이 그대로면 같은 객체 (빈 이름 → 이름 없던 탭 포함)', () => {
+    const t = flutterTask()
+    expect(renameTab(t, t.tabs[0].id, ' 개발 ')).toBe(t)
+    const untitled = renameTab(t, t.tabs[1].id, '')
+    expect(renameTab(untitled, untitled.tabs[1].id, '  ')).toBe(untitled)
   })
 
   test('renameTab: 앞뒤 공백 제거, 빈 이름이면 title 을 지워 기본 이름으로, 없는 탭은 그대로', () => {

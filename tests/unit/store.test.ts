@@ -103,5 +103,8 @@ describe('reducer — 탭', () => {
     const renamed = reducer(s, { type: 'tab/rename', taskId: a, tabId: 't2', title: ' 로그 ' })
     expect(renamed.tasks[0]!.tabs[1]!.title).toBe('로그')
     expect(reducer(s, { type: 'tab/rename', taskId: 'nope', tabId: 't2', title: 'x' })).toBe(s)
+    // 바뀐 것이 없으면 같은 상태 — App 이 저장하지 않는다
+    expect(reducer(s, { type: 'tab/select', taskId: a, tabId: 't3' })).toBe(s)
+    expect(reducer(s, { type: 'tab/rename', taskId: a, tabId: 't2', title: ' ' })).toBe(s)
   })
 })
