@@ -14,7 +14,7 @@ import { cleanExit, splitForWrite } from '../shared/pty'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
-import { dirtyPanes, findingPanes, osc7Panes, restoredPanes, runtime, webgl } from './runtime'
+import { dirtyPanes, findingPanes, osc7Panes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -132,10 +132,12 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     let startTimer: ReturnType<typeof setTimeout> | undefined
     let typed = false
     let disposed = false
+    // 셸 지킴이에 다시 붙었는지 답을 받기 전에는 보내지 않는다 — 되돌려 받은 화면 · 프롬프트 신호가 시작 명령을 부르지 않게 (16단계)
+    let startBlocked = true
     const sendStart = () => {
       const { command, onSent } = startRef.current
       clearTimeout(startTimer)
-      if (!command || sentStarts.has(paneId)) return
+      if (startBlocked || !command || sentStarts.has(paneId)) return
       sentStarts.add(paneId)
       pty.write(paneId, command + '\r')
       onSent?.()
@@ -216,19 +218,38 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     }
     // 이전 출력 되살리기 — 셸보다 먼저 쓰고, 이번 실행에서 pane 당 한 번. 되살린 글에는 OSC 가 없어 시작 명령 · 활동 신호가 돌지 않는다.
     // 읽기 실패 · 깨진 파일이면 되살리지 않고 셸만 띄운다.
-    if (s.restoreScrollback && !restoredPanes.has(paneId)) {
-      window.taskminal.scrollback.load(paneId).then(
-        (saved) => {
-          if (disposed) return // 다시 마운트된 쪽이 되살린다
-          restoredPanes.add(paneId)
-          if (saved && saved.text) term.write(saved.text + restoreBanner(saved.savedAt))
-          spawn()
-        },
-        () => spawn(),
-      )
-    } else {
-      spawn()
+    const restoreThenSpawn = () => {
+      startBlocked = false
+      if (s.restoreScrollback && !restoredPanes.has(paneId)) {
+        window.taskminal.scrollback.load(paneId).then(
+          (saved) => {
+            if (disposed) return // 다시 마운트된 쪽이 되살린다
+            restoredPanes.add(paneId)
+            if (saved && saved.text) {
+              term.write(saved.text + restoreBanner(saved.savedAt))
+              restoredWithText.add(paneId)
+            }
+            spawn()
+          },
+          () => spawn(),
+        )
+      } else {
+        spawn()
+      }
     }
+    // 16단계: 셸 지킴이에 이 pane 의 셸이 남아 있으면(앱을 껐다 켬 · 창 다시 읽기) 다시 붙는다 — 화면은 main 이 onData 로 먼저 보냈다.
+    // 붙으면 파일 되살리기 · 시작 명령은 하지 않는다(이미 돈 셸). 셸의 크기를 지금 화면에 맞춘다.
+    pty.attach(paneId).then(
+      (r) => {
+        if (disposed) return
+        if (!r.attached) return restoreThenSpawn()
+        restoredPanes.add(paneId)
+        pty.resize(paneId, term.cols, term.rows)
+      },
+      () => {
+        if (!disposed) restoreThenSpawn()
+      },
+    )
 
     // 창 가장자리를 끄는 동안 프레임마다 SIGWINCH 를 보내지 않게, 한 프레임에 한 번만 맞춘다.
     const refit = () => {

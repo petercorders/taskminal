@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
-import { IPC, type AppInfo } from '../shared/ipc'
+import { IPC, isHostAction, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
 import { isAccel, isAppCommand } from '../shared/keymap'
@@ -11,12 +11,12 @@ import { MAX_LINK, webUrl } from '../shared/links'
 import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
-import { installAppMenu } from './menu'
+import { installAppMenu, onQuitAll } from './menu'
 import { lsofCwds } from './cwd-probe'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import type { WorktreeResult } from '../shared/worktree'
-import { PtyManager } from './pty-manager'
+import { createHostControl, type HostControl } from './host-control'
 import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
 
@@ -45,29 +45,18 @@ const allowedShells = ((): string[] => {
     return []
   }
 })()
-const ptys = new PtyManager(zshIntegrationDir, allowedShells)
+// 셸 지킴이(16단계) — userData 가 정해진 뒤(ready) 만든다. 셸 프로세스는 지킴이가 갖는다.
+let hostControl: HostControl | null = null
+const control = (): HostControl => {
+  if (!hostControl) throw new Error('셸 지킴이가 아직 준비되지 않음')
+  return hostControl
+}
 
 // renderer 가 알려 주는 값: 실행 중 명령 수(끄기 전 확인이 꺼져 있으면 0) — renderer 가 사라지면 0
 let busyCommands = 0
-let quitConfirmed = false
-let asking = false
+let quitting = false // 끝내기를 정했다 — before-quit 이 다시 묻지 않게
+let asking = false // 안내 · 확인 창이 떠 있다 — 두 번째 창을 띄우지 않는다
 const setBadge = (n: number) => app.dock?.setBadge(n > 0 ? String(n) : '')
-
-/** 실행 중인 명령이 있으면 끄기 · 닫기 전에 묻는다. true = 그대로 진행 */
-async function confirmEnd(win: BrowserWindow | null, what: '끝내기' | '닫기'): Promise<boolean> {
-  const options = {
-    type: 'warning' as const,
-    message: `명령 ${busyCommands}개가 실행 중입니다`,
-    detail: what === '끝내기' ? '끝내면 모든 터미널이 함께 종료됩니다.' : '창을 닫으면 모든 터미널이 함께 종료됩니다.',
-    buttons: [what, '취소'],
-    defaultId: 1,
-    cancelId: 1,
-  }
-  // 창에 붙는 시트라 창이 숨었거나(⌘H) 최소화돼 있으면 보이지 않는다 → 먼저 보여 준다
-  if (win && !win.isDestroyed() && (!win.isVisible() || win.isMinimized())) win.show()
-  const r = win && !win.isDestroyed() ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
-  return r.response === 0
-}
 
 const MAX_STATE_BYTES = 5 * 1024 * 1024
 // 스크롤 저장 — userData 가 정해진 뒤(ready 이후 첫 요청) 만든다
@@ -150,38 +139,29 @@ function createWindow(): BrowserWindow {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
-  // 창 닫기(⇧⌘W · 빨간 단추)도 셸을 모두 끝낸다 → 실행 중이면 묻는다. 끝내기 중(이미 물음)이면 묻지 않는다.
-  let closeConfirmed = false
-  win.on('close', (event) => {
-    if (closeConfirmed || quitConfirmed || busyCommands === 0) return
-    event.preventDefault()
-    if (asking) return
-    asking = true
-    void confirmEnd(win, '닫기')
-      .then((ok) => {
-        if (!ok || win.isDestroyed()) return
-        closeConfirmed = true
-        win.close()
-      })
-      .finally(() => (asking = false))
-  })
-
-  // 셸 정리 — 종료 경로 4개 중 창에 딸린 3개 (앱 종료는 will-quit).
+  // 종료 경로 4개 중 창에 딸린 3개 — 셸은 지킴이에 남기고 떼기만 한다(16단계). 다시 열리면 attach 로 다시 붙는다.
   const wc = win.webContents
   // renderer 가 사라지면(창 닫기 · 새로 고침 · 충돌) 그 renderer 가 알려 준 수도 버린다 — 새 페이지가 다시 보낸다
   const forget = () => {
     busyCommands = 0
     setBadge(0)
   }
-  const endOwner = () => {
-    ptys.killOwner(wc)
+  const detach = () => {
+    hostControl?.ptys.detachOwner(wc)
     forget()
   }
-  wc.on('destroyed', endOwner) // ① 창 닫기
+  wc.on('destroyed', detach) // ① 창 닫기
   wc.on('did-start-navigation', (details) => {
-    if (details.isMainFrame && !details.isSameDocument) endOwner() // ② 새로 고침 — 새 페이지가 다시 띄운다(수 · 배지도 다시 보낸다)
+    if (details.isMainFrame && !details.isSameDocument) detach() // ② 새로 고침 — 새 페이지가 다시 붙는다(수 · 배지도 다시 보낸다)
   })
-  wc.on('render-process-gone', endOwner) // ③ 렌더러 충돌
+  // ③ 렌더러 충돌 — 셸은 남아 있으니 창을 다시 읽어 다시 붙는다. 10초 안에 또 죽으면 다시 읽지 않는다(충돌 되풀이)
+  let lastCrash = 0
+  wc.on('render-process-gone', () => {
+    detach()
+    const now = Date.now()
+    if (now - lastCrash > 10_000 && !win.isDestroyed()) wc.reload()
+    lastCrash = now
+  })
 
   const load = devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(rendererFile)
   load.catch(() => {
@@ -220,13 +200,14 @@ if (!app.requestSingleInstanceLock()) {
     return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, renderer }
   })
 
-  ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {
+  ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     const o = (opts ?? {}) as Record<string, unknown>
     if (!isPaneId(paneId) || typeof o['cwd'] !== 'string' || !validSize(o['cols'], o['rows'])) {
       throw new Error('잘못된 pty 인자')
     }
-    ptys.spawn(event.sender, paneId, {
+    await control().ready
+    await control().ptys.spawn(event.sender, paneId, {
       cwd: o['cwd'],
       cols: o['cols'] as number,
       rows: o['rows'] as number,
@@ -234,17 +215,23 @@ if (!app.requestSingleInstanceLock()) {
       integration: o['integration'] !== false,
     })
   })
-  // 고빈도 입력은 send(응답 없음). 틀린 인자는 조용히 버린다.
+  ipcMain.handle(IPC.ptyAttach, async (event, paneId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isPaneId(paneId)) throw new Error('잘못된 pty 인자')
+    await control().ready
+    return control().ptys.attach(event.sender, paneId)
+  })
+  // 고빈도 입력은 send(응답 없음). 틀린 인자는 조용히 버린다. 지킴이와 끊긴 동안의 입력은 버린다(화면이 '연결 끊김' 을 보인다).
   ipcMain.on(IPC.ptyWrite, (event, paneId: unknown, data: unknown) => {
-    if (fromOurWindow(event) && isPaneId(paneId) && validWrite(data)) ptys.write(event.sender, paneId, data)
+    if (fromOurWindow(event) && isPaneId(paneId) && validWrite(data)) hostControl?.ptys.write(event.sender, paneId, data)
   })
   ipcMain.on(IPC.ptyResize, (event, paneId: unknown, cols: unknown, rows: unknown) => {
     if (fromOurWindow(event) && isPaneId(paneId) && validSize(cols, rows)) {
-      ptys.resize(event.sender, paneId, cols as number, rows as number)
+      hostControl?.ptys.resize(event.sender, paneId, cols as number, rows as number)
     }
   })
   ipcMain.on(IPC.ptyKill, (event, paneId: unknown) => {
-    if (fromOurWindow(event) && isPaneId(paneId)) ptys.kill(event.sender, paneId)
+    if (fromOurWindow(event) && isPaneId(paneId)) hostControl?.ptys.kill(event.sender, paneId)
   })
 
   ipcMain.handle(IPC.stateLoad, (event) => {
@@ -309,11 +296,35 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.ptyCwds, async (event, paneIds: unknown): Promise<Record<string, string>> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     if (!Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return {}
-    const pids = ptys.pids(event.sender, paneIds.filter(isPaneId))
+    const pids = control().ptys.pids(event.sender, paneIds.filter(isPaneId))
     const cwds = await lsofCwds(Object.values(pids))
     const out: Record<string, string> = {}
     for (const [paneId, pid] of Object.entries(pids)) if (cwds[pid]) out[paneId] = cwds[pid]
     return out
+  })
+
+  // 셸 지킴이 — 설정 칸 · 위 줄
+  ipcMain.handle(IPC.hostView, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return control().view()
+  })
+  ipcMain.handle(IPC.hostSessions, async (event, clearUnseen: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    await control().ready
+    return control().sessions(clearUnseen === true)
+  })
+  ipcMain.handle(IPC.hostTail, async (event, paneId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return isPaneId(paneId) ? control().tail(paneId) : ''
+  })
+  ipcMain.on(IPC.hostKill, (event, paneIds: unknown) => {
+    if (!fromOurWindow(event) || !Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return
+    hostControl?.ptys.killUnowned(paneIds.filter(isPaneId))
+  })
+  ipcMain.on(IPC.hostAction, (event, action: unknown) => {
+    if (!fromOurWindow(event) || !isHostAction(action)) return
+    if (action === 'quit-all') return void quitAll()
+    void hostControl?.action(action)
   })
 
   ipcMain.handle(IPC.pickFolder, async (event): Promise<string | null> => {
@@ -344,28 +355,43 @@ if (!app.requestSingleInstanceLock()) {
     installAppMenu(safe)
   })
 
-  // ⌘Q · Dock 의 끝내기: 실행 중인 명령이 있으면 묻는다 (설정 '끄기 전에 묻기'가 꺼져 있으면 renderer 가 0 을 보낸다)
+  // ⌥⌘Q 셸까지 모두 끝내기 (메뉴 · 단축키 · ⌘P) — 실행 중이 있고 '끄기 전에 묻기' 가 켜져 있으면 확인(renderer 가 꺼져 있으면 0 을 보낸다)
+  async function quitAll(): Promise<void> {
+    if (asking || quitting || !hostControl) return
+    asking = true
+    try {
+      if (!(await hostControl.quitAll(mainWindow, busyCommands, true))) return
+      quitting = true
+      app.quit()
+    } finally {
+      asking = false
+    }
+  }
+  onQuitAll(() => void quitAll())
+
+  // ⌘Q · Dock 의 끝내기: 셸은 지킴이에 남는다(묻지 않음). 처음 한 번만 안내한다.
   app.on('before-quit', (event) => {
-    if (quitConfirmed || busyCommands === 0) return
+    if (quitting || !hostControl) return
     event.preventDefault()
     if (asking) return
     asking = true
-    void confirmEnd(mainWindow, '끝내기')
-      .then((ok) => {
-        if (!ok) return
-        quitConfirmed = true
+    void hostControl
+      .beforeQuit(mainWindow)
+      .then(async (choice) => {
+        if (choice === 'cancel') return
+        if (choice === 'quit-all') await hostControl!.quitAll(mainWindow, 0, false)
+        quitting = true
         app.quit()
       })
       .finally(() => (asking = false))
   })
 
-  // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다
-  // (변이 확인으로 확인: e2e ① 은 이 줄 없이도 통과). 13단계의 종료 전 저장이 이 순서에 붙는다.
+  // ④ 앱 종료 — 셸은 지킴이에 남는다. 상태를 쓰고 지킴이와의 연결만 놓는다.
   app.on('will-quit', () => {
     try {
       stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
     } finally {
-      ptys.killAll() // 저장이 실패해도 셸 정리는 한다
+      hostControl?.dispose()
     }
   })
 
@@ -376,6 +402,7 @@ if (!app.requestSingleInstanceLock()) {
       if (existsSync(icon)) app.dock?.setIcon(icon)
     }
     installAppMenu()
+    hostControl = createHostControl(zshIntegrationDir, allowedShells)
     mainWindow = createWindow()
     // macOS: Dock 아이콘을 누르면 창을 다시 만든다.
     app.on('activate', () => {

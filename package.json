@@ -18,6 +18,7 @@
     "package": "electron-vite build && electron-builder --mac --arm64 && node scripts/check-package.mjs dist/mac-arm64/Taskminal.app"
   },
   "dependencies": {
+    "@xterm/headless": "6.0.0",
     "node-pty": "1.1.0"
   },
   "devDependencies": {

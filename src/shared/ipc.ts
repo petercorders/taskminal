@@ -26,7 +26,46 @@ export const IPC = {
   gitBranches: 'git:branches', // invoke(폴더[]) → { 폴더: 브랜치 | null } — 사이드바 일감 둘째 줄 (15c)
   gitWorktreeAdd: 'git:worktree-add', // invoke(폴더, 브랜치) → { ok, path } | { ok: false, error } — 새 일감을 worktree 에서 (15f)
   ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
+  ptyAttach: 'pty:attach', // invoke(paneId) → PtyAttachResult — 셸 지킴이에 남은 셸에 다시 붙기 (16단계)
+  hostView: 'host:view', // invoke → HostView / main → renderer: 바뀔 때마다
+  hostSessions: 'host:sessions', // invoke(clearUnseen) → SessionInfo[]
+  hostTail: 'host:tail', // invoke(paneId) → 마지막 20줄
+  hostKill: 'host:kill', // send(paneId[]) — 주인 없는 셸 끝내기
+  hostAction: 'host:action', // send(HostAction)
 } as const
+
+/** 셸 지킴이에 렌더러가 부탁하는 일 */
+export const HOST_ACTIONS = ['reconnect', 'restart', 'quit-all', 'replace-old', 'open-log'] as const
+export type HostAction = (typeof HOST_ACTIONS)[number]
+export const isHostAction = (v: unknown): v is HostAction => typeof v === 'string' && (HOST_ACTIONS as readonly string[]).includes(v)
+
+/** 셸 지킴이 상태 — 설정 칸 · 위 줄(배너)이 그린다 */
+export interface HostView {
+  state: 'starting' | 'connected' | 'reconnecting' | 'down'
+  /** 다시 연결 중 몇 번째 / 모두 몇 번 */
+  attempt?: number
+  of?: number
+  error?: string
+  pid?: number
+  version?: number
+  startedAt?: number
+  /** 이번 실행에서 지킴이를 새로 띄웠다 — 셸이 이어지지 않았다(재부팅 · 지킴이 충돌) */
+  fresh?: boolean
+  sockPath?: string
+  /** 마지막으로 잰 지킴이 메모리 · 셸 수 */
+  rss?: number
+  sessions?: number
+  /** 메모리 · 셸 수가 기준을 넘었다 (실행마다 한 번) */
+  memoryWarning?: boolean
+  /** 다른 버전 지킴이가 셸을 갖고 있다 */
+  oldHost?: { version: number; sessions: number } | null
+}
+
+export interface PtyAttachResult {
+  attached: boolean
+  /** 앱(창)이 떨어져 있던 시간 */
+  detachedMs?: number
+}
 
 export interface AppInfo {
   name: string

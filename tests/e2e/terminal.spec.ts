@@ -83,60 +83,74 @@ test('stty size 가 화면의 터미널 크기와 같고, 창을 줄이면 따�
   expect(second[1]).toBe(await sizeOf())
 })
 
-test('종료 경로 ① 앱 종료: 셸과 그 자식이 남지 않는다', async () => {
+// 16단계: 종료 경로 ①~④ 는 셸을 끝내지 않는다 — 셸 지킴이에 남고, 다시 붙으면 같은 셸(같은 $$)이다.
+// 셸까지 끝내는 길(⌥⌘Q · pane 닫기 · 지킴이 죽음)은 persist.spec.ts.
+
+/** 지금 pane 의 셸 pid ($$) */
+async function shellPid(tag: string): Promise<number> {
+  await run(`echo ${tag} $$`)
+  return Number((await waitFor(new RegExp(`${tag} (\\d+)`)))[1])
+}
+
+test('종료 경로 ① 앱 종료: 셸과 그 자식이 남고, 다시 띄우면 같은 셸에 붙는다', async () => {
   const pids = await shellPids('PIDA')
   await app.close()
   launched = undefined
-  await expectGone(pids)
+  await win.waitForTimeout(500).catch(() => {})
+  expect(pids.every(alive)).toBe(true)
+  app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
+  win = await firstWindow(app)
+  await expect(win.locator('.xterm-rows')).toContainText('PIDA') // 앞 실행의 화면이 이어진다
+  expect(await shellPid('AGAINA')).toBe(pids[0])
 })
 
-test('종료 경로 ② 창 닫기: macOS 는 앱이 남아도 셸은 끝난다', async () => {
+test('종료 경로 ② 창 닫기: 셸은 남고, 창을 다시 열면 같은 셸에 붙는다', async () => {
   const pids = await shellPids('PIDB')
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close())
-  await expectGone(pids)
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(0)
+  expect(pids.every(alive)).toBe(true)
   expect(await app.evaluate(({ app }) => app.isReady())).toBe(true) // 앱은 그대로
+  const reopened = app.waitForEvent('window')
+  await app.evaluate(({ app }) => app.emit('activate')) // Dock 아이콘 누르기
+  win = await reopened
+  expect(await shellPid('AGAINB')).toBe(pids[0])
 })
 
-test('종료 경로 ③ 새로 고침: 옛 셸은 끝나고 새 셸이 뜬다', async () => {
+test('종료 경로 ③ 새로 고침: 같은 셸에 다시 붙고 화면이 이어진다', async () => {
   const old = await shellPids('PIDC')
   await win.reload()
-  await expectGone(old)
-  const fresh = await shellPids('PIDD')
-  expect(fresh[0]).not.toBe(old[0])
+  await expect(win.locator('.xterm-rows')).toContainText('PIDC')
+  expect(await shellPid('AGAINC')).toBe(old[0])
+  expect(old.every(alive)).toBe(true)
 })
 
-test('종료 경로 ④ 렌더러 충돌: 셸이 남지 않는다', async () => {
+test('종료 경로 ④ 렌더러 충돌: 셸은 남고 창이 다시 읽혀 같은 셸에 붙는다', async () => {
   const pids = await shellPids('PIDE')
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.forcefullyCrashRenderer())
-  await expectGone(pids)
+  // main 이 같은 창을 다시 읽어 다시 붙는다. Playwright 는 충돌한 Page 를 되살리지 못해 main 에서 화면 글을 읽는다
+  const shown = () =>
+    app.evaluate(({ BrowserWindow }) => {
+      const wc = BrowserWindow.getAllWindows()[0]!.webContents
+      return wc.isCrashed() || wc.isLoading() ? '' : (wc.executeJavaScript(`document.querySelector('.xterm-rows')?.innerText ?? ''`) as Promise<string>)
+    })
+  await expect.poll(shown, { timeout: 15_000 }).toContain(`PIDE ${pids[0]} ${pids[1]}`)
+  expect(pids.every(alive)).toBe(true)
 })
 
-test('새로 고침 뒤 옛 셸이 끝나며 낸 출력이 새 터미널에 섞이지 않는다', async () => {
-  // 옛 셸이 SIGHUP 을 받으면 글자를 찍고 끝나게 한다.
-  // 새 셸이 뜬 뒤에 찍히도록 0.5초 늦게.
-  await run(`trap 'sleep 0.5; echo GHOST_$((40+2)); exit' HUP; echo READY_$((1+1))`)
+test('새로 고침해도 셸에 HUP 이 가지 않는다 (trap 이 돌지 않음)', async () => {
+  await run(`trap 'echo GHOST_$((40+2))' HUP; echo READY_$((1+1))`)
   await waitFor(/READY_2/)
   await win.reload()
   await run('echo FRESH_$((2+3))')
   await waitFor(/FRESH_5/)
-  await win.waitForTimeout(1000) // 옛 셸의 마지막 출력이 늦게 와도 보이게
+  await win.waitForTimeout(1000)
   expect(await screenText()).not.toContain('GHOST_42')
 })
 
-test('SIGHUP 을 무시하는 셸도 창을 닫으면 끝난다', async () => {
+test('pane 닫기는 SIGHUP 을 무시하는 셸도 끝낸다 (지킴이가 2초 뒤 SIGKILL)', async () => {
   await run(`trap '' HUP; echo PIDF $$`)
-  const m = await waitFor(/PIDF (\d+)/)
-  const pid = Number(m[1])
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close())
-  await expectGone([pid])
-})
-
-test('SIGHUP 을 무시하는 셸도 앱을 끝내면 남지 않는다', async () => {
-  await run(`trap '' HUP; echo PIDG $$`)
-  const m = await waitFor(/PIDG (\d+)/)
-  const pid = Number(m[1])
-  await app.close()
-  launched = undefined
+  const pid = Number((await waitFor(/PIDF (\d+)/))[1])
+  await win.keyboard.press('Meta+w')
   await expectGone([pid])
 })
 

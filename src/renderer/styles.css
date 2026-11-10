@@ -1343,3 +1343,102 @@ input[type='checkbox'] {
 .dialog-body {
   display: contents;
 }
+
+/* ─── 셸 지킴이 (16단계) ─── */
+.host-banners {
+  display: flex;
+  flex-direction: column;
+}
+
+.host-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+}
+.host-banner.ok {
+  border-left: 3px solid var(--done);
+}
+.host-banner.warn {
+  border-left: 3px solid var(--waiting);
+}
+.host-banner.err {
+  border-left: 3px solid var(--failed);
+}
+.host-banner.info {
+  border-left: 3px solid var(--muted);
+}
+.host-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.host-banner-text span {
+  color: var(--muted);
+}
+.host-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.host-status.ok {
+  color: var(--done);
+}
+.host-status.err {
+  color: var(--failed);
+}
+
+.host-orphans {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.host-orphan {
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.host-orphan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.host-orphan-name {
+  font-family: ui-monospace, monospace;
+}
+.host-orphan-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-tail {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+.host-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.host-confirm span {
+  flex: 1;
+}

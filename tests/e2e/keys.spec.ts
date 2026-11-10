@@ -278,8 +278,8 @@ test('앱 메뉴: 항목을 누르면 같은 명령, 단축키 표시는 키 표
       commands: all.filter((i) => i.id && !i.role).map((i) => `${i.id}:${i.accelerator}`),
     }
   })
-  // 키 표의 명령이 모두 메뉴에 한 번씩, 같은 단축키로 (표와 메뉴가 따로 놀지 않게)
-  expect([...info.commands].sort()).toEqual(SHORTCUTS.map((s) => `${s.command}:${s.accel}`).sort())
+  // 키 표의 명령(키가 있는 것)이 모두 메뉴에 한 번씩, 같은 단축키로 (표와 메뉴가 따로 놀지 않게) — 키 없는 명령은 ⌘P 에만
+  expect([...info.commands].sort()).toEqual(SHORTCUTS.filter((s) => s.accel).map((s) => `${s.command}:${s.accel}`).sort())
   expect(info.roles).not.toContain('reload')
   expect(info.roles).not.toContain('forcereload')
   expect(info.roles).toEqual(expect.arrayContaining(['copy', 'paste', 'close']))

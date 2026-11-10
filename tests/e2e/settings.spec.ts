@@ -314,11 +314,11 @@ test('알림: 보지 않는 일감의 실패는 macOS 알림, 보고 있으면 �
   await expect.poll(badge).toBe('')
 })
 
-test('끄기 전 확인: 실행 중이면 ⌘Q 가 묻고, 취소면 그대로 · 끝내기면 앱이 끝난다', async () => {
+test('끄기 전 확인: 실행 중이면 ⌥⌘Q(셸까지 모두 끝내기)가 묻고, 닫기면 그대로 · 모두 끝내기면 앱이 끝난다', async () => {
   await app.evaluate(({ dialog }) => {
     const g = globalThis as unknown as { asked: string[]; answer: number }
     g.asked = []
-    g.answer = 1 // 취소
+    g.answer = 0 // 닫기 (기본 · Esc)
     dialog.showMessageBox = (async (...args: unknown[]) => {
       const opts = args.at(-1) as { message: string }
       g.asked.push(opts.message)
@@ -330,16 +330,17 @@ test('끄기 전 확인: 실행 중이면 ⌘Q 가 묻고, 취소면 그대로 �
   await waitText('pane-a', /%/)
   await type('sleep 30')
   await expect(win.locator('[data-pane-id="pane-a"] [data-testid="pane-head"]')).toHaveAttribute('data-activity', 'running')
-  await app.evaluate(({ app }) => app.quit())
-  await expect.poll(asked).toEqual(['명령 1개가 실행 중입니다'])
+  const quitAll = () => app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('quit-all')!.click())
+  await quitAll()
+  await expect.poll(asked).toEqual(['실행 중인 명령 1개를 끝낼까요?'])
   await win.waitForTimeout(300)
-  await expect(term('pane-a')).toBeVisible() // 취소 — 그대로
+  await expect(term('pane-a')).toBeVisible() // 닫기 — 그대로
 
   const closed = new Promise<void>((resolve) => launched!.on('close', () => resolve()))
-  await app.evaluate(({ app }) => {
-    ;(globalThis as unknown as { answer: number }).answer = 0 // 끝내기
-    app.quit()
+  await app.evaluate(() => {
+    ;(globalThis as unknown as { answer: number }).answer = 1 // 모두 끝내기
   })
+  await quitAll()
   await closed
   launched = undefined
 })

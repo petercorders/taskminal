@@ -28,7 +28,7 @@ beforeEach(async () => {
   writeFileSync(join(res, 'icon.icns'), 'x')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
@@ -75,6 +75,9 @@ describe('check-package (14단계)', () => {
     const problems = (await check()).join('\n')
     expect(problems).toContain('out/preload/index.js')
     expect(problems).toContain('out/renderer/index.html')
+    // 16단계: 셸 지킴이 입구 · 그것이 쓰는 headless — 빠지면 셸이 하나도 안 뜬다
+    expect(problems).toContain('out/main/host.js')
+    expect(problems).toContain('node_modules/@xterm/headless/package.json')
   })
 
   it('node-pty 가 asar 밖에 없으면 · 아이콘 · 번들 id · arm64 가 아니면', async () => {

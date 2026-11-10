@@ -26,8 +26,11 @@ async function launch(env: Record<string, string> = {}): Promise<void> {
   app = launched = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData, ...env } })
   win = await firstWindow(app)
 }
+/** 16단계: ⌘Q 는 셸을 남겨 다시 붙으므로, 13단계 되살리기를 보려고 ⌥⌘Q(셸까지 모두 끝내기)로 끝낸다 */
 async function quit(): Promise<void> {
-  await app.close()
+  const closed = new Promise<void>((resolve) => launched!.once('close', () => resolve()))
+  await app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('quit-all')!.click())
+  await closed
   launched = undefined
 }
 
@@ -78,17 +81,17 @@ test('셸 통합이 꺼져 있어도 lsof 로 폴더를 따라가 재시작 뒤 
 })
 
 test('새로 고침해도 이전 출력이 보이고, 한 화면에 두 번 되살아나지 않는다', async () => {
+  // 16단계: 새로 고침은 셸 지킴이의 같은 셸에 다시 붙는다 — 화면은 지킴이가 주고, 파일 되살리기(이전 세션 줄)는 하지 않는다
   seedState(userData, [{ id: 't', name: '새로 고침', paneId: 'p1' }])
   await launch()
   await run('p1', 'echo ONCE$((3+4))')
   await expect(screen('p1')).toContainText('ONCE7')
   await win.reload()
-  await expect(screen('p1')).toContainText('── 이전 세션')
   await expect(screen('p1')).toContainText('ONCE7')
   await run('p1', 'echo AFTER$((1+1))')
   await expect(screen('p1')).toContainText('AFTER2')
   expect(count(await screen('p1').innerText(), 'ONCE7')).toBe(1)
-  expect(count(await screen('p1').innerText(), '── 이전 세션')).toBe(1)
+  expect(await screen('p1').innerText()).not.toContain('── 이전 세션')
 })
 
 test('설정에서 끄면 저장된 스크롤을 모두 지우고 되살리지 않는다', async () => {

@@ -1,36 +1,36 @@
 import type { WebContents } from 'electron'
-import { spawn, type IPty } from 'node-pty'
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { IPC, type PtyExit, type PtySpawnOptions } from '../shared/ipc'
+import { IPC, type PtyAttachResult, type PtyExit, type PtySpawnOptions } from '../shared/ipc'
 import { expandHome } from '../shared/cwd'
+import type { SessionInfo } from '../shared/ptyhost'
 import { integrationEnv, OutputBatcher, pickShell, shellEnv } from '../shared/pty'
+import type { HostClient } from './ptyhost/client'
 
-const KILL_AFTER_MS = 2000 // SIGHUP 뒤 이만큼 지나도 살아 있으면 SIGKILL
+/** 화면을 처음부터 다시 그리기 전에 지운다 (ESC c — 화면 · 스크롤 · 모드 초기화) */
+const RESET = '\x1bc'
 
-interface Session {
-  pty: IPty
-  owner: WebContents
-}
-
-/** 셸 프로세스의 주인. renderer 는 paneId 로만 가리키고, 프로세스는 여기서만 만들고 끝낸다. */
+/**
+ * 셸의 주인(창)을 아는 쪽. 셸 프로세스는 셸 지킴이(앱 밖 프로세스, 16단계)가 갖고, 여기는 paneId 를 창에 이어 준다.
+ * renderer 는 paneId 로만 가리킨다. 창이 닫히거나 새로 고쳐져도 셸은 지킴이에 남는다(detach).
+ */
 export class PtyManager {
   /**
    * @param zshIntegrationDir 셸 통합 시작 파일 폴더(resources/shell/zsh). null 이면 통합 없이 띄운다.
    * @param allowedShells 설정에서 고를 수 있는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 띄운다.
    */
   constructor(
+    private readonly host: HostClient,
     private readonly zshIntegrationDir: string | null = null,
     private readonly allowedShells: readonly string[] = [],
   ) {}
 
-  private readonly sessions = new Map<string, Session>()
-  /** SIGHUP 을 보냈지만 아직 끝나지 않은 셸 — trap '' HUP 등. 목록에서 빠져도 여기서 끝까지 쫓는다. */
-  private readonly dying = new Map<IPty, ReturnType<typeof setTimeout>>()
+  private readonly owners = new Map<string, WebContents>()
+  private readonly pidOf = new Map<string, number>()
   private readonly batcher = new OutputBatcher(
     (paneId, data) => {
-      const s = this.sessions.get(paneId)
-      if (s && !s.owner.isDestroyed()) s.owner.send(IPC.ptyData, paneId, data)
+      const owner = this.owners.get(paneId)
+      if (owner && !owner.isDestroyed()) owner.send(IPC.ptyData, paneId, data)
     },
     (fn, ms) => {
       const t = setTimeout(fn, ms)
@@ -38,110 +38,134 @@ export class PtyManager {
     },
   )
 
+  /** 지킴이가 보낸 출력 — 주인이 있는 pane 만 (주인 없는 셸의 출력은 지킴이 화면에만 남는다) */
+  onHostData(paneId: string, data: string): void {
+    if (this.owners.has(paneId)) this.batcher.push(paneId, data)
+  }
+
+  onHostExit(paneId: string, exit: PtyExit): void {
+    const owner = this.owners.get(paneId)
+    if (!owner) return
+    this.batcher.flush(paneId)
+    this.owners.delete(paneId)
+    this.pidOf.delete(paneId)
+    if (!owner.isDestroyed()) owner.send(IPC.ptyExit, paneId, exit)
+  }
+
   /**
-   * 이미 같은 paneId 의 셸이 있으면 새로 만들지 않고 크기만 맞춘다
-   * (StrictMode 이중 마운트 · pane 이 다시 붙을 때 — 그 사이 창 크기가 바뀌었을 수 있다).
+   * 지킴이에 이 pane 의 셸이 있으면 붙는다: 화면(serialize) · 명령 상태를 출력 길로 먼저 보내고 답한다.
+   * 없으면 attached:false — renderer 가 13단계 되살리기 뒤 spawn 한다.
    */
-  spawn(owner: WebContents, paneId: string, opts: PtySpawnOptions): void {
-    const existing = this.sessions.get(paneId)
-    if (existing) {
-      if (existing.owner !== owner) throw new Error('다른 창의 pane')
-      existing.pty.resize(opts.cols, opts.rows)
-      return
-    }
+  async attach(owner: WebContents, paneId: string): Promise<PtyAttachResult> {
+    const other = this.owners.get(paneId)
+    if (other && other !== owner && !other.isDestroyed()) throw new Error('다른 창의 pane')
+    if (!this.host.connected) return { attached: false }
+    const r = await this.host.request({ op: 'attach', paneId })
+    if (r['found'] !== true) return { attached: false }
+    this.owners.set(paneId, owner)
+    this.pidOf.set(paneId, Number(r['pid']))
+    this.batcher.push(paneId, RESET + String(r['screen'] ?? '') + String(r['replay'] ?? ''))
+    const exited = r['exited'] as PtyExit | undefined
+    if (exited) this.onHostExit(paneId, exited)
+    const detachedMs = Number(r['detachedMs']) || 0
+    return { attached: true, detachedMs }
+  }
+
+  async spawn(owner: WebContents, paneId: string, opts: PtySpawnOptions): Promise<void> {
+    const other = this.owners.get(paneId)
+    if (other && other !== owner && !other.isDestroyed()) throw new Error('다른 창의 pane')
     const shell = pickShell(opts.shell, process.env['SHELL'], this.allowedShells)
     const env = shellEnv(process.env)
-    const pty = spawn(shell, ['-l'], {
-      name: 'xterm-256color',
-      cols: opts.cols,
-      rows: opts.rows,
+    const r = await this.host.request({
+      op: 'spawn',
+      paneId,
+      file: shell,
+      args: ['-l'],
       cwd: resolveCwd(opts.cwd),
       env: opts.integration === false ? env : integrationEnv(env, shell, this.zshIntegrationDir),
+      cols: opts.cols,
+      rows: opts.rows,
     })
-    const session: Session = { pty, owner }
-    this.sessions.set(paneId, session)
-    // 새로 고침 뒤 같은 paneId 로 새 셸이 떴으면, 끝나 가는 옛 셸의 출력은 버린다.
-    pty.onData((data) => {
-      if (this.sessions.get(paneId) === session) this.batcher.push(paneId, data)
-    })
-    pty.onExit(({ exitCode, signal }) => {
-      const timer = this.dying.get(pty)
-      if (timer) clearTimeout(timer)
-      this.dying.delete(pty)
-      // 같은 paneId 로 새 셸이 이미 떴으면(새로 고침 직후) 옛 셸의 끝을 알리지 않는다.
-      if (this.sessions.get(paneId) !== session) return
-      this.batcher.flush(paneId)
-      this.sessions.delete(paneId)
-      const exit: PtyExit = { exitCode, signal: signal ?? null }
-      if (!owner.isDestroyed()) owner.send(IPC.ptyExit, paneId, exit)
-    })
+    this.owners.set(paneId, owner)
+    this.pidOf.set(paneId, Number(r['pid']))
+    // 이미 있던 셸(StrictMode 이중 마운트 등)이면 크기만 맞춘다 — 그 사이 창 크기가 바뀌었을 수 있다
+    if (r['existing'] === true) this.host.send({ op: 'resize', paneId, cols: opts.cols, rows: opts.rows })
   }
 
   write(owner: WebContents, paneId: string, data: string): void {
-    this.owned(owner, paneId)?.pty.write(data)
+    if (this.owned(owner, paneId)) this.host.send({ op: 'write', paneId, data })
   }
 
   resize(owner: WebContents, paneId: string, cols: number, rows: number): void {
-    this.owned(owner, paneId)?.pty.resize(cols, rows)
+    if (this.owned(owner, paneId)) this.host.send({ op: 'resize', paneId, cols, rows })
   }
 
+  /** 일감 · 탭 · pane 지우기 — 셸을 끝낸다 */
   kill(owner: WebContents, paneId: string): void {
-    if (this.owned(owner, paneId)) this.end(paneId)
+    if (!this.owned(owner, paneId)) return
+    this.forget(paneId)
+    this.host.send({ op: 'kill', paneId })
   }
 
-  /** 창 닫기 · 새로 고침 · 렌더러 충돌: 그 창의 셸을 모두 끝낸다. */
-  killOwner(owner: WebContents): void {
-    for (const [paneId, s] of this.sessions) if (s.owner === owner) this.end(paneId)
+  /** 주인 없는 셸 끝내기 (설정 › 셸 지킴이) — 지금 어느 창도 쓰지 않는 pane 만 */
+  killUnowned(paneIds: readonly string[]): number {
+    let n = 0
+    for (const paneId of paneIds) {
+      const owner = this.owners.get(paneId)
+      if (owner && !owner.isDestroyed()) continue
+      this.forget(paneId)
+      if (this.host.send({ op: 'kill', paneId })) n++
+    }
+    return n
   }
 
-  /**
-   * 앱 종료. 살아 있는 셸에 SIGHUP 만 보낸다 — SIGKILL 은 보내지 않는다.
-   * 종료 때는 창 닫기(① 경로)가 먼저 돌아 셸이 이미 dying 에 들어 있는데, 그것을 바로 SIGKILL 했더니 zsh 가
-   * 정리 없이 죽어 다음에 뜨는 셸이 약 10초 늦게 시작했다(3단계 e2e 에서 측정 · 이분 탐색으로 이 줄을 찾음).
-   * main 이 끝나면 pty 가 닫혀 HUP 을 무시하는 셸도 끝난다(e2e 로 확인). 남은 타이머는 unref 라 종료를 막지 않는다.
-   */
-  killAll(): void {
-    for (const paneId of [...this.sessions.keys()]) this.end(paneId, false)
+  /** 창 닫기 · 새로 고침 · 렌더러 충돌: 그 창의 셸을 지킴이에 남겨 두고 떼기만 한다 */
+  detachOwner(owner: WebContents): void {
+    for (const [paneId, o] of [...this.owners]) {
+      if (o !== owner) continue
+      this.forget(paneId)
+      this.host.send({ op: 'detach', paneId })
+    }
+  }
+
+  /** 같은 지킴이에 다시 붙었다(연결이 잠깐 끊김) — 붙어 있던 pane 의 화면을 처음부터 다시 받는다 */
+  async reattachAll(): Promise<void> {
+    for (const [paneId, owner] of [...this.owners]) {
+      if (owner.isDestroyed()) continue
+      this.batcher.drop(paneId)
+      await this.attach(owner, paneId).catch(() => undefined)
+    }
+  }
+
+  /** 지킴이를 잃었다(셸도 끝남) — 주인 표를 비운다. 창은 다시 읽혀 새로 띄운다 */
+  clear(): void {
+    for (const paneId of [...this.owners.keys()]) this.forget(paneId)
   }
 
   /** 그 창의 셸 pid — lsof 로 작업 폴더를 물을 때 (요청한 pane 중 그 창의 것만) */
   pids(owner: WebContents, paneIds: readonly string[]): Record<string, number> {
     const out: Record<string, number> = {}
     for (const id of paneIds) {
-      const s = this.owned(owner, id)
-      if (s) out[id] = s.pty.pid
+      const pid = this.owned(owner, id) ? this.pidOf.get(id) : undefined
+      if (pid) out[id] = pid
     }
     return out
   }
 
-  private owned(owner: WebContents, paneId: string): Session | undefined {
-    const s = this.sessions.get(paneId)
-    return s && s.owner === owner ? s : undefined
+  async sessions(clearUnseen = false): Promise<SessionInfo[]> {
+    if (!this.host.connected) return []
+    const r = await this.host.request({ op: 'list', clearUnseen })
+    return Array.isArray(r['sessions']) ? (r['sessions'] as SessionInfo[]) : []
   }
 
-  private end(paneId: string, escalate = true): void {
-    const s = this.sessions.get(paneId)
-    if (!s) return
-    this.sessions.delete(paneId)
+  private owned(owner: WebContents, paneId: string): boolean {
+    return this.owners.get(paneId) === owner
+  }
+
+  private forget(paneId: string): void {
     this.batcher.drop(paneId)
-    // SIGHUP: 터미널이 닫힐 때와 같은 신호 — 셸이 자기 작업(백그라운드 포함)에도 전한다.
-    // 무시하는 셸은 KILL_AFTER_MS 뒤 SIGKILL (onExit 가 오면 타이머를 지운다).
-    signal(s.pty, 'SIGHUP')
-    if (!escalate) return
-    const timer = setTimeout(() => {
-      this.dying.delete(s.pty)
-      signal(s.pty, 'SIGKILL')
-    }, KILL_AFTER_MS)
-    timer.unref()
-    this.dying.set(s.pty, timer)
-  }
-}
-
-function signal(pty: IPty, sig: string): void {
-  try {
-    pty.kill(sig)
-  } catch {
-    // 이미 끝난 프로세스
+    this.owners.delete(paneId)
+    this.pidOf.delete(paneId)
   }
 }
 

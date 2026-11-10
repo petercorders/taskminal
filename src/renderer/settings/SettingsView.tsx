@@ -5,12 +5,14 @@ import type { AppState, NotifyKind } from '../../shared/types'
 import type { Action, SettingsPatch } from '../store'
 import { fontStack } from '../term-settings'
 import { TemplateEditor } from './TemplateEditor'
+import { HostSection } from './HostSection'
 
-type SectionId = 'general' | 'look' | 'term' | 'notify' | 'keys' | 'tasks'
+type SectionId = 'general' | 'look' | 'term' | 'host' | 'notify' | 'keys' | 'tasks'
 const SECTIONS: Array<{ id: SectionId; title: string }> = [
   { id: 'general', title: '일반' },
   { id: 'look', title: '모양' },
   { id: 'term', title: '터미널' },
+  { id: 'host', title: '셸 지킴이' },
   { id: 'notify', title: '알림 · 활동' },
   { id: 'keys', title: '단축키' },
   { id: 'tasks', title: '일감 관리' },
@@ -22,6 +24,10 @@ interface Props {
   shortcuts: readonly Shortcut[]
   dispatch: Dispatch<Action>
   newId(): string
+  /** 열 때 보일 칸 (⌘P '셸 지킴이 보기') */
+  initialSection?: 'host' | undefined
+  /** 실행 중인 명령 수 — 셸 지킴이 다시 시작 확인 */
+  busy?: number
   onClose(): void
 }
 
@@ -116,9 +122,9 @@ const NOTIFY_ROWS: Record<NotifyKind, { title: string; desc: string }> = {
 /** 편집기를 새 템플릿으로 연다 — 템플릿 id 와 겹치지 않는 값 */
 const NEW_TEMPLATE = '\u0000new'
 
-export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Props) {
+export function SettingsView({ state, shortcuts, dispatch, newId, initialSection, busy = 0, onClose }: Props) {
   const s = state.settings
-  const [section, setSection] = useState<SectionId>('general')
+  const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   // JSON 편집기: 템플릿 id · 'new'(새 템플릿)
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null)
   const editedTemplate = s.templates.find((t) => t.id === editingTemplate) ?? null
@@ -172,6 +178,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
   const sectionTitle = SECTIONS.find((x) => x.id === section)!.title
 
   const body: Record<SectionId, ReactNode> = {
+    host: <HostSection state={state} busy={busy} Row={Row} />,
     general: (
       <>
         <Row title="앱을 열 때" keywords="시작 되살리기 목록 빈 창">
@@ -220,9 +227,10 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
           }
         />
         <Row
-          title="실행 중인 명령이 있으면 끄기 전에 묻기"
-          desc="예: flutter run · 서버 · Claude 가 돌고 있을 때 (앱 끝내기 · 창 닫기)"
-          control={<Switch label="실행 중인 명령이 있으면 끄기 전에 묻기" checked={s.confirmQuit} onChange={(v) => patch({ confirmQuit: v })} />}
+          title="셸까지 모두 끝낼 때 실행 중이면 묻기"
+          desc="⌥⌘Q · 예: flutter run · 서버 · Claude 가 돌고 있을 때. ⌘Q 는 앱만 끄고 셸은 계속 돌아요"
+          keywords="끄기 전 확인 종료 quit"
+          control={<Switch label="셸까지 모두 끝낼 때 실행 중이면 묻기" checked={s.confirmQuit} onChange={(v) => patch({ confirmQuit: v })} />}
         />
         <Row title="Dock 아이콘에 확인 필요 수 표시" desc="입력 기다림 · 실패한 일감 수" control={<Switch label="Dock 아이콘에 확인 필요 수 표시" checked={s.dockBadge} onChange={(v) => patch({ dockBadge: v })} />} />
       </>

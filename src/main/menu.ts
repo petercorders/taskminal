@@ -2,6 +2,12 @@ import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'elect
 import { IPC } from '../shared/ipc'
 import { shortcutTable, type AppCommand, type Shortcut } from '../shared/keymap'
 
+// ⌥⌘Q 모두 끝내기는 창이 없어도 돌아야 해서 renderer 를 거치지 않고 main 이 바로 받는다 (index.ts 가 정한다)
+let quitAllHandler: () => void = () => {}
+export const onQuitAll = (fn: () => void): void => {
+  quitAllHandler = fn
+}
+
 /** 우리 명령 항목: 단축키는 보여 주기만 한다(registerAccelerator: false) — 실제 키는 renderer 가 같은 표로 처리한다.
  *  네이티브로도 등록하면 키 하나에 명령이 두 번 돈다. 누르면 그 창의 renderer 에 명령을 보낸다. */
 function itemOf(table: readonly Shortcut[], command: AppCommand): MenuItemConstructorOptions {
@@ -37,7 +43,9 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { role: 'hideOthers' },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit' },
+        // 16단계: ⌘Q 는 앱만 끈다 — 셸은 셸 지킴이에 남는다
+        { role: 'quit', label: `${app.name} 끝내기 (셸은 계속 돌아요)` },
+        { ...item('quit-all'), label: '셸까지 모두 끝내기…', click: () => quitAllHandler() },
       ],
     },
     {

@@ -71,7 +71,7 @@ describe('commandForKey', () => {
 
 describe('SHORTCUTS', () => {
   it('표의 모든 단축키가 자기 명령으로 풀린다 (메뉴 표시 = 실제 키)', () => {
-    for (const s of SHORTCUTS) {
+    for (const s of SHORTCUTS.filter((x) => x.accel !== '')) {
       const parts = s.accel.split('+')
       const last = parts.at(-1)!
       const code = /^[A-Z]$/.test(last)
@@ -86,8 +86,16 @@ describe('SHORTCUTS', () => {
   })
 
   it('단축키 · 명령이 겹치지 않는다', () => {
-    expect(new Set(SHORTCUTS.map((s) => s.accel)).size).toBe(SHORTCUTS.length)
+    const keyed = SHORTCUTS.filter((s) => s.accel !== '') // 키 없는 명령(⌘P 로만 — 셸 지킴이 보기 등)은 빼고
+    expect(new Set(keyed.map((s) => s.accel)).size).toBe(keyed.length)
     expect(new Set(SHORTCUTS.map((s) => s.command)).size).toBe(SHORTCUTS.length)
+  })
+
+  it('셸 지킴이 명령: ⌥⌘Q 모두 끝내기 · 키 없는 보기 · 정리 (16단계)', () => {
+    expect(commandForKey(key('KeyQ', { altKey: true }))).toBe('quit-all')
+    expect(commandForKey(key('KeyQ'))).toBeNull() // ⌘Q 는 표에 없다 — 네이티브 끝내기(셸은 남음)
+    expect(SHORTCUTS.find((s) => s.command === 'host-view')?.accel).toBe('')
+    expect(SHORTCUTS.find((s) => s.command === 'host-orphans')?.accel).toBe('')
   })
 
   it('isAppCommand 는 표에 있는 명령만', () => {

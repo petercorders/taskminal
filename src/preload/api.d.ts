@@ -1,8 +1,14 @@
 // renderer 가 보는 preload API 타입 (window.taskminal). 구현은 preload/index.ts.
-import type { AppInfo, LoadedState, PtyExit, PtySpawnOptions, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
+import type { AppInfo, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
+import type { SessionInfo } from '../shared/ptyhost'
 import type { AppState } from '../shared/types'
 
 export interface PtyApi {
+  /**
+   * 셸 지킴이에 이 pane 의 셸이 남아 있으면 다시 붙는다 — 화면 · 명령 상태가 onData 로 먼저 온 뒤 답한다(16단계).
+   * attached:false 면 되살리기 · spawn 을 한다.
+   */
+  attach(paneId: string): Promise<PtyAttachResult>
   /** 같은 paneId 의 셸이 이미 있으면 새로 만들지 않는다. */
   spawn(paneId: string, opts: PtySpawnOptions): Promise<void>
   write(paneId: string, data: string): void
@@ -32,6 +38,20 @@ export interface StateApi {
   onError(listener: (message: string) => void): () => void
 }
 
+/** 셸 지킴이 (16단계) — 앱 밖에서 셸을 갖고 있는 프로세스 */
+export interface HostApi {
+  view(): Promise<HostView>
+  /** 상태가 바뀔 때마다. 구독 해제 함수를 돌려준다 */
+  onView(listener: (view: HostView) => void): () => void
+  /** 지킴이의 모든 셸. clearUnseen: '꺼져 있던 동안 생긴 것' 을 받고 지운다(앱이 처음 읽힐 때 한 번) */
+  sessions(clearUnseen?: boolean): Promise<SessionInfo[]>
+  /** 그 셸의 마지막 20줄 */
+  tail(paneId: string): Promise<string>
+  /** 주인 없는 셸 끝내기 — 어느 창도 쓰지 않는 pane 만 main 이 끝낸다 */
+  kill(paneIds: string[]): void
+  action(action: HostAction): void
+}
+
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
@@ -55,6 +75,7 @@ export interface TaskminalApi {
   pty: PtyApi
   scrollback: ScrollbackApi
   state: StateApi
+  host: HostApi
 }
 
 declare global {

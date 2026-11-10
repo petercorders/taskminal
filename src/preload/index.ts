@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, type AppInfo, type LoadedState, type PtyExit, type ScrollbackEntry } from '../shared/ipc'
+import { IPC, type AppInfo, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type ScrollbackEntry } from '../shared/ipc'
+import type { SessionInfo } from '../shared/ptyhost'
 import type { WorktreeResult } from '../shared/worktree'
 import type { TaskminalApi } from './api'
 
@@ -23,6 +24,7 @@ const api: TaskminalApi = {
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   setMenuKeys: (keys) => ipcRenderer.send(IPC.menuKeys, keys),
   pty: {
+    attach: (paneId) => ipcRenderer.invoke(IPC.ptyAttach, paneId) as Promise<PtyAttachResult>,
     spawn: (paneId, opts) => ipcRenderer.invoke(IPC.ptySpawn, paneId, opts) as Promise<void>,
     write: (paneId, data) => ipcRenderer.send(IPC.ptyWrite, paneId, data),
     resize: (paneId, cols, rows) => ipcRenderer.send(IPC.ptyResize, paneId, cols, rows),
@@ -42,6 +44,14 @@ const api: TaskminalApi = {
     load: () => ipcRenderer.invoke(IPC.stateLoad) as Promise<LoadedState>,
     save: (state) => ipcRenderer.send(IPC.stateSave, state),
     onError: (listener) => subscribe<[string]>(IPC.stateError, listener),
+  },
+  host: {
+    view: () => ipcRenderer.invoke(IPC.hostView) as Promise<HostView>,
+    onView: (listener) => subscribe<[HostView]>(IPC.hostView, listener),
+    sessions: (clearUnseen = false) => ipcRenderer.invoke(IPC.hostSessions, clearUnseen) as Promise<SessionInfo[]>,
+    tail: (paneId) => ipcRenderer.invoke(IPC.hostTail, paneId) as Promise<string>,
+    kill: (paneIds) => ipcRenderer.send(IPC.hostKill, paneIds),
+    action: (action) => ipcRenderer.send(IPC.hostAction, action),
   },
 }
 

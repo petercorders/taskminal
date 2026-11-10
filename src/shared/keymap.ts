@@ -25,6 +25,10 @@ export const SHORTCUTS = [
   { command: 'settings', accel: 'Command+,', label: '설정' },
   ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((n) => ({ command: `tab-${n}` as const, accel: `Command+${n}`, label: `${n}번째 탭` })),
   { command: 'last-tab', accel: 'Command+9', label: '마지막 탭' },
+  // 셸 지킴이(16단계) — ⌘Q 는 앱만 끈다(네이티브 role). 키 없는 둘은 ⌘P 로
+  { command: 'quit-all', accel: 'Alt+Command+Q', label: '셸까지 모두 끝내기' },
+  { command: 'host-view', accel: '', label: '셸 지킴이 보기' },
+  { command: 'host-orphans', accel: '', label: '주인 없는 셸 정리' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

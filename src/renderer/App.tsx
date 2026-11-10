@@ -21,7 +21,9 @@ import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
-import { dirtyPanes, osc7Panes, runtime } from './runtime'
+import { dirtyPanes, osc7Panes, restoredWithText, runtime } from './runtime'
+import { HostBanners, useHostView, type StartupNotes } from './host-ui'
+import { summarizeResume } from '../shared/ptyhost'
 import { terminals } from './terminals'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
@@ -122,6 +124,12 @@ export function App() {
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // 설정을 열 때 보일 칸 (⌘P '셸 지킴이 보기' 등) — 닫으면 지운다
+  const [settingsSection, setSettingsSection] = useState<'host' | null>(null)
+  // 셸 지킴이 (16단계): 상태 · 처음 읽힐 때 정한 줄 · 확인 창
+  const hostView = useHostView()
+  const [startup, setStartup] = useState<StartupNotes | null>(null)
+  const [hostConfirm, setHostConfirm] = useState<'restart' | 'replace-old' | null>(null)
   // 팔레트에서 고른 출력 줄 — 그 pane 이 보이게 그린 뒤에 스크롤 · 선택한다(숨은 터미널에서 하면 스크롤이 맞지 않는다)
   const [pendingReveal, setPendingReveal] = useState<{ paneId: string; line: number; query: string } | null>(null)
   const [removing, setRemoving] = useState<Task | null>(null)
@@ -253,6 +261,43 @@ export function App() {
   updateActivityRef.current = updateActivity
   const deliverRef = useRef(deliver)
   deliverRef.current = deliver
+
+  // 16단계: 앱이 처음 읽히면 셸 지킴이에 남은 셸을 본다 — 꺼져 있던 동안의 입력 기다림 · 실패를 활동(사이드바 확인 필요)으로 넣고,
+  // 이어진 셸 수 · 기다리는 셸을 위 줄로. 아직 마운트되지 않은 탭의 pane 도 들어간다. 한 번만(clearUnseen).
+  const loadedOnce = load.phase === 'ready'
+  useEffect(() => {
+    if (!loadedOnce) return
+    let alive = true
+    window.taskminal.host.sessions(true).then(
+      (sessions) => {
+        if (!alive) return
+        const st = stateRef.current
+        const summary = summarizeResume(sessions, st.tasks.flatMap((t) => Object.keys(t.panes)))
+        const inState = new Set(st.tasks.flatMap((t) => Object.keys(t.panes)))
+        for (const s of sessions) if (s.command && !s.exited && inState.has(s.paneId)) updateActivityRef.current(s.paneId, { type: 'command', text: s.command })
+        // 꺼져 있던 동안 생긴 것 — 지금 보고 있는 pane 이어도 사용자는 못 봤다(보지 않음으로 넣어 확인 필요가 되게). 알림은 위 줄이 대신한다
+        const away = (paneId: string, ev: ActivityEvent) => {
+          const next = applyActivity(activityRef.current[paneId], ev, { viewed: false, now: Date.now() })
+          putActivity({ ...activityRef.current, [paneId]: next })
+        }
+        for (const f of summary.failed) away(f.paneId, { type: 'end', code: f.code })
+        for (const w of summary.waiting) away(w.paneId, { type: 'notify', text: w.message ?? '' })
+        const label = (paneId: string) => st.tasks.find((t) => t.id === findPaneTask(st, paneId))?.name ?? paneId
+        setStartup({ resumed: summary.resumed, awayMs: summary.awayMs, waiting: summary.waiting.map((w) => ({ label: label(w.paneId), ...(w.message ? { message: w.message } : {}) })), fresh: false })
+      },
+      () => {},
+    )
+    // 지킴이 없이(재부팅 · 충돌) 새로 띄워 이전 출력을 되살린 pane 이 있으면 안내 — pane 들이 되살리기를 마친 뒤
+    const t = setTimeout(() => {
+      void window.taskminal.host.view().then((v) => {
+        if (alive && v.fresh && restoredWithText.size > 0) setStartup((s) => ({ resumed: 0, awayMs: 0, waiting: [], ...s, fresh: true }))
+      })
+    }, 1500)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [loadedOnce])
 
   // 셸이 깨끗하게 끝나면(exit 0) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 아니면 TerminalPane 이 이유를 보여 주고 키를 누를 때 닫는다.
   // 우리가 끝낸 셸(탭 닫기 · 새로 고침 …)은 main 이 알리지 않는다 → 여기 오는 것은 모두 셸이 스스로 닫힌 것(알림 '셸 닫힘')
@@ -454,7 +499,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
@@ -483,6 +528,12 @@ export function App() {
         return setPaletteOpen(true)
       case 'settings':
         return setSettingsOpen(true)
+      case 'host-view':
+      case 'host-orphans':
+        setSettingsSection('host')
+        return setSettingsOpen(true)
+      case 'quit-all':
+        return window.taskminal.host.action('quit-all')
       case 'font-bigger':
         return font('bigger')
       case 'font-smaller':
@@ -618,6 +669,13 @@ export function App() {
           {message}
         </p>
       )}
+      <HostBanners
+        view={hostView}
+        startup={startup}
+        onOpenSettings={() => runCommand('host-view')}
+        onNextAttention={() => runCommand('next-attention')}
+        onConfirm={setHostConfirm}
+      />
       <div className="app-body">
         <Sidebar
           state={state}
@@ -727,8 +785,11 @@ export function App() {
           shortcuts={shortcuts}
           dispatch={dispatch}
           newId={newId}
+          initialSection={settingsSection ?? undefined}
+          busy={busyTotal}
           onClose={() => {
             setSettingsOpen(false)
+            setSettingsSection(null)
             refocus()
           }}
         />
@@ -747,6 +808,26 @@ export function App() {
           confirmLabel="지우기"
           onConfirm={() => remove(removing)}
           onCancel={closeDialogs}
+        />
+      )}
+      {hostConfirm && (
+        <ConfirmDialog
+          title={hostConfirm === 'restart' ? '셸 지킴이 다시 시작' : '옛 지킴이 바꾸기'}
+          message={
+            hostConfirm === 'restart'
+              ? `셸이 모두 끝나요${busyTotal > 0 ? ` — 지금 실행 중인 명령 ${busyTotal}개도` : ''}. 폴더와 출력만 되살아나요.`
+              : `옛 지킴이의 셸 ${hostView?.oldHost?.sessions ?? 0}개가 끝나요.`
+          }
+          confirmLabel={hostConfirm === 'restart' ? '다시 시작' : '지금 바꾸기'}
+          onConfirm={() => {
+            window.taskminal.host.action(hostConfirm)
+            setHostConfirm(null)
+            refocus()
+          }}
+          onCancel={() => {
+            setHostConfirm(null)
+            refocus()
+          }}
         />
       )}
       {confirming && (
