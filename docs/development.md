@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-10 (15단계 병합 · 단위까지 — 사용자 지시로 앱을 띄우는 시험 · .app 실행 보류. 13~15 의 e2e 를 한 번에 돌려야 한다)
+마지막 갱신: 2026-11-11 (e2e 고침 병합 — 13~15 e2e 전체 통과 115개 · 14단계 .app 임시 데이터 폴더 실행 확인, 16단계 진행 중)
 
 ## 1. 지금 어디까지
 
@@ -9,9 +9,10 @@
 |---|---|
 | 0~12 | 끝, `main` 에 병합 (12단계 = main `3d570ab`) |
 | 13 재시작 복원 | **단위까지 확인 · e2e 미실행** — main 에 병합. 브랜치 이름은 `stage-13`(worktree `~/taskminal-work`, ~/taskminal 의 `stage-13-restore` 는 그 앞 문서 브랜치). e2e 는 사용자 지시(2026-11-10 "지금 실제 테스트는 하지마")로 돌리지 않음 — 돌려야 할 목록은 `docs/stages/13-restore.md` 결과 절 |
-| 14 패키징 · 설치 | **패키지 정적 검사까지 · 실행 미확인** — main 에 병합(브랜치 `stage-14-package`). `npm run package` 로 `dist/mac-arm64/Taskminal.app` + 정적 검사. .app 실행 · Finder 실행 · /Applications 설치는 사용자 지시 · 확인 대상 — 목록은 `docs/stages/14-package.md` 결과 절 |
+| 14 패키징 · 설치 | main 에 병합(브랜치 `stage-14-package`). `npm run package` 로 `dist/mac-arm64/Taskminal.app` + 정적 검사. 2026-11-11 임시 데이터 폴더로 .app 실행 확인(셸 · 한글 · 최소 환경 `which node` · 아이콘 · 패키지 node-pty) — Finder 더블클릭 · /Applications 설치는 사용자 확인 대상. `docs/stages/14-package.md` 결과 절 '실행 확인' |
 | 15 다듬기 | **단위까지 확인 · e2e 미실행** — main 에 병합(브랜치 `stage-15-polish`). 15a~15f 항목별 문서(`docs/stages/15a-notify.md` ~ `15f-worktree.md`) 결과 절에 돌려야 할 e2e. playwright 설정이 기본 `TASKMINAL_RENDERER=dom`(15e) — 기존 e2e 전체도 다시 |
-| 16~25 1차 출시 | 대기 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택). 16 전에 브랜치 `stage-15-e2e-fix`(e2e 고침 3커밋, 전체 검사 전 중단) 를 전체 검사 · 병합 |
+| 13~15 e2e | 2026-11-11 브랜치 `stage-15-e2e-fix`(e2e 고침 3커밋) 로 전체 검사 통과(e2e 115개) → main ff 병합 `73c70cd` |
+| 16~25 1차 출시 | 16 진행 중 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.

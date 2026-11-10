@@ -65,6 +65,14 @@ plan-check: 서버 없음 — 로컬 파일만 만드는 패키징 단계
 - `@electron/asar` 를 직접 devDependency 로(check-package 가 씀).
 - npm audit: electron-builder 의 빌드 도구 의존성(minimatch)에 moderate 6건 — 앱에 들어가지 않음, 강제 업그레이드 안 함.
 
+### 실행 확인 (2026-11-11, 16단계 전제) — 목록 1 · 2 · 5 확인, 3 · 4 는 사용자 확인 대상으로 남김
+14단계 그대로의 `dist/mac-arm64/Taskminal.app`(0.1.0) 을 Playwright `_electron`(executablePath) 로 임시 `TASKMINAL_USER_DATA` 에서 띄움.
+- 1 · 5: `app.isPackaged=true` · 이름 Taskminal · ad-hoc 서명 · hardened runtime 꺼진 채 창이 뜨고 로그인 zsh 가 뜸(spawn-helper 정상). `echo 한글출력 가나다` 그대로 표시 · 셸 통합으로 pane 머리에 명령 · `exit 0` 표시.
+- `which node`: 환경을 `HOME · USER · PATH=/usr/bin:/bin` 만 준 실행(Finder 에 가까움)에서도 `/opt/homebrew/bin/node` — 로그인 셸(-l)이 PATH 를 만든다. 이 최소 환경에서는 `$SHELL` 이 비었다(launchd 가 주는 값이라 실제 Finder 실행에서는 채워짐 — 미확인).
+- 아이콘: `Info.plist CFBundleIconFile=icon.icns` · `Resources/icon.icns` 를 png 로 풀어 눈으로 확인(보라 바탕 T + 체크).
+- 2: `ELECTRON_RUN_AS_NODE=1 …/MacOS/Taskminal -e "require('…/Resources/app.asar/node_modules/node-pty').spawn(…)"` 통과(`PTY_OK`). **`app.asar.unpacked/node_modules/node-pty` 로 직접 require 하면 `posix_spawnp failed`** — node-pty 가 helper 경로의 `app.asar` 를 `app.asar.unpacked` 로 바꾸므로 `.unpacked.unpacked` 가 된다. 16단계 셸 지킴이는 `app.asar` 경로로 require 해야 한다.
+- 남김: 3 Finder 더블클릭(실제 데이터 폴더) · 4 `/Applications` 복사 — 사용자 확인 대상.
+
 ## 리뷰 (/code-review medium, 2026-11-10) — 8건 중 7건 반영
 | 지적 | 처리 |
 |---|---|
