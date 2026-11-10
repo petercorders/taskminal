@@ -1,8 +1,13 @@
 import { app, BrowserWindow, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
+import { normalizeState } from '../shared/model'
+import { Debouncer } from '../shared/persist'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
+import type { AppState } from '../shared/types'
 import { PtyManager } from './pty-manager'
+import { StateFile } from './state-file'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -13,6 +18,18 @@ const rendererFile = join(__dirname, '../renderer/index.html')
 
 let mainWindow: BrowserWindow | null = null
 const ptys = new PtyManager()
+
+const MAX_STATE_BYTES = 5 * 1024 * 1024
+let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
+// 디바운스가 main 에 있어서 창 닫기 · 새로 고침 · 렌더러 충돌 뒤에도 이미 받은 값은 타이머가 쓴다.
+const stateWriter = new Debouncer<AppState>(
+  (state) => stateFile?.save(state),
+  (fn, ms) => {
+    const t = setTimeout(fn, ms)
+    return () => clearTimeout(t)
+  },
+  300,
+)
 
 const isOurPage = (url: string): boolean => {
   try {
@@ -137,9 +154,31 @@ if (!app.requestSingleInstanceLock()) {
     if (fromOurWindow(event) && isPaneId(paneId)) ptys.kill(event.sender, paneId)
   })
 
+  ipcMain.handle(IPC.stateLoad, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    stateWriter.flush() // 새로 고침 직전에 받은 값을 먼저 쓰고 읽는다
+    stateFile = new StateFile(app.getPath('userData'), randomUUID)
+    return stateFile.load()
+  })
+  // renderer 를 믿지 않는다: 크기 상한 · normalizeState 로 다시 검증한 값만 쓴다.
+  ipcMain.on(IPC.stateSave, (event, raw: unknown) => {
+    if (!fromOurWindow(event)) return
+    let size = 0
+    try {
+      size = JSON.stringify(raw).length
+    } catch {
+      return
+    }
+    if (size > MAX_STATE_BYTES) return
+    stateWriter.push(normalizeState(raw, randomUUID))
+  })
+
   // ④ 앱 종료 — 남은 셸을 모두 끝낸다. 이 줄이 없어도 main 이 끝나면 pty 가 닫혀 커널이 셸에 SIGHUP 을 보낸다
   // (변이 확인으로 확인: e2e ① 은 이 줄 없이도 통과). 13단계의 종료 전 저장이 이 순서에 붙는다.
-  app.on('will-quit', () => ptys.killAll())
+  app.on('will-quit', () => {
+    stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
+    ptys.killAll()
+  })
 
   void app.whenReady().then(() => {
     mainWindow = createWindow()
