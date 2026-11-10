@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { clampRatio, layoutRects, setRatioAt, type Divider, type SplitPath } from '../shared/layout'
+import type { ActivityEvent, PaneActivity } from '../shared/activity'
 import type { Id, Pane, Tab } from '../shared/types'
+import { PaneHead } from './activity-ui'
+import { shortPath } from './sidebar-model'
 import { TerminalPane } from './TerminalPane'
 
 interface Props {
@@ -10,6 +13,9 @@ interface Props {
   visible: boolean
   focusSignal: number
   fontSize: number
+  /** paneId → 활동 (저장하지 않는 런타임 값) */
+  activity: Readonly<Record<Id, PaneActivity>>
+  onActivity(paneId: Id, event: ActivityEvent): void
   onFocusPane(paneId: Id): void
   onRatio(path: SplitPath, ratio: number): void
   /** 깨끗하지 않게 끝난 셸을 본 뒤 키를 눌렀다 */
@@ -25,7 +31,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, fontSize, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, fontSize, activity, onActivity, onFocusPane, onRatio, onClosePane, onDragEnd }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -103,7 +109,8 @@ export function SplitView({ tab, panes, visible, focusSignal, fontSize, onFocusP
         return (
           <div
             key={r.paneId}
-            className={`pane-slot${split && focused ? ' focused' : ''}`}
+            // 분할일 때 포커스 아닌 pane 은 흐리게(어디에 칠지 보이게)
+            className={`pane-slot${split && focused ? ' focused' : ''}${split && !focused ? ' dimmed' : ''}`}
             style={{ left: pct(r.x), top: pct(r.y), width: pct(r.w), height: pct(r.h) }}
             data-testid="pane-slot"
             data-pane-id={r.paneId}
@@ -111,6 +118,7 @@ export function SplitView({ tab, panes, visible, focusSignal, fontSize, onFocusP
             // 보이는 탭에서만 — 숨은 탭 안의 포커스가 활성 탭을 바꾸지 않게
             onFocus={() => visible && onFocusPane(r.paneId)}
           >
+            {pane && <PaneHead activity={activity[pane.id]} folder={shortPath(pane.cwd)} focused={split && focused} />}
             {pane && (
               <TerminalPane
                 paneId={pane.id}
@@ -119,6 +127,7 @@ export function SplitView({ tab, panes, visible, focusSignal, fontSize, onFocusP
                 focusSignal={focusSignal}
                 fontSize={fontSize}
                 onClosed={() => onClosePane(pane.id)}
+                onActivity={(ev) => onActivity(pane.id, ev)}
               />
             )}
           </div>

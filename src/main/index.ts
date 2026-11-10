@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
@@ -18,7 +19,12 @@ const devServerUrl = process.env['ELECTRON_RENDERER_URL']
 const rendererFile = join(__dirname, '../renderer/index.html')
 
 let mainWindow: BrowserWindow | null = null
-const ptys = new PtyManager()
+// 셸 통합 시작 파일 — zsh 가 직접 읽으므로 실제 폴더여야 한다(패키징 때 asar 밖으로: 14단계)
+const zshIntegrationDir = ((): string | null => {
+  const dir = join(app.getAppPath(), 'resources', 'shell', 'zsh')
+  return existsSync(join(dir, '.zshrc')) ? dir : null
+})()
+const ptys = new PtyManager(zshIntegrationDir)
 
 const MAX_STATE_BYTES = 5 * 1024 * 1024
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다

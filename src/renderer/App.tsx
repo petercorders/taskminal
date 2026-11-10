@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
+import { applyActivity, type ActivityEvent, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
 import { commandForKey, isAppCommand, repeatable, stepFontSize, type AppCommand } from '../shared/keymap'
 import { cleanExit } from '../shared/pty'
@@ -8,7 +9,7 @@ import type { NewTaskInput, Task } from '../shared/types'
 import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog } from './NewTaskDialog'
 import { Sidebar } from './Sidebar'
-import { adjacentTask } from './sidebar-model'
+import { adjacentTask, nextAttention } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { SplitView } from './SplitView'
@@ -50,6 +51,11 @@ export function App() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<Task | null>(null)
+  // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
+  const [confirming, setConfirming] = useState<{ title: string; message: string; label: string; run(): void } | null>(null)
+  // pane 의 활동 — 저장하지 않는 런타임 값 (shared/activity.ts)
+  const [activity, setActivity] = useState<Readonly<Record<string, PaneActivity>>>({})
+  const [windowFocused, setWindowFocused] = useState(() => document.hasFocus())
   // 대화상자가 닫히면 올려서 보이는 터미널이 포커스를 다시 가져가게 한다
   const [focusSignal, setFocusSignal] = useState(0)
   const refocus = () => setFocusSignal((n) => n + 1)
@@ -100,11 +106,58 @@ export function App() {
     if (shownTabId && !seenTabs.has(shownTabId)) setSeenTabs((s) => new Set(s).add(shownTabId))
   }, [shownTabId, seenTabs])
 
+  // 사용자가 보고 있는 pane: 활성 일감 · 활성 탭 · 활성 pane, 창에 포커스가 있을 때만 (다른 앱을 보는 동안의 벨은 확인 필요)
+  useEffect(() => {
+    const on = () => setWindowFocused(true)
+    const off = () => setWindowFocused(false)
+    window.addEventListener('focus', on)
+    window.addEventListener('blur', off)
+    return () => {
+      window.removeEventListener('focus', on)
+      window.removeEventListener('blur', off)
+    }
+  }, [])
+  const activeTabNow = state.tasks.find((t) => t.id === state.activeTaskId)?.tabs.find((t) => t.id === shownTabId)
+  const viewedPane = windowFocused && activeTabNow ? activeTabNow.activePaneId : null
+  const viewedRef = useRef(viewedPane)
+  viewedRef.current = viewedPane
+
+  const updateActivity = (paneId: string, ev: ActivityEvent) =>
+    setActivity((prev) => {
+      const next = applyActivity(prev[paneId], ev, { viewed: paneId === viewedRef.current, now: Date.now() })
+      return next === prev[paneId] ? prev : { ...prev, [paneId]: next }
+    })
+  // 보는 pane 이 바뀌면(일감 · 탭 · pane 이동, 창으로 돌아옴) 그 pane 의 확인 필요를 끈다
+  useEffect(() => {
+    if (viewedPane) updateActivity(viewedPane, { type: 'viewed' })
+  }, [viewedPane]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 닫힌 pane 의 활동은 지운다
+  useEffect(() => {
+    setActivity((prev) => {
+      const live = new Set(state.tasks.flatMap((t) => Object.keys(t.panes)))
+      const gone = Object.keys(prev).filter((id) => !live.has(id))
+      if (gone.length === 0) return prev
+      const next = { ...prev }
+      for (const id of gone) delete next[id]
+      return next
+    })
+  }, [state.tasks])
+  const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
+
   const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })
 
-  const closeTab = (task: Task, tabId: string) => {
+  const closeTab = (task: Task, tabId: string, confirmed = false) => {
     const tab = task.tabs.find((t) => t.id === tabId)
     if (!tab) return
+    const busy = busyPanes(paneIds(tab.layout))
+    if (busy > 0 && !confirmed)
+      return setConfirming({
+        title: '탭 닫기',
+        message: `이 탭에서 명령 ${busy}개가 실행 중입니다. 닫으면 함께 끝납니다.`,
+        label: '닫기',
+        run: () => closeTab(task, tabId, true),
+      })
+    setConfirming(null)
     // 그 탭의 셸만 끝낸다 — 다른 탭 · 일감의 셸은 그대로.
     for (const paneId of paneIds(tab.layout)) window.taskminal.pty.kill(paneId)
     dispatch({ type: 'tab/close', taskId: task.id, tabId })
@@ -121,6 +174,7 @@ export function App() {
   const closeDialogs = () => {
     setCreating(false)
     setRemoving(null)
+    setConfirming(null)
     refocus()
   }
 
@@ -132,7 +186,22 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating || removing !== null
+  const dialogOpen = creating || removing !== null || confirming !== null
+
+  const closePane = (paneId: string, confirmed = false) => {
+    if (!confirmed && activity[paneId]?.busy)
+      return setConfirming({
+        title: 'pane 닫기',
+        message: `실행 중인 명령${activity[paneId]?.command ? ` ‘${activity[paneId]!.command}’` : ''}이 함께 끝납니다.`,
+        label: '닫기',
+        run: () => closePane(paneId, true),
+      })
+    setConfirming(null)
+    // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도
+    window.taskminal.pty.kill(paneId)
+    dispatch({ type: 'pane/exited', paneId })
+    refocus()
+  }
 
   // 앱 명령 하나 — 단축키(아래 keydown)와 앱 메뉴(main → onCommand)가 같은 길로 온다.
   const runCommand = (command: AppCommand) => {
@@ -152,6 +221,13 @@ export function App() {
         return font('smaller')
       case 'font-reset':
         return font('reset')
+      case 'next-attention': {
+        const target = nextAttention(state, activity, viewedRef.current)
+        if (!target) return
+        dispatch({ type: 'task/select', id: target.taskId })
+        dispatch({ type: 'pane/focus', taskId: target.taskId, paneId: target.paneId })
+        return refocus()
+      }
       case 'next-task':
       case 'prev-task': {
         const id = adjacentTask(state, command === 'next-task' ? 1 : -1)
@@ -187,10 +263,7 @@ export function App() {
     if (!tab) return
     switch (command) {
       case 'close-pane':
-        // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도 (실행 중 확인은 9단계)
-        window.taskminal.pty.kill(tab.activePaneId)
-        dispatch({ type: 'pane/exited', paneId: tab.activePaneId })
-        return refocus()
+        return closePane(tab.activePaneId)
       case 'clear':
         terminals.get(tab.activePaneId)?.clear()
         return refocus()
@@ -240,6 +313,7 @@ export function App() {
       <div className="app-body">
         <Sidebar
           state={state}
+          activity={activity}
           loading={load.phase === 'loading'}
           onSelect={(id) => dispatch({ type: 'task/select', id })}
           onNew={() => setCreating(true)}
@@ -260,6 +334,7 @@ export function App() {
               >
                 <TabBar
                   task={task}
+                  activity={activity}
                   visible={taskActive}
                   onSelect={(tabId) => dispatch({ type: 'tab/select', taskId: task.id, tabId })}
                   onAdd={() => addTab(task.id)}
@@ -289,6 +364,8 @@ export function App() {
                           visible={taskActive && tabActive}
                           focusSignal={focusSignal}
                           fontSize={state.settings.fontSize}
+                          activity={activity}
+                          onActivity={updateActivity}
                           onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
@@ -319,9 +396,20 @@ export function App() {
       {removing && (
         <ConfirmDialog
           title="일감 지우기"
-          message={`‘${removing.name}’ 일감을 지울까요? 터미널 ${Object.keys(removing.panes).length}개가 함께 종료됩니다.`}
+          message={`‘${removing.name}’ 일감을 지울까요? 터미널 ${Object.keys(removing.panes).length}개가 함께 종료됩니다.${
+            busyPanes(Object.keys(removing.panes)) > 0 ? ` 그중 ${busyPanes(Object.keys(removing.panes))}개에서 명령이 실행 중입니다.` : ''
+          }`}
           confirmLabel="지우기"
           onConfirm={() => remove(removing)}
+          onCancel={closeDialogs}
+        />
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.title}
+          message={confirming.message}
+          confirmLabel={confirming.label}
+          onConfirm={confirming.run}
           onCancel={closeDialogs}
         />
       )}

@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { taskActivity, type PaneActivity } from '../shared/activity'
+import { paneIds } from '../shared/layout'
 import { tabLabel } from '../shared/model'
 import type { Id, SplitDir, Task } from '../shared/types'
 
 interface Props {
   task: Task
+  /** paneId → 활동 (탭에 실행 중 · 확인 필요 표시) */
+  activity: Readonly<Record<Id, PaneActivity>>
   /** 이 일감이 보이는 중 — 다시 보일 때도 활성 탭을 보이는 곳으로 스크롤한다 */
   visible: boolean
   onSelect(tabId: Id): void
@@ -21,7 +25,7 @@ export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit }: Props) {
+export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -48,8 +52,22 @@ export function TabBar({ task, visible, onSelect, onAdd, onClose, onRename, onDo
         {task.tabs.map((tab, index) => {
           const label = tabLabel(task, tab)
           const active = tab.id === task.activeTabId
+          const act = taskActivity(paneIds(tab.layout).map((id) => activity[id]))
           return (
-            <div key={tab.id} role="presentation" className={`tab${active ? ' active' : ''}`} data-testid="tab" data-tab-id={tab.id}>
+            <div
+              key={tab.id}
+              role="presentation"
+              className={`tab${active ? ' active' : ''}`}
+              data-testid="tab"
+              data-tab-id={tab.id}
+              data-running={act.running}
+              data-attention={act.attention}
+            >
+              {act.attention ? (
+                <span className="tab-mark attention" aria-label="확인 필요" role="img" />
+              ) : act.running > 0 ? (
+                <span className="tab-mark running" aria-label={`실행 중 ${act.running}개`} role="img" />
+              ) : null}
               {editing === tab.id ? (
                 <RenameInput
                   initial={tab.title ?? ''}

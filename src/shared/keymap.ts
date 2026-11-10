@@ -19,6 +19,7 @@ export const SHORTCUTS = [
   { command: 'prev-pane', accel: 'Command+[', label: '이전 pane' },
   { command: 'next-task', accel: 'Alt+Command+Down', label: '다음 일감' },
   { command: 'prev-task', accel: 'Alt+Command+Up', label: '이전 일감' },
+  { command: 'next-attention', accel: 'Shift+Command+A', label: '다음 확인 필요' },
   ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((n) => ({ command: `tab-${n}` as const, accel: `Command+${n}`, label: `${n}번째 탭` })),
   { command: 'last-tab', accel: 'Command+9', label: '마지막 탭' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>

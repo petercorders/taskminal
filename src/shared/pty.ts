@@ -89,3 +89,15 @@ export function shellEnv(base: Record<string, string | undefined>): Record<strin
 export function cleanExit(exit: { exitCode: number; signal: number | null }): boolean {
   return exit.exitCode === 0 && !exit.signal
 }
+
+/**
+ * 셸 통합 환경. zsh 이고 통합 폴더가 있으면 ZDOTDIR 을 그 폴더로 바꿔 띄운다 — 그 폴더의 시작 파일이 사용자 설정을
+ * 그대로 읽은 뒤 명령 시작/끝 표시(OSC 133)만 더하고, 끝나면 ZDOTDIR 을 원래대로 돌린다(resources/shell/zsh).
+ * 원래 ZDOTDIR 이 있었으면 TASKMINAL_USER_ZDOTDIR 로 넘긴다. 아니면 env 를 그대로 돌려준다.
+ */
+export function integrationEnv(env: Record<string, string>, shellPath: string, dir: string | null): Record<string, string> {
+  if (!dir || !/(^|\/)zsh$/.test(shellPath)) return env
+  const out: Record<string, string> = { ...env, ZDOTDIR: dir }
+  if (env['ZDOTDIR']) out['TASKMINAL_USER_ZDOTDIR'] = env['ZDOTDIR']
+  return out
+}

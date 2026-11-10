@@ -1,5 +1,7 @@
 // 사이드바에 보일 칸 나누기. 순수 함수라 단위 시험한다.
-import type { AppState, Group, Task } from '../shared/types'
+import type { PaneActivity } from '../shared/activity'
+import { paneIds } from '../shared/layout'
+import type { AppState, Group, Id, Task } from '../shared/types'
 
 export interface SidebarSection {
   /** 묶음 이름. 묶음이 하나도 쓰이지 않으면 null(제목 없는 한 칸) */
@@ -27,6 +29,33 @@ export function adjacentTask(state: AppState, step: 1 | -1): string | null {
   const i = state.activeTaskId === null ? -1 : order.indexOf(state.activeTaskId)
   if (i < 0) return order[0]!
   return order[(i + step + order.length) % order.length]!
+}
+
+export interface PaneTarget {
+  taskId: Id
+  tabId: Id
+  paneId: Id
+}
+
+/** 모든 pane 을 사이드바 순서 → 탭 순서 → 화면 순서로 */
+function orderedPanes(state: AppState): PaneTarget[] {
+  return sidebarSections(state).flatMap((s) =>
+    s.tasks.flatMap((task) => task.tabs.flatMap((tab) => paneIds(tab.layout).map((paneId) => ({ taskId: task.id, tabId: tab.id, paneId })))),
+  )
+}
+
+/** 확인 필요(주의)가 있는 pane 들, 사이드바에 보이는 순서로. */
+export function attentionTargets(state: AppState, activity: Readonly<Record<Id, PaneActivity>>): PaneTarget[] {
+  return orderedPanes(state).filter((p) => activity[p.paneId]?.attention)
+}
+
+/** ⇧⌘A: 지금 보는 pane 다음의 확인 필요 pane, 끝이면 처음으로. 없으면 null. */
+export function nextAttention(state: AppState, activity: Readonly<Record<Id, PaneActivity>>, current: Id | null): PaneTarget | null {
+  const all = orderedPanes(state)
+  const here = current === null ? -1 : all.findIndex((p) => p.paneId === current)
+  const targets = all.map((p, i) => ({ p, i })).filter(({ p }) => activity[p.paneId]?.attention)
+  if (targets.length === 0) return null
+  return (targets.find(({ i }) => i > here) ?? targets[0]!).p
 }
 
 /** 사이드바 둘째 줄용: 세 칸 넘는 경로는 끝 두 칸만 (`~/code/jjikgyebu/flutter` → `…/jjikgyebu/flutter`). */

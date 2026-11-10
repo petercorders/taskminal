@@ -36,6 +36,8 @@ describe('commandForKey', () => {
     expect(commandForKey(key('ArrowDown', { altKey: true }))).toBe('next-task')
     expect(commandForKey(key('ArrowUp', { altKey: true }))).toBe('prev-task')
     expect(commandForKey(key('ArrowUp'))).toBeNull() // ⌥ 없이는 셸 몫
+    expect(commandForKey(key('KeyA', { shiftKey: true }))).toBe('next-attention')
+    expect(commandForKey(key('KeyA'))).toBeNull() // ⌘A 모두 선택은 네이티브
   })
 
   it('글꼴: ⌘= 와 ⌘+(⇧⌘=) 둘 다 크게, ⌘− 작게, ⌘0 기본', () => {

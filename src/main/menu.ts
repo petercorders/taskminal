@@ -80,6 +80,7 @@ export function buildAppMenu(dev: boolean): Menu {
         { type: 'separator' },
         item('next-task'),
         item('prev-task'),
+        item('next-attention'),
         { type: 'separator' },
         { role: 'front', label: '모두 앞으로 가져오기' },
       ],

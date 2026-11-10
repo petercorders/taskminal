@@ -60,7 +60,7 @@ async function whereTyping(): Promise<string> {
   let found: string | null = null
   await expect
     .poll(async () => {
-      for (const el of await win.locator('[data-testid^="pane-"]:not([data-testid="pane-slot"])').all()) {
+      for (const el of await win.locator('.terminal-pane').all()) {
         if (re.test(await el.locator('.xterm-rows').innerText())) return (found = (await el.getAttribute('data-testid'))!.slice(5))
       }
       return null

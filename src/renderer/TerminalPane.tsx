@@ -3,6 +3,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
+import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { cleanExit, splitForWrite } from '../shared/pty'
 import { terminals } from './terminals'
 
@@ -21,14 +22,18 @@ interface Props {
   fontSize: number
   /** 깨끗하지 않게 끝난 셸의 이유를 본 뒤 키를 눌렀다 — pane 을 닫는다 */
   onClosed(): void
+  /** 셸 통합 · 벨 · 알림이 알려 준 활동 (숨은 pane 도 계속 받는다) */
+  onActivity(event: ActivityEvent): void
 }
 
 /** 셸 하나를 보여 주는 pane. 셸 프로세스의 수명은 main 이 맡는다 — 여기서 마운트가 풀려도 kill 하지 않는다. */
-export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClosed }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClosed, onActivity }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
   onClosedRef.current = onClosed
+  const onActivityRef = useRef(onActivity)
+  onActivityRef.current = onActivity
   // 셸을 띄울 때의 글자 크기 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
   const fontSizeRef = useRef(fontSize)
   fontSizeRef.current = fontSize
@@ -50,6 +55,19 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
     term.loadAddon(new Unicode11Addon())
     term.unicode.activeVersion = '11'
     term.open(host)
+
+    // 활동 신호 — 처리했다고(true) 알려 xterm 이 화면에 아무것도 하지 않게
+    const emit = (ev: ActivityEvent | null) => {
+      if (ev) onActivityRef.current(ev)
+      return true
+    }
+    const oscs = [
+      term.parser.registerOscHandler(133, (data) => emit(parseOsc133(data))),
+      term.parser.registerOscHandler(6973, (data) => emit(parseCommandOsc(data))),
+      term.parser.registerOscHandler(9, (data) => emit(parseNotifyOsc(9, data))),
+      term.parser.registerOscHandler(777, (data) => emit(parseNotifyOsc(777, data))),
+      term.onBell(() => onActivityRef.current({ type: 'bell' })),
+    ]
 
     let size = { cols: 0, rows: 0 }
     const fitNow = (): boolean => {
@@ -105,6 +123,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, fontSize, onClo
       observer.disconnect()
       cancelAnimationFrame(frame)
       input.dispose()
+      for (const d of oscs) d.dispose()
       offData()
       offExit()
       terminals.delete(paneId)

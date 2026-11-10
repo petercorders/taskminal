@@ -8,6 +8,10 @@
   --accent: #5b9cf5;
   --accent-soft: #5b9cf522;
   --danger: #e07a7a;
+  --running: #5b9cf5;
+  --waiting: #e5b567;
+  --done: #7cc48b;
+  --failed: #e07a7a;
   color-scheme: dark;
 }
 
@@ -169,6 +173,26 @@ select {
   color: var(--muted);
 }
 
+.task-activity {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+  padding-left: 6px;
+}
+
+.attention-section .sidebar-section-title {
+  color: var(--waiting);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.attention-section kbd {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .task-remove {
   opacity: 0; /* visibility:hidden 이면 Tab 으로 갈 수 없다 */
   width: 22px;
@@ -183,6 +207,11 @@ select {
 .task-row:hover .task-remove,
 .task-remove:focus-visible {
   opacity: 1;
+}
+.task-remove-space {
+  flex: none;
+  width: 22px;
+  margin-right: 6px;
 }
 .task-remove:hover {
   background: #e07a7a22;
@@ -220,11 +249,67 @@ select {
 .pane-slot {
   position: absolute;
   display: flex;
+  flex-direction: column;
   box-sizing: border-box;
 }
-/* 어느 pane 에 칠지 보이게 (흐리기 · pane 머리는 9단계) */
+/* 어느 pane 에 칠지 보이게: 포커스 pane 은 머리 아래 강조 줄, 나머지는 내용을 흐리게 (Ghostty unfocused-split-opacity) */
 .pane-slot.focused {
-  box-shadow: inset 0 0 0 1px var(--accent-soft), inset 0 2px 0 var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.pane-slot.dimmed .terminal-pane {
+  opacity: 0.62;
+}
+
+/* ─── pane 머리 ─── */
+.pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pane-head.focused {
+  border-bottom: 2px solid var(--accent);
+}
+.pane-head-command {
+  color: var(--fg);
+  font-family: Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.pane-head-folder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.pane-head-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.pane-head-status.running { color: var(--running); }
+.pane-head-status.waiting { color: var(--waiting); }
+.pane-head-status.done { color: var(--done); }
+.pane-head-status.failed { color: var(--failed); }
+
+/* ─── 활동 아이콘 (모양으로도 구분: 호 · 원 · 체크 · 네모) ─── */
+.activity-icon { flex: none; display: block; }
+.activity-icon.running { color: var(--running); animation: spin 1.1s linear infinite; }
+.activity-icon.waiting { color: var(--waiting); }
+.activity-icon.done { color: var(--done); }
+.activity-icon.failed { color: var(--failed); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .activity-icon.running { animation: none; }
 }
 
 .divider {
@@ -314,6 +399,17 @@ select {
   height: 2px;
   background: var(--accent);
 }
+
+.tab-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-left: 10px;
+  margin-right: -6px;
+  border-radius: 50%;
+}
+.tab-mark.running { background: var(--running); }
+.tab-mark.attention { background: var(--waiting); }
 
 .tab-main {
   min-width: 0;
