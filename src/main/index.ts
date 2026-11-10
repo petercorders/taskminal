@@ -7,7 +7,7 @@ import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
 import { Debouncer } from '../shared/persist'
 import { isAccel, isAppCommand } from '../shared/keymap'
-import { webUrl } from '../shared/links'
+import { MAX_LINK, webUrl } from '../shared/links'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
@@ -315,7 +315,7 @@ if (!app.requestSingleInstanceLock()) {
     if (fromOurWindow(event)) shell.beep()
   })
   ipcMain.on(IPC.openLink, (event, url: unknown) => {
-    if (fromOurWindow(event)) openExternalIfWeb(url)
+    if (fromOurWindow(event) && typeof url === 'string' && url.length <= MAX_LINK) openExternalIfWeb(url)
   })
   ipcMain.on(IPC.menuKeys, (event, keys: unknown) => {
     if (!fromOurWindow(event) || typeof keys !== 'object' || keys === null) return
