@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -62,6 +62,42 @@ describe('addWorktree (15f)', () => {
     const plain = join(root, 'plain')
     mkdirSync(plain)
     expect(await addWorktree(plain, 'x', root)).toMatchObject({ ok: false })
+  })
+
+  it('앞뒤 빈칸은 떼고 본다 — 끝 빈칸 때문에 바깥 저장소에 만들지 않는다 (15f 리뷰)', async () => {
+    const outer = repo('outer')
+    const inner = join(outer, 'inner')
+    mkdirSync(inner)
+    git(inner, 'init', '-q', '-b', 'main')
+    writeFileSync(join(inner, 'b.txt'), 'b')
+    git(inner, 'add', 'b.txt')
+    git(inner, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'first')
+    expect(await addWorktree(inner + ' ', 'x', root)).toEqual({ ok: true, path: join(outer, 'inner-x') })
+    expect(existsSync(join(root, 'outer-x'))).toBe(false)
+    expect(await addWorktree('  ~/outer', 'y', root)).toEqual({ ok: true, path: join(root, 'outer-y') })
+  })
+
+  it('상대 경로는 받지 않는다 (main 의 지금 폴더 기준으로 풀지 않게)', async () => {
+    // 지금 폴더를 임시 저장소 안으로 옮겨 둔다 — 검사가 빠지면(변이) 진짜 저장소가 아니라 이 임시 저장소 옆에 만들어져 시험이 잡는다
+    const dir = repo('app')
+    const before = process.cwd()
+    process.chdir(dir)
+    try {
+      expect(await addWorktree('sub', 'x', root)).toMatchObject({ ok: false })
+      expect(existsSync(join(root, 'app-x'))).toBe(false)
+    } finally {
+      process.chdir(before)
+    }
+  })
+
+  it('post-checkout 훅이 실패해도 worktree 가 만들어졌으면 성공 (15f 리뷰)', async () => {
+    const dir = repo('hooked')
+    const hook = join(dir, '.git', 'hooks', 'post-checkout')
+    writeFileSync(hook, '#!/bin/sh\necho hook-broke >&2\nexit 1\n')
+    chmodSync(hook, 0o755)
+    const got = await addWorktree(dir, 'h1', root)
+    expect(got).toMatchObject({ ok: true, path: join(root, 'hooked-h1') })
+    expect(await branchOf(join(root, 'hooked-h1'))).toBe('h1')
   })
 
   it('나쁜 브랜치 이름은 git 을 부르지 않고 이유', async () => {

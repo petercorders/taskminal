@@ -1338,3 +1338,8 @@ input[type='checkbox'] {
   color: var(--muted);
   line-height: 1.5;
 }
+
+/* 새 일감 칸 묶음 — 모양 없이, git 이 도는 동안 한꺼번에 막는 용도 (15f) */
+.dialog-body {
+  display: contents;
+}

@@ -7,6 +7,8 @@ export function checkBranchName(name: string): string | null {
   if (name.trim() === '') return '브랜치 이름을 적어 주세요'
   if (name.length > 100) return '브랜치 이름이 너무 깁니다 (100자까지)'
   if (/[\s\x00-\x1f\x7f]/.test(name)) return '브랜치 이름에 빈칸을 쓸 수 없습니다'
+  // 글 방향 제어 문자(U+200E · U+200F · U+202A–202E · U+2066–2069)는 사이드바 · 폴더 이름을 거꾸로 보이게 꾸밀 수 있다 (15f 리뷰)
+  if (/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(name)) return '브랜치 이름에 글 방향 제어 문자를 쓸 수 없습니다'
   if (/[~^:?*[\\]/.test(name)) return '브랜치 이름에 ~ ^ : ? * [ \\ 를 쓸 수 없습니다'
   if (name === '@' || name.includes('@{')) return "브랜치 이름에 '@{' 를 쓸 수 없습니다"
   if (name.includes('..') || name.includes('//')) return "브랜치 이름에 '..' · '//' 를 쓸 수 없습니다"

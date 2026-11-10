@@ -7,7 +7,7 @@ describe('checkBranchName', () => {
     for (const n of ['main2', 'stage/15', 'feat/영수증-주소', 'v1.2_fix']) expect(checkBranchName(n)).toBeNull()
   })
   it('나쁜 이름은 이유', () => {
-    for (const n of ['', ' ', 'a b', 'a..b', '-x', '/x', 'x/', 'x.', 'x.lock', 'a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b', 'a\\b', 'a@{b', '@', 'a//b', 'x'.repeat(101), 'a\tb']) {
+    for (const n of ['', ' ', 'a b', 'a..b', '-x', '/x', 'x/', 'x.', 'x.lock', 'a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b', 'a\\b', 'a@{b', '@', 'a//b', 'x'.repeat(101), 'a\tb', 'a\u202eb', 'a\u2066b', 'a\u200fb']) {
       expect(checkBranchName(n), n).not.toBeNull()
     }
   })
