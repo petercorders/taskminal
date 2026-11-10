@@ -21,6 +21,24 @@ async function readSmall(path: string): Promise<string | null> {
   }
 }
 
+/** dir 에서 위로 `.git`(폴더 · worktree 의 파일)이 있는 폴더 — 저장소 뿌리. 아니거나 못 보면 null (15f) */
+export async function repoRoot(dir: string): Promise<string | null> {
+  let d = resolve(dir)
+  for (let i = 0; i < MAX_DEPTH; i++) {
+    try {
+      await stat(join(d, '.git'))
+      return d
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') return null
+    }
+    const up = dirname(d)
+    if (up === d) return null
+    d = up
+  }
+  return null
+}
+
 /** dir 에서 위로 `.git` 을 찾아 HEAD 를 푼다. 저장소가 아니거나 못 읽으면 null */
 export async function branchOf(dir: string): Promise<string | null> {
   let d = resolve(dir)

@@ -1322,3 +1322,19 @@ input[type='checkbox'] {
   font-size: 11px;
   border: 1px solid var(--line);
 }
+
+/* 새 일감의 'git worktree 에서' (15f) */
+.field > .check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}

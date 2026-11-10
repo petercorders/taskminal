@@ -14,6 +14,8 @@ import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
 import { lsofCwds } from './cwd-probe'
 import { branchesOf } from './git-branch'
+import { addWorktree } from './worktree'
+import type { WorktreeResult } from '../shared/worktree'
 import { PtyManager } from './pty-manager'
 import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
@@ -296,6 +298,13 @@ if (!app.requestSingleInstanceLock()) {
     if (!Array.isArray(dirs) || dirs.length > MAX_BRANCH_DIRS) return {}
     const ok = dirs.filter((d): d is string => typeof d === 'string' && d.length > 0 && d.length <= 4096)
     return branchesOf(ok, homedir())
+  })
+  ipcMain.handle(IPC.gitWorktreeAdd, async (event, dir: unknown, branch: unknown): Promise<WorktreeResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (typeof dir !== 'string' || typeof branch !== 'string' || dir.length === 0 || dir.length > 4096 || branch.length > 200) {
+      return { ok: false, error: '잘못된 요청' }
+    }
+    return addWorktree(dir, branch, homedir())
   })
   ipcMain.handle(IPC.ptyCwds, async (event, paneIds: unknown): Promise<Record<string, string>> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')

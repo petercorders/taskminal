@@ -44,6 +44,8 @@ export interface TaskminalApi {
   setBadge(count: number): void
   /** 알림 소리만 (macOS 알림 없이) */
   beep(): void
+  /** 폴더의 저장소 옆에 새 브랜치 worktree 를 만든다 (15f) */
+  gitWorktreeAdd(dir: string, branch: string): Promise<import('../shared/worktree').WorktreeResult>
   /** 폴더마다 git 브랜치(저장소가 아니면 null) — `~` 는 main 이 푼다 */
   gitBranches(dirs: string[]): Promise<Record<string, string | null>>
   /** 터미널 링크를 바깥 브라우저로 — http(s) 가 아니면 main 이 무시 */

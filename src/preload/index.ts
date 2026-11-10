@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC, type AppInfo, type LoadedState, type PtyExit, type ScrollbackEntry } from '../shared/ipc'
+import type { WorktreeResult } from '../shared/worktree'
 import type { TaskminalApi } from './api'
 
 // renderer 에 여는 유일한 통로. ipcRenderer 자체나 채널 이름을 받는 함수는 열지 않는다.
@@ -17,6 +18,7 @@ const api: TaskminalApi = {
   setQuitGuard: (busy) => ipcRenderer.send(IPC.quitGuard, busy),
   setBadge: (count) => ipcRenderer.send(IPC.badge, count),
   beep: () => ipcRenderer.send(IPC.beep),
+  gitWorktreeAdd: (dir, branch) => ipcRenderer.invoke(IPC.gitWorktreeAdd, dir, branch) as Promise<WorktreeResult>,
   gitBranches: (dirs) => ipcRenderer.invoke(IPC.gitBranches, dirs) as Promise<Record<string, string | null>>,
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   setMenuKeys: (keys) => ipcRenderer.send(IPC.menuKeys, keys),
