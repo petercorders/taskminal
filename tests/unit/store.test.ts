@@ -196,3 +196,16 @@ describe('설정 동작 (11단계)', () => {
     expect(s.settings.groups[0]!.collapsed).toBe(true)
   })
 })
+
+describe('pane/cwd (13단계)', () => {
+  it('어느 일감의 pane 이든 폴더를 바꾸고, 같은 폴더 · 없는 pane 이면 같은 상태', () => {
+    const s = withTasks('a', 'b')
+    const b = s.tasks[1]!
+    const pid = Object.keys(b.panes)[0]!
+    const next = reducer(s, { type: 'pane/cwd', paneId: pid, cwd: '/tmp' })
+    expect(next.tasks[1]!.panes[pid]!.cwd).toBe('/tmp')
+    expect(next.tasks[0]).toBe(s.tasks[0])
+    expect(reducer(next, { type: 'pane/cwd', paneId: pid, cwd: '/tmp' })).toBe(next)
+    expect(reducer(s, { type: 'pane/cwd', paneId: 'ghost', cwd: '/tmp' })).toBe(s)
+  })
+})

@@ -19,6 +19,7 @@ import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
+import { dirtyPanes, osc7Panes, runtime } from './runtime'
 import { terminals } from './terminals'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
@@ -31,7 +32,34 @@ const NOTICE: Record<NonNullable<LoadedState['notice']>, string> = {
 
 // 읽기는 페이지마다 한 번만 — 개발 모드 StrictMode 가 effect 를 두 번 돌려도 load(손상 파일 백업 같은 부수 효과)를 두 번 하지 않게.
 let loadOnce: Promise<LoadedState> | null = null
-const loadState = () => (loadOnce ??= window.taskminal.state.load())
+// appInfo(이 Mac 이름 · lsof 주기)를 먼저 채워 둔다 — 셸이 뜨자마자 보내는 OSC 7 을 호스트로 거르려면 pane 이 마운트되기 전에 있어야 한다
+const loadState = () =>
+  (loadOnce ??= window.taskminal.appInfo().then(
+    (info) => {
+      runtime.host = info.host
+      runtime.cwdPollMs = info.cwdPollMs
+      return window.taskminal.state.load()
+    },
+    () => window.taskminal.state.load(),
+  ))
+
+/** 스크롤 저장할 글: all 이면 마운트된 모든 pane, 아니면 마지막 저장 뒤 출력이 온 pane 만 */
+function collectScrollback(all: boolean): Record<string, string> {
+  const panes: Record<string, string> = {}
+  for (const [paneId, handle] of terminals) {
+    if (!all && !dirtyPanes.has(paneId)) continue
+    try {
+      panes[paneId] = handle.serialize()
+    } catch {
+      // 그 pane 만 건너뛴다 — 다음 주기가 다시 본다
+    }
+  }
+  dirtyPanes.clear()
+  return panes
+}
+
+/** 스크롤 주기 저장 — 렌더러 충돌 · 강제 종료 때 잃는 것을 이만큼으로 줄인다 */
+const SCROLLBACK_SAVE_MS = 30_000
 
 const newId = () => crypto.randomUUID()
 
@@ -215,6 +243,50 @@ export function App() {
       }),
     [],
   )
+  // ─── 13단계: 스크롤 저장 · 작업 폴더 ───
+  // 저장은 상태를 읽은 뒤에만 — 빈 상태의 live=[] 가 저장된 스크롤을 모두 지우지 않게
+  const scrollReady = load.phase === 'ready'
+  const restoreOn = state.settings.restoreScrollback
+  useEffect(() => {
+    if (!scrollReady) return
+    const live = () => stateRef.current.tasks.flatMap((t) => Object.keys(t.panes))
+    if (!restoreOn) {
+      // 끄면 저장된 것을 모두 지운다(디스크에 터미널 출력을 남기지 않게)
+      window.taskminal.scrollback.save({ live: [], panes: {} })
+      return
+    }
+    const timer = setInterval(() => {
+      if (dirtyPanes.size > 0) window.taskminal.scrollback.save({ live: live(), panes: collectScrollback(false) })
+    }, SCROLLBACK_SAVE_MS)
+    // 앱 종료 · 창 닫기 · 새로 고침: 페이지가 내려가기 전에 동기로 — main 이 다 쓴 뒤에 페이지가 사라진다
+    const flush = () => window.taskminal.scrollback.saveNow({ live: live(), panes: collectScrollback(true) })
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('beforeunload', flush)
+    }
+  }, [scrollReady, restoreOn])
+  // 셸 통합(OSC 7)이 없는 셸의 폴더는 lsof 로 — 마운트된 pane 중 OSC 7 을 한 번도 보내지 않은 것만
+  useEffect(() => {
+    if (!scrollReady) return
+    let alive = true
+    const timer = setInterval(() => {
+      const ids = [...terminals.keys()].filter((id) => !osc7Panes.has(id))
+      if (ids.length === 0) return
+      void window.taskminal.pty.cwds(ids).then(
+        (found) => {
+          if (!alive) return
+          for (const [paneId, cwd] of Object.entries(found)) if (!osc7Panes.has(paneId)) dispatch({ type: 'pane/cwd', paneId, cwd })
+        },
+        () => {},
+      )
+    }, runtime.cwdPollMs)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [scrollReady])
+
   // 보는 pane 이 바뀌면(일감 · 탭 · pane 이동, 창으로 돌아옴) 그 pane 의 확인 필요를 끈다
   useEffect(() => {
     if (viewedPane) updateActivityRef.current(viewedPane, { type: 'viewed' })
@@ -549,6 +621,7 @@ export function App() {
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
                           onStartSent={(paneId) => dispatch({ type: 'pane/command-sent', paneId })}
+                          onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd })}
                           onDragEnd={refocus}
                         />
                       )}

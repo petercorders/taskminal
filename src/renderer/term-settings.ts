@@ -17,6 +17,8 @@ export interface TermSettings {
   /** 띄울 때만 쓰는 값 — 바꾸면 새 터미널부터 */
   shell: string | null
   integration: boolean
+  /** 띄울 때 이전 출력을 되살리기 */
+  restoreScrollback: boolean
 }
 
 export function termSettings(s: Settings, theme: 'dark' | 'light'): TermSettings {
@@ -33,6 +35,7 @@ export function termSettings(s: Settings, theme: 'dark' | 'light'): TermSettings
     accent: s.accent,
     shell: s.shell,
     integration: s.shellIntegration,
+    restoreScrollback: s.restoreScrollback,
   }
 }
 

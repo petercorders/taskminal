@@ -348,6 +348,12 @@ export function SettingsView({ state, shortcuts, dispatch, newId, onClose }: Pro
             />
           }
         />
+        <Row
+          title="스크롤 되살리기"
+          desc="다시 열 때 이전 출력을 보여 줘요. 터미널 출력을 디스크에 저장해요(비밀번호 등이 남을 수 있어요) — 끄면 저장한 것을 모두 지워요"
+          keywords="복원 재시작 scrollback restore 이전 세션"
+          control={<Switch label="스크롤 되살리기" checked={s.restoreScrollback} onChange={(v) => patch({ restoreScrollback: v })} />}
+        />
         <Row title="커서" keywords="막대 블록 밑줄 cursor">
           <Choices
             label="커서 모양"

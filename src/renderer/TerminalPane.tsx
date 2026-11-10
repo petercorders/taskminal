@@ -1,11 +1,15 @@
 import { FitAddon } from '@xterm/addon-fit'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef } from 'react'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
+import { parseOsc7 } from '../shared/cwd'
 import { cleanExit, splitForWrite } from '../shared/pty'
+import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
+import { dirtyPanes, osc7Panes, restoredPanes, runtime } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -25,6 +29,8 @@ interface Props {
   startCommand?: string | undefined
   /** 시작 명령을 보냈다 — 저장된 pendingCommand 를 지워 다시 돌지 않게 */
   onStartSent?(): void
+  /** 셸이 OSC 7 로 알려 준 지금 폴더 (셸 안의 cd) */
+  onCwd?(cwd: string): void
 }
 
 /** 셸 통합이 꺼져 있거나 첫 프롬프트 신호가 오지 않을 때 시작 명령을 보내는 시각 */
@@ -49,7 +55,7 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent }: Props) {
+export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
@@ -61,6 +67,11 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
   // 셸을 띄울 때의 설정 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  // 폴더는 셸을 띄울 때만 쓴다 — effect 의존성에 넣으면 cd(OSC 7 → pane.cwd)마다 터미널이 통째로 다시 만들어진다
+  const cwdRef = useRef(cwd)
+  cwdRef.current = cwd
+  const onCwdRef = useRef(onCwd)
+  onCwdRef.current = onCwd
   const refitRef = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -81,6 +92,8 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.loadAddon(new Unicode11Addon())
+    const serializer = new SerializeAddon()
+    term.loadAddon(serializer)
     term.unicode.activeVersion = '11'
     term.open(host)
 
@@ -111,6 +124,15 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
       term.parser.registerOscHandler(9, (data) => emit(parseNotifyOsc(9, data))),
       term.parser.registerOscHandler(777, (data) => emit(parseNotifyOsc(777, data))),
       term.onBell(() => onActivityRef.current({ type: 'bell' })),
+      // 지금 폴더 — 다른 호스트(ssh 안의 셸)가 보낸 것은 버린다
+      term.parser.registerOscHandler(7, (data) => {
+        const path = parseOsc7(data, runtime.host)
+        if (path) {
+          osc7Panes.add(paneId)
+          onCwdRef.current?.(path)
+        }
+        return true
+      }),
     ]
 
     let size = { cols: 0, rows: 0 }
@@ -124,7 +146,9 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     }
 
     const offData = pty.onData((id, data) => {
-      if (id === paneId) term.write(data)
+      if (id !== paneId) return
+      term.write(data)
+      dirtyPanes.add(paneId)
     })
     // 깨끗하게 끝나면(exit 0) App 이 pane 을 바로 닫는다. 아니면 이유를 보여 주고 다음 키에 닫는다.
     let ended = false
@@ -148,16 +172,34 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
 
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
     fitNow()
-    pty.spawn(paneId, { cwd, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
-      () => {
-        // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
-        if (disposed || !startRef.current.command) return
-        startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
-      },
-      (error: unknown) => {
-        term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
-      },
-    )
+    const spawn = () => {
+      if (disposed) return
+      pty.spawn(paneId, { cwd: cwdRef.current, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
+        () => {
+          // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
+          if (disposed || !startRef.current.command) return
+          startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
+        },
+        (error: unknown) => {
+          term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
+        },
+      )
+    }
+    // 이전 출력 되살리기 — 셸보다 먼저 쓰고, 이번 실행에서 pane 당 한 번. 되살린 글에는 OSC 가 없어 시작 명령 · 활동 신호가 돌지 않는다.
+    // 읽기 실패 · 깨진 파일이면 되살리지 않고 셸만 띄운다.
+    if (s.restoreScrollback && !restoredPanes.has(paneId)) {
+      window.taskminal.scrollback.load(paneId).then(
+        (saved) => {
+          if (disposed) return // 다시 마운트된 쪽이 되살린다
+          restoredPanes.add(paneId)
+          if (saved && saved.text) term.write(saved.text + restoreBanner(saved.savedAt))
+          spawn()
+        },
+        () => spawn(),
+      )
+    } else {
+      spawn()
+    }
 
     // 창 가장자리를 끄는 동안 프레임마다 SIGWINCH 를 보내지 않게, 한 프레임에 한 번만 맞춘다.
     const refit = () => {
@@ -176,6 +218,8 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
     refitRef.current = refit
     terminals.set(paneId, {
       clear: () => term.clear(),
+      // 전체 화면 프로그램(vim · less · Claude)의 화면 · 커서 모드는 빼고 일반 화면만
+      serialize: () => serializer.serialize({ scrollback: saveLines(settingsRef.current.scrollback), excludeAltBuffer: true, excludeModes: true }),
       search: (query, limit) => {
         const q = query.toLowerCase()
         const lines = logicalLines(term)
@@ -217,7 +261,7 @@ export function TerminalPane({ paneId, cwd, active, focusSignal, settings, onClo
       termRef.current = null
       term.dispose()
     }
-  }, [paneId, cwd])
+  }, [paneId])
 
   // 설정이 바뀌면 바로. 글꼴 · 크기 · 줄 간격은 칸 수를 바꾼다 → 셸에도 새 크기를 알린다 (숨은 pane 은 다시 보일 때 ResizeObserver 가 맞춘다)
   useEffect(() => {

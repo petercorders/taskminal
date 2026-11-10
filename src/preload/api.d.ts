@@ -1,5 +1,5 @@
 // renderer 가 보는 preload API 타입 (window.taskminal). 구현은 preload/index.ts.
-import type { AppInfo, LoadedState, PtyExit, PtySpawnOptions } from '../shared/ipc'
+import type { AppInfo, LoadedState, PtyExit, PtySpawnOptions, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
 import type { AppState } from '../shared/types'
 
 export interface PtyApi {
@@ -11,6 +11,17 @@ export interface PtyApi {
   /** 구독 해제 함수를 돌려준다. */
   onData(listener: (paneId: string, data: string) => void): () => void
   onExit(listener: (paneId: string, exit: PtyExit) => void): () => void
+  /** 셸 통합이 없는 셸의 작업 폴더(lsof) — 이 창의 pane 만, 모르면 빠진다 */
+  cwds(paneIds: string[]): Promise<Record<string, string>>
+}
+
+export interface ScrollbackApi {
+  /** 저장해 둔 이전 출력 (없거나 못 읽으면 null) */
+  load(paneId: string): Promise<ScrollbackEntry | null>
+  /** 주기 저장 — 바뀐 pane 만. live 밖의 파일은 main 이 지운다 */
+  save(req: ScrollbackSave): void
+  /** 페이지가 내려갈 때 — main 이 다 쓴 뒤 돌아온다(동기) */
+  saveNow(req: ScrollbackSave): void
 }
 
 export interface StateApi {
@@ -36,6 +47,7 @@ export interface TaskminalApi {
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi
+  scrollback: ScrollbackApi
   state: StateApi
 }
 

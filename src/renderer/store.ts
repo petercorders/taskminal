@@ -26,6 +26,7 @@ import {
   replaceTemplate,
   selectTab,
   selectTabAt,
+  setPaneCwd,
   setTabRatio,
   splitActivePane,
   toggleGroup,
@@ -76,6 +77,8 @@ export type Action =
   /** 템플릿 시작 명령을 셸에 보냈다 → 다시 돌지 않게 */
   | { type: 'pane/command-sent'; paneId: Id }
   | { type: 'task/edit'; id: Id; patch: TaskEdit }
+  /** 셸 안의 cd — OSC 7 · lsof 가 알려 준 폴더 */
+  | { type: 'pane/cwd'; paneId: Id; cwd: string }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
 function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
@@ -182,6 +185,10 @@ export function reducer(state: AppState, action: Action): AppState {
           return id
         }),
       )
+    }
+    case 'pane/cwd': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => setPaneCwd(t, action.paneId, action.cwd)) : state
     }
     case 'pane/command-sent': {
       const taskId = findPaneTask(state, action.paneId)

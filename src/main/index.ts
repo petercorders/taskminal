@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
@@ -9,7 +10,9 @@ import { isAccel, isAppCommand } from '../shared/keymap'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState } from '../shared/types'
 import { installAppMenu } from './menu'
+import { lsofCwds } from './cwd-probe'
 import { PtyManager } from './pty-manager'
+import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
@@ -62,6 +65,14 @@ async function confirmEnd(win: BrowserWindow | null, what: '끝내기' | '닫기
 }
 
 const MAX_STATE_BYTES = 5 * 1024 * 1024
+// 스크롤 저장 — userData 가 정해진 뒤(ready 이후 첫 요청) 만든다
+let scrollbackStore: ScrollbackStore | null = null
+const scrollback = () => (scrollbackStore ??= new ScrollbackStore(join(app.getPath('userData'), 'scrollback')))
+const MAX_LIVE_PANES = 2000
+const cwdPollMs = ((): number => {
+  const v = Number(process.env['TASKMINAL_CWD_POLL_MS'])
+  return Number.isInteger(v) && v >= 100 ? v : 15_000
+})()
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
 // 디바운스가 main 에 있어서 창 닫기 · 새로 고침 · 렌더러 충돌 뒤에도 이미 받은 값은 타이머가 쓴다.
 const stateWriter = new Debouncer<AppState>(
@@ -202,7 +213,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), cwdPollMs }
   })
 
   ipcMain.handle(IPC.ptySpawn, (event, paneId: unknown, opts: unknown) => {
@@ -251,6 +262,37 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (bytes > MAX_STATE_BYTES) return
     stateWriter.push(normalizeState(raw, randomUUID))
+  })
+
+  // 스크롤 저장 — renderer 를 믿지 않는다: paneId 검사 · pane 당 바이트 상한은 ScrollbackStore, live 수 상한은 여기
+  ipcMain.handle(IPC.scrollbackLoad, (event, paneId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return scrollback().load(paneId)
+  })
+  const saveScrollback = (raw: unknown): void => {
+    const r = (raw ?? {}) as Record<string, unknown>
+    if (!Array.isArray(r['live']) || r['live'].length > MAX_LIVE_PANES) return
+    const error = scrollback().save({ live: r['live'], panes: r['panes'] })
+    if (error) console.error('스크롤을 저장하지 못함', error) // 덤이라 알림은 띄우지 않는다 — 다음 주기가 다시 쓴다
+  }
+  ipcMain.on(IPC.scrollbackSave, (event, raw: unknown) => {
+    if (fromOurWindow(event)) saveScrollback(raw)
+  })
+  ipcMain.on(IPC.scrollbackSaveSync, (event, raw: unknown) => {
+    try {
+      if (fromOurWindow(event)) saveScrollback(raw)
+    } finally {
+      event.returnValue = true // 돌려주지 않으면 renderer 가 멈춘다
+    }
+  })
+  ipcMain.handle(IPC.ptyCwds, async (event, paneIds: unknown): Promise<Record<string, string>> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return {}
+    const pids = ptys.pids(event.sender, paneIds.filter(isPaneId))
+    const cwds = await lsofCwds(Object.values(pids))
+    const out: Record<string, string> = {}
+    for (const [paneId, pid] of Object.entries(pids)) if (cwds[pid]) out[paneId] = cwds[pid]
+    return out
   })
 
   ipcMain.handle(IPC.pickFolder, async (event): Promise<string | null> => {

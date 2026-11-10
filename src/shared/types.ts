@@ -114,6 +114,8 @@ export interface Settings {
   sidebarDensity: SidebarDensity
   // 터미널
   shellIntegration: boolean
+  /** 다시 열 때 이전 출력을 보여 주기 (pane 마다 디스크에 저장) */
+  restoreScrollback: boolean
   scrollback: number
   cursorStyle: CursorStyle
   cursorBlink: boolean

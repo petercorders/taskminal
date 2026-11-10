@@ -21,6 +21,7 @@ import {
   selectTabAt,
   setTabRatio,
   splitActivePane,
+  setPaneCwd,
   tabLabel,
   taskToTemplate,
 } from '../../src/shared/model'
@@ -586,5 +587,32 @@ describe('selectTabAt · cycleTab · cycleActivePane (단축키)', () => {
     expect(cycleActivePane(cycleActivePane(cycleActivePane(t, 1), 1), 1).tabs[0].activePaneId).toBe(p1)
     const log = selectTabAt(t, 2) // 로그 탭은 pane 하나
     expect(cycleActivePane(log, 1)).toBe(log)
+  })
+})
+
+describe('setPaneCwd (13단계 — 셸 안의 cd 를 따라감)', () => {
+  test('바뀐 폴더를 pane 에 적고, 이름 없는 탭의 이름이 따라간다', () => {
+    const t = renameTab(flutterTask(), flutterTask().tabs[1].id, '')
+    const pid = t.tabs[1].activePaneId
+    const u = setPaneCwd(t, pid, '/tmp/한글 폴더')
+    expect(u.panes[pid]!.cwd).toBe('/tmp/한글 폴더')
+    expect(tabLabel(u, u.tabs[1])).toBe('한글 폴더')
+    expect(u.panes).not.toBe(t.panes)
+  })
+
+  test('같은 폴더 · 없는 pane · 빈 경로는 같은 객체 (저장하지 않게)', () => {
+    const t = flutterTask()
+    const pid = t.tabs[0].activePaneId
+    expect(setPaneCwd(t, pid, t.panes[pid]!.cwd)).toBe(t)
+    expect(setPaneCwd(t, 'ghost', '/tmp')).toBe(t)
+    expect(setPaneCwd(t, pid, '')).toBe(t)
+  })
+
+  test('시작 명령 · 원래 명령 칸은 그대로 둔다', () => {
+    const t = flutterTask()
+    const pid = t.tabs[0].activePaneId
+    const before = t.panes[pid]!
+    const u = setPaneCwd(t, pid, '/tmp')
+    expect(u.panes[pid]).toEqual({ ...before, cwd: '/tmp' })
   })
 })

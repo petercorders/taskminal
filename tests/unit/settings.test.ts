@@ -21,6 +21,7 @@ describe('설정 기본값', () => {
       dimOpacity: 0.62,
       sidebarDensity: 'two',
       shellIntegration: true,
+      restoreScrollback: true,
       scrollback: 5000,
       cursorStyle: 'bar',
       cursorBlink: true,
@@ -40,6 +41,12 @@ describe('설정 기본값', () => {
     expect(s.fontSize).toBe(14)
     expect(s.theme).toBe('dark')
     expect(s.notify).toEqual(defaultSettings().notify)
+    expect(s.restoreScrollback).toBe(true)
+  })
+
+  it('스크롤 되살리기: 끈 값은 남고, 불리언이 아니면 기본(켬)', () => {
+    expect(load({ restoreScrollback: false }).restoreScrollback).toBe(false)
+    expect(load({ restoreScrollback: 'no' }).restoreScrollback).toBe(true)
   })
 })
 

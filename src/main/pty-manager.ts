@@ -104,6 +104,16 @@ export class PtyManager {
     for (const paneId of [...this.sessions.keys()]) this.end(paneId, false)
   }
 
+  /** 그 창의 셸 pid — lsof 로 작업 폴더를 물을 때 (요청한 pane 중 그 창의 것만) */
+  pids(owner: WebContents, paneIds: readonly string[]): Record<string, number> {
+    const out: Record<string, number> = {}
+    for (const id of paneIds) {
+      const s = this.owned(owner, id)
+      if (s) out[id] = s.pty.pid
+    }
+    return out
+  }
+
   private owned(owner: WebContents, paneId: string): Session | undefined {
     const s = this.sessions.get(paneId)
     return s && s.owner === owner ? s : undefined

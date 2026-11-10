@@ -18,6 +18,10 @@ export const IPC = {
   badge: 'app:badge', // send: Dock 배지 수 (0 = 지움)
   beep: 'app:beep', // send: 알림 소리만
   menuKeys: 'menu:keys', // send: 바꾼 단축키 (settings.keys) → 메뉴 표시를 다시 만든다
+  scrollbackLoad: 'scrollback:load', // invoke(paneId) → { text, savedAt } | null
+  scrollbackSave: 'scrollback:save', // send: 주기 저장 { live, panes }
+  scrollbackSaveSync: 'scrollback:save-sync', // sendSync: 페이지가 내려갈 때(앱 종료 · 창 닫기 · 새로 고침) — main 이 다 쓴 뒤 돌아온다
+  ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
 } as const
 
 export interface AppInfo {
@@ -25,6 +29,23 @@ export interface AppInfo {
   version: string
   /** 설정에서 고를 수 있는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 연다 */
   shells: string[]
+  /** 이 Mac 이름 — OSC 7 의 호스트가 이것 · localhost · 빈 값일 때만 폴더로 받는다 */
+  host: string
+  /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 (시험은 TASKMINAL_CWD_POLL_MS 로 줄인다) */
+  cwdPollMs: number
+}
+
+export interface ScrollbackEntry {
+  text: string
+  /** 저장한 시각 (ms) — '이전 세션' 줄에 보인다 */
+  savedAt: number
+}
+
+export interface ScrollbackSave {
+  /** 상태에 있는 모든 pane id — main 이 이 밖의 파일을 지운다 */
+  live: string[]
+  /** 이번에 바뀐 pane 의 글 */
+  panes: Record<string, string>
 }
 
 export interface PtySpawnOptions {

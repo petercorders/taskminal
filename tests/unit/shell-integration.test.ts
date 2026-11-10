@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { unescapeCommand } from '../../src/shared/activity'
+import { parseOsc7 } from '../../src/shared/cwd'
 
 const dir = resolve(__dirname, '../../resources/shell/zsh')
 let home: string
@@ -45,5 +46,18 @@ describe('zsh 셸 통합', () => {
     expect(m, JSON.stringify(out)).not.toBeNull()
     expect(m![1]).not.toMatch(/[\x00-\x1f\x7f;]/)
     expect(unescapeCommand(m![1]!)).toBe(command)
+  })
+
+  it('프롬프트마다 OSC 7 로 지금 폴더를 알리고, 한글 · 공백 · % · ; 폴더도 parseOsc7 이 원래 경로로 되돌린다 (13단계)', () => {
+    const folder = join(home, '한글 폴더;a%b')
+    mkdirSync(folder)
+    const out = execFileSync('/bin/zsh', ['-f', '-c', `source ${dir}/taskminal-hooks.zsh; cd "$1"; __taskminal_precmd`, 'x', folder], {
+      encoding: 'utf8',
+      env: { PATH: '/usr/bin:/bin', HOST: 'my-mac', LANG: 'ko_KR.UTF-8' },
+    })
+    const m = out.match(/\x1b\]7;([^\x07]*)\x07/)
+    expect(m, JSON.stringify(out)).not.toBeNull()
+    expect(m![1]).not.toMatch(/[\x00-\x1f\x7f; ]/)
+    expect(parseOsc7(m![1]!, 'my-mac')).toBe(folder)
   })
 })

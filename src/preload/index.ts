@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, type AppInfo, type LoadedState, type PtyExit } from '../shared/ipc'
+import { IPC, type AppInfo, type LoadedState, type PtyExit, type ScrollbackEntry } from '../shared/ipc'
 import type { TaskminalApi } from './api'
 
 // renderer 에 여는 유일한 통로. ipcRenderer 자체나 채널 이름을 받는 함수는 열지 않는다.
@@ -25,6 +25,14 @@ const api: TaskminalApi = {
     kill: (paneId) => ipcRenderer.send(IPC.ptyKill, paneId),
     onData: (listener) => subscribe<[string, string]>(IPC.ptyData, listener),
     onExit: (listener) => subscribe<[string, PtyExit]>(IPC.ptyExit, listener),
+    cwds: (paneIds) => ipcRenderer.invoke(IPC.ptyCwds, paneIds) as Promise<Record<string, string>>,
+  },
+  scrollback: {
+    load: (paneId) => ipcRenderer.invoke(IPC.scrollbackLoad, paneId) as Promise<ScrollbackEntry | null>,
+    save: (req) => ipcRenderer.send(IPC.scrollbackSave, req),
+    saveNow: (req) => {
+      ipcRenderer.sendSync(IPC.scrollbackSaveSync, req)
+    },
   },
   state: {
     load: () => ipcRenderer.invoke(IPC.stateLoad) as Promise<LoadedState>,

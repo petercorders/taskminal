@@ -304,6 +304,13 @@ export function splitActivePane(task: Task, dir: SplitDir, newId: NewId): Task {
   }
 }
 
+/** 셸 안의 cd (OSC 7 · lsof) — 복원할 때 그 폴더에서 셸을 연다. 같은 폴더 · 없는 pane · 빈 경로면 같은 객체(저장하지 않게). */
+export function setPaneCwd(task: Task, paneId: Id, cwd: string): Task {
+  const p = task.panes[paneId]
+  if (!p || !cwd || p.cwd === cwd) return task
+  return { ...task, panes: { ...task.panes, [paneId]: { ...p, cwd } } }
+}
+
 /** 시작 명령을 셸에 보냈다 — 다시 보내지 않게 pendingCommand 만 지운다. */
 export function markCommandSent(task: Task, paneId: Id): Task {
   const p = task.panes[paneId]
