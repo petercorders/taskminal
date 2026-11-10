@@ -395,7 +395,7 @@ export function App() {
   const term = useMemo(
     () => termSettings(settings, theme),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.accent, settings.shell, settings.shellIntegration, theme],
+    [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.accent, settings.shell, settings.shellIntegration, settings.restoreScrollback, theme],
   )
   const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
 
