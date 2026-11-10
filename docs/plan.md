@@ -50,6 +50,28 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 14 | 패키징 · 설치 | electron-builder .app(arm64) · asarUnpack(node-pty) · 앱 아이콘 · /Applications 설치 · Finder 실행 시 PATH/LANG | 설치한 .app 을 Finder 에서 실행해 셸 · `which node` · 한글 확인 (**패키지 정적 검사까지 · 실행 미확인**(사용자 지시 2026-11-10) — 돌려야 할 목록은 `docs/stages/14-package.md` 결과 절. 완료: `npm run package` = 빌드 → electron-builder(dir · arm64 · ad-hoc 서명) → `scripts/check-package.mjs`(번들 id · 이름 · 아이콘 · asar 진입점 · node-pty 가 찾는 곳의 pty.node · spawn-helper 0755 · 셸 통합 점 파일과 목록 밖 파일 · arm64 · codesign) · 아이콘 `scripts/build-icon.sh` · 개발 Dock 아이콘. /Applications 설치는 사용자 확인 대상. 남은 것: asarUnpack 축소(실행 확인과 함께)) |
 | 15 | 다듬기 (v1 뒤 후보) | 보이는 pane 만 WebGL · ⌘F 검색 · 명령 끝 macOS 알림 · git worktree 일감 · 링크 열기 · 일감 브랜치 표시 | 단계마다 따로 계획 (**단위까지 확인 · e2e 미실행**(사용자 지시 2026-11-10) — 항목별 `docs/stages/15a-…` ~ `15f-…` 결과 절의 돌려야 할 목록. 완료: 15a 명령 끝 알림은 11단계로 닫음(문서) · 15b ⌘+클릭 링크(http(s) 만) · 15c 사이드바 브랜치(.git/HEAD 읽기, git 실행 안 함) · 15d ⌘F 찾기 막대 · 15e 보이는 pane 만 WebGL(상한 8 · 잃으면 다시 · 시험은 DOM) · 15f 새 일감을 git worktree 에서. 남은 것: 찾기 막대가 열린 동안 출력마다 다시 찾는 addon 동작 · reftable 저장소는 브랜치 대신 폴더) |
 
+## 1차 출시까지 — 16~25단계 (2026-11-11 기획 · 캔버스 보드 13개 · UX 독립 채점 80점 이상 · 보드의 '정할 것' 추천안 모두 채택 — 사용자 "전부 추천안으로")
+
+전제(16단계 전에): 브랜치 `stage-15-e2e-fix` 의 e2e 고침을 전체 검사로 확인 → main 병합 · 13·14·15단계 e2e 와 .app 실행 확인(지금 '미확인').
+순서 원칙: ① 구조를 바꾸는 것 먼저(셸 지킴이) ② 데이터를 남기는 기능보다 데이터 안전(백업 · 가리기)을 먼저 ③ 자동 업데이트는 셸 지킴이 뒤 ④ 대화는 Claude → Codex → 지휘 순 ⑤ 단계마다 첫 순서는 보드의 '미확인 → 스파이크'.
+보드: https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d (1차 출시 구역 · 대화 보드)
+
+| # | 단계 | 범위 (보드) | 앞 단계 | 먼저 할 스파이크 | verify |
+|---|---|---|---|---|---|
+| 16 | 셸 지킴이 | pty 를 앱 밖 상주 프로세스(ELECTRON_RUN_AS_NODE)로 · `<userData>/ptyhost.sock`(0600) · @xterm/headless 로 화면 유지 · ⌘Q 앱만 / ⌥⌘Q 모두 · 연결 안 됨 · 주인 없는 셸 목록 · 메모리 경고 (Persist) | 전제 | detached 자식이 앱 종료 · 업데이트 뒤 사는지, 그 안 node-pty, headless 메모리, 바뀐 .app 파일 | e2e: 셸에서 `sleep 600` → 앱 종료 · 재실행 → 같은 pid 로 다시 붙고 출력 이어짐 · ⌥⌘Q 뒤 고아 셸 0 · 지킴이 죽이면 13단계 복원으로 내려감 |
+| 17 | 데이터 안전 | 상태 자동 백업 · 되돌리기 · 손상 자동 복구 · 내보내기/가져오기 (Backup) + 출력 속 비밀값 가리기 `redact()` — 디스크로 가는 모든 길 · 화면 가림 · 가리지 않기로 한 값 (Secrets) | 16 | 백업 크기 · 복사 시간, decoration 위치(WebGL · 줄바꿈), 2MB 정규식 시간 | 단위(redact 모양 · 보존 규칙) + e2e: 일감 지우기 → 되돌리기로 복원 · 깨진 state.json 으로 시작 → 마지막 정상본 · `echo sk-ant-…` 뒤 scrollback 파일에 원문 없음 |
+| 18 | 출시 기본기 | Developer ID 서명 · 공증 · dmg+zip · electron-updater(NAS 정적 폴더) · 메뉴 '업데이트 확인…' · 오류 기록 창 · crashReporter(이 Mac) · 첫 실행 안내 3장 (Release) | 16 (업데이트가 셸을 끊지 않게) | **Apple Developer 계정(사용자 확인)**, hardened runtime 에서 spawn-helper · 지킴이, Squirrel.Mac | 다른 계정/새 Mac 에서 dmg 설치 경고 없음(`spctl -a`) · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지 · 첫 실행 3장 e2e |
+| 19 | 기록과 찾기 | 명령 기록 ⌘Y(OSC 133/6973 → `<userData>/history/*.jsonl`, redact 뒤) (History) + 모든 출력 찾기 ⇧⌘F(숨은 pane 버퍼 · 범위 · 상한 300 · 진행) (GlobalFind) | 17 | 안 연 탭 pane 의 버퍼 유무, 60 pane × 5000줄 훑는 시간 | 단위 + e2e: 두 일감에서 명령 → ⌘Y 에 일감별로 · 실패 거르기 · ⇧⌘F 결과 클릭 → 그 pane 그 줄 |
+| 20 | 매일 쓰는 작은 것 | 빠른 명령(Task/Template.quickCommands · ⌥1~9 · ⌘P '빠른 명령' · 입력줄에 넣기) (QuickCmd) + 포트 감지(lsof LISTEN · 탭/사이드바/전체 보기 칩 · 겹침 알림 · 끄기 확인) (Ports) | 19 (위험 명령 표 공유) | 자식 pid 모으기 · lsof 비용, ⌥숫자와 한글 입력 | e2e: 단추로 명령 실행 · ✓/✗ 표시 · `python3 -m http.server 8123` → 칩 · 클릭 시 openExternal 호출 |
+| 21 | 대화 1 — Claude + 사이드바 개편 | 사이드바 개편(`docs/design-gaps.md` 4 — 상태 흐름 보기, 추천안대로 이 단계와 함께) · pane 종류 '대화' · 공통 이벤트 모양 · Claude 어댑터(stream-json · --permission-prompt-tool 허락 카드 · 질문 카드) · session_id 저장 → 이어 하기 · 터미널(TUI) 전환 · 허락 방식(처음 '확인', 바꾸면 유지) · 상태/사용량 이벤트 · 빈/실패/로그인/한도 (Chat) | 16 · 17(redact) | 허락 도구 · AskUserQuestion 이 구조화 모드에서 오는 모양 | 단위(이벤트 변환) + e2e(가짜 claude 실행 파일로): 글 · 도구 줄 · 허락 카드 ↩/Esc · 재시작 뒤 같은 세션 · 허락 방식이 재시작 뒤 유지 |
+| 22 | 대화 2 — Codex · 확장 | Codex 어댑터(app-server JSON-RPC · 승인) · 이미지 붙이기 · 되감기 · 여기서 새 대화로 나누기 · 대기열 · 지금 보내기 (Chat) | 21 | Codex app-server 승인 · 이미지 · 갈래 지원 | e2e(가짜 codex): 같은 카드로 승인 · 이미지 첨부가 메시지에 실림 · 되감기 뒤 이후 메시지 사라짐 |
+| 23 | 변경 검토 | pane 종류 '변경' · 파일별 diff · 줄 골라 되돌리기(+⌘Z · 되돌린 것 7일) · 체크한 파일만 커밋 · 커밋 전 검사 실패 · 대화 diff 카드 · 전체 보기 '± 변경' 칩에서 들어옴 (Review) | 21 | fs.watch 비용, 줄 단위 역패치 정확성, 서명 · 훅이 창 없이 물을 때 | e2e(임시 git 저장소): 줄 되돌리기 → 파일 내용 · ⌘Z 로 복구 · 커밋 뒤 `git log` · 훅 실패 표시 |
+| 24 | 지휘와 이어받기 | CLI 소켓 기본(`taskminal` 명령 · task/pane/notify — CLI 보드) + chat new/send/wait/read → 여러 에이전트 지휘 (Chat) + 이어받기 요약 · 일감 메모 · `taskminal task note` (Resume) | 21 · 22 · 19 | TUI 에이전트 '마지막 말' 얻기(OSC 9), 소켓 권한 | e2e: CLI 로 대화 2개 띄우고 wait · 30분 지난 일감 열면 요약 카드 맨 위 '확인 필요' |
+| 25 | 보관 · 원격 | 보관함(⌥⌘A · 셸만 끄고 남김 · 최근 지운 것 30일) · 주간 정리 (Archive) + SSH 원격 일감(Task.host · 호스트 키 확인 · ControlMaster · tmux 이어 붙기) (Remote) | 17 · 19 | 일감별 AI 토큰 원천, SSH_AUTH_SOCK(Finder 실행) · Synology tmux | e2e: 보관 → 셸 종료 · 되살리기 → 탭 · 메모 복원 · 로컬 sshd(또는 가짜 ssh)로 원격 pane · 끊김 → 다시 붙기 |
+
+함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 나머지 디자인 맞추기(design-gaps 1 · 2 · 3 · 5 — 전체 보기 · AI 사용량 등)는 사용자와 따로 단계로 나눈다.
+크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
+
 ## 단계 사이 규칙
 - 단계 하나 = 커밋 하나 이상, 단계 끝에 `npm run typecheck && npx vitest run && npm run e2e` 를 한 번에.
 - 화면이 바뀐 단계는 e2e 스크린샷을 직접 열어 본다.
