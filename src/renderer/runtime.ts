@@ -12,8 +12,8 @@ export const runtime = {
   renderer: 'dom' as RendererMode,
 }
 
-/** 지금 WebGL 로 그리는 pane 수 · pane 마다 WebGL 실패 수 (15e) */
-export const webgl = { inUse: 0, failures: new Map<string, number>() }
+/** 지금 WebGL 로 그리는 pane 수 · pane 마다 WebGL 실패 수 · 상한에 걸려 자리를 기다리는 pane 의 다시 해 보기 (15e) */
+export const webgl = { inUse: 0, failures: new Map<string, number>(), waiting: new Set<() => void>() }
 
 /** OSC 7 을 한 번이라도 보낸 pane — lsof 로 묻지 않는다 */
 export const osc7Panes = new Set<string>()

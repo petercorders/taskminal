@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_WEBGL, MAX_WEBGL_FAILURES, wantWebgl } from '../../src/shared/renderer'
+import { MAX_WEBGL, MAX_WEBGL_FAILURES, wantWebgl, webglBlock } from '../../src/shared/renderer'
 
 // 15e: 보이는 pane 만 WebGL — 창당 컨텍스트 한도 · 실패 되풀이 막기
 const base = { mode: 'webgl' as const, visible: true, inUse: 0, failures: 0 }
@@ -21,5 +21,15 @@ describe('wantWebgl', () => {
   it(`실패가 ${MAX_WEBGL_FAILURES}번이면 다시 시도하지 않는다`, () => {
     expect(wantWebgl({ ...base, failures: MAX_WEBGL_FAILURES - 1 })).toBe(true)
     expect(wantWebgl({ ...base, failures: MAX_WEBGL_FAILURES })).toBe(false)
+  })
+})
+
+describe('webglBlock (15e 리뷰)', () => {
+  it('이유: 상한이면 cap(자리가 나면 다시) · 실패 · 숨음 · 모드', () => {
+    expect(webglBlock({ ...base, inUse: MAX_WEBGL })).toBe('cap')
+    expect(webglBlock({ ...base, failures: MAX_WEBGL_FAILURES, inUse: MAX_WEBGL })).toBe('failed')
+    expect(webglBlock({ ...base, visible: false })).toBe('hidden')
+    expect(webglBlock({ ...base, mode: 'dom' })).toBe('mode')
+    expect(webglBlock(base)).toBeNull()
   })
 })

@@ -6,12 +6,12 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
-import { wantWebgl } from '../shared/renderer'
+import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
 import { dirtyPanes, findingPanes, osc7Panes, restoredPanes, runtime, webgl } from './runtime'
@@ -299,6 +299,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       offData()
       offExit()
       terminals.delete(paneId)
+      webgl.failures.delete(paneId) // 닫힌 pane 의 실패 수는 남기지 않는다
       refitRef.current = () => {}
       termRef.current = null
       term.dispose()
@@ -336,41 +337,65 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
 
   // 보이는 동안만 WebGL (15e) — 숨으면 놓아 창당 컨텍스트 한도를 넘지 않게. 실패하면 DOM 으로 남는다.
   // term 이 새로 만들어지면(paneId) 다시 판단. 정리(숨음 · 해제)에서 놓고 수를 줄인다.
+  // glTry: 컨텍스트를 잃은 뒤 · 상한으로 기다리다 자리가 났을 때 다시 판단 (15e 리뷰)
+  const [glTry, setGlTry] = useState(0)
   useEffect(() => {
     const term = termRef.current
     const host = hostRef.current
     if (!term || !host) return
     host.dataset['renderer'] = 'dom'
+    const retry = () => setGlTry((n) => n + 1)
     const fail = () => webgl.failures.set(paneId, (webgl.failures.get(paneId) ?? 0) + 1)
-    if (!wantWebgl({ mode: runtime.renderer, visible, inUse: webgl.inUse, failures: webgl.failures.get(paneId) ?? 0 })) return
+    const block = webglBlock({ mode: runtime.renderer, visible, inUse: webgl.inUse, failures: webgl.failures.get(paneId) ?? 0 })
+    if (block === 'cap') {
+      webgl.waiting.add(retry) // 다른 pane 이 놓으면 다시
+      return () => void webgl.waiting.delete(retry)
+    }
+    if (block) return
     let addon: WebglAddon | null = null
     const release = () => {
       if (!addon) return
       const a = addon
-      addon = null
+      addon = null // 아래 loseContext 가 부르는 onContextLoss 를 실패로 세지 않게 먼저
       webgl.inUse--
       host.dataset['renderer'] = 'dom'
+      // addon 의 dispose 는 canvas 를 떼기만 한다 — GC 전까지 컨텍스트가 살아 한도(~16)를 채우지 않게 바로 놓는다
+      for (const c of host.querySelectorAll('canvas')) c.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext()
       try {
         a.dispose() // DOM 그리기로 돌아간다
       } catch {
         // 이미 잃은 컨텍스트
       }
+      // 상한으로 기다리던 pane 하나에 자리를 준다
+      const next = webgl.waiting.values().next().value
+      if (next) {
+        webgl.waiting.delete(next)
+        next()
+      }
     }
     try {
       const a = new WebglAddon()
       a.onContextLoss(() => {
+        if (addon !== a) return // 우리가 놓은 것
         fail()
         release()
+        retry() // 실패가 상한 아래면 바로 다시 (GPU 리셋 · 잠자기 복귀)
       })
-      term.loadAddon(a)
       addon = a
+      try {
+        term.loadAddon(a)
+      } catch (e) {
+        addon = null
+        a.dispose() // 실패한 addon 이 term 의 목록에 남지 않게
+        throw e
+      }
       webgl.inUse++
       host.dataset['renderer'] = 'webgl'
     } catch {
       fail() // WebGL2 가 없는 환경 — DOM 으로
     }
     return release
-  }, [paneId, visible])
+  }, [paneId, visible, glTry])
 
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.
