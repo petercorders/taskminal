@@ -1,10 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { autoUpdater, type ProgressInfo } from 'electron-updater'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
-import { IPC, isBackupMark, isHostAction, isRedactFix, type AppInfo, type RedactStatus } from '../shared/ipc'
+import { IPC, isBackupMark, isHostAction, isRedactFix, isUpdateAction, type AppInfo, type RedactStatus } from '../shared/ipc'
+import type { LogLevel } from '../shared/errlog'
+import { blockedReason, UPDATE_CHECK_MS, UPDATE_FIRST_DELAY_MS, type UpdateView } from '../shared/update'
 import { normalizeState } from '../shared/model'
 import { Debouncer, readStateText } from '../shared/persist'
 import { redact, type SecretOptions } from '../shared/redact'
@@ -22,10 +25,16 @@ import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
+import { ErrorLog } from './errlog'
+import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
 if (userDataOverride) app.setPath('userData', userDataOverride)
+// 충돌 보고(18단계) — <userData>/Crashpad 에만 남기고 밖으로 보내지 않는다. ready 전에.
+// 임시 userData(e2e)에서는 켜지 않는다: crashpad_handler 가 stdio 파이프를 물고 남아 Playwright 가 앱 종료를 못 본다.
+// '갑자기 꺼짐' 안내는 덤프가 아니라 running 표시 파일로 판단하므로 e2e 에서도 그대로 시험된다.
+if (!userDataOverride) crashReporter.start({ uploadToServer: false })
 
 const devServerUrl = process.env['ELECTRON_RENDERER_URL']
 const rendererFile = join(__dirname, '../renderer/index.html')
@@ -61,6 +70,26 @@ let quitting = false // 끝내기를 정했다 — before-quit 이 다시 묻지
 let asking = false // 안내 · 확인 창이 떠 있다 — 두 번째 창을 띄우지 않는다
 const setBadge = (n: number) => app.dock?.setBadge(n > 0 ? String(n) : '')
 
+// ─── 18단계: 오류 기록 · 지난번 꺼짐 · 첫 실행 · 업데이트 ───
+let errorLog: ErrorLog | null = null
+const errlog = () => (errorLog ??= new ErrorLog(app.getPath('logs'), () => secretOpts))
+/** console 과 오류 기록 둘 다 — 오류 기록은 이 Mac 에만(~/Library/Logs/Taskminal) */
+function report(level: LogLevel, key: string, msg: string, detail?: unknown): void {
+  console.error(msg, detail ?? '')
+  if (app.isReady()) errlog().write(level, key, msg, detail)
+}
+// 앱이 도는 동안 있는 표시 파일 — 시작 때 남아 있으면 지난번이 정상으로 끝나지 않은 것
+const runningFile = () => join(app.getPath('userData'), 'running')
+const firstRunFile = () => join(app.getPath('userData'), 'first-run-seen')
+let crashedLast = false
+// 업데이트 설정 — main 이 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
+let updatePrefs: UpdatePrefs = { download: true, skip: '' }
+const prefsFrom = (s: Settings): UpdatePrefs => ({ download: s.updateDownload, skip: s.updateSkip })
+let updater: Updater | null = null
+const sendUpdate = (v: UpdateView) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.updateView, v)
+}
+
 const MAX_STATE_BYTES = 5 * 1024 * 1024
 // 비밀값 가리기 옵션(17단계) — main 이 마지막으로 받은 상태의 설정에서. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
 let secretOpts: SecretOptions = {}
@@ -86,7 +115,7 @@ let backupFailing = false
 function backupNow(reason: BackupReason, force = false): string | null | Error {
   const r = backups().snapshot(reason, Date.now(), force)
   if (r instanceof Error) {
-    console.error('백업을 만들지 못함', r)
+    report('error', 'backup', '백업을 만들지 못했어요', r)
     backupFailing = true
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.backupError, r.message)
   } else if (backupFailing) {
@@ -124,7 +153,7 @@ const stateWriter = new Debouncer<AppState>(
       return
     }
     // 디스크 가득 · 권한: main 을 죽이지 않고 알린다. 다음 변경이 전체 상태를 다시 보내므로 그때 다시 시도된다.
-    console.error('상태를 저장하지 못함', error)
+    report('error', 'state-save', '상태를 저장하지 못했어요', error)
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.stateError, error.message)
   },
   (fn, ms) => {
@@ -170,7 +199,7 @@ function createWindow(): BrowserWindow {
   // 화면을 못 읽으면 ready-to-show 가 오지 않는다 — 숨은 창으로 남지 않게 보여 주고 기록한다.
   win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame) return
-    console.error(`화면을 읽지 못함 (${code} ${description}): ${url}`)
+    report('error', 'load-fail', '화면을 읽지 못했어요', `${code} ${description}: ${url}`)
     win.show()
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -203,7 +232,8 @@ function createWindow(): BrowserWindow {
   })
   // ③ 렌더러 충돌 — 셸은 남아 있으니 창을 다시 읽어 다시 붙는다. 10초 안에 또 죽으면 다시 읽지 않는다(충돌 되풀이)
   let lastCrash = 0
-  wc.on('render-process-gone', () => {
+  wc.on('render-process-gone', (_event, details) => {
+    report('error', 'render-gone', '화면이 멈췄다 되살아났어요', `render-process-gone: ${details.reason} (${details.exitCode})`)
     detach()
     const now = Date.now()
     if (now - lastCrash > 10_000 && !win.isDestroyed()) wc.reload()
@@ -228,6 +258,91 @@ const fromOurWindow = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => {
   )
 }
 
+/** .app 이 든 폴더에 쓸 수 있나 — 없으면 업데이트가 .app 을 바꾸지 못한다 */
+function bundleWritable(): boolean {
+  const bundle = process.execPath.split('/Contents/MacOS/')[0] ?? process.execPath
+  try {
+    accessSync(dirname(bundle), constants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** electron-updater 를 엔진 모양으로. 받는 곳은 electron-builder 가 넣은 app-update.yml(GitHub Releases) —
+ *  TASKMINAL_UPDATE_FEED 가 있으면 그 주소(generic, e2e · 로컬 확인용)를 개발 실행에서도 본다. */
+function electronUpdaterEngine(feed: string | undefined): UpdateEngine {
+  autoUpdater.logger = null
+  autoUpdater.autoDownload = false // 건너뛴 버전 · 받기 설정은 Updater 가 정한다
+  autoUpdater.autoInstallOnAppQuit = false // 설치는 사용자가 고를 때만 — 이것이 꺼져 있으면 받은 뒤 Squirrel 을 부르지 않는다
+  autoUpdater.autoRunAppAfterInstall = true
+  if (feed) {
+    const config = join(app.getPath('userData'), 'dev-app-update.yml')
+    writeFileSync(config, `provider: generic\nurl: ${JSON.stringify(feed)}\nupdaterCacheDirName: taskminal-updater\n`, { mode: 0o600 })
+    autoUpdater.forceDevUpdateConfig = true
+    autoUpdater.updateConfigPath = config
+    autoUpdater.setFeedURL({ provider: 'generic', url: feed })
+  }
+  if (userDataOverride) {
+    // 시험이 실제 ~/Library/Caches/taskminal-updater 를 쓰지 않게 (받은 파일 자리 — ElectronAppAdapter.baseCachePath)
+    Object.defineProperty((autoUpdater as unknown as { app: object }).app, 'baseCachePath', { value: join(userDataOverride, 'caches') })
+  }
+  return {
+    async checkForUpdate() {
+      const r = await autoUpdater.checkForUpdates()
+      return r?.isUpdateAvailable ? { version: r.updateInfo.version, notes: r.updateInfo.releaseNotes } : null
+    },
+    async downloadUpdate(onProgress) {
+      const h = (p: ProgressInfo) => onProgress({ percent: p.percent, transferred: p.transferred, total: p.total })
+      autoUpdater.on('download-progress', h)
+      try {
+        await autoUpdater.downloadUpdate()
+      } finally {
+        autoUpdater.removeListener('download-progress', h)
+      }
+    },
+    install() {
+      autoUpdater.quitAndInstall(false, true)
+    },
+    onError(fn) {
+      autoUpdater.on('error', fn)
+    },
+  }
+}
+
+function createUpdater(): Updater {
+  const feed = process.env['TASKMINAL_UPDATE_FEED']
+  // 받는 곳(app-update.yml)은 배포 빌드(dmg · zip)에만 있다 — dir 패키징본 · 개발 실행은 확인하지 않는다
+  const hasFeed = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml'))
+  return new Updater(hasFeed || feed ? electronUpdaterEngine(feed) : null, {
+    current: app.getVersion(),
+    blocked: app.isPackaged ? blockedReason(process.execPath, bundleWritable()) : null,
+    prefs: () => updatePrefs,
+    now: Date.now,
+    send: sendUpdate,
+    log: report,
+    // 설치를 위한 종료는 '처음 끌 때 안내' 를 건너뛴다 — 셸은 지킴이에 남는다(16단계)
+    beforeInstall: () => {
+      quitting = true
+      stateWriter.flush()
+    },
+    installFailed: () => {
+      quitting = false
+    },
+  })
+}
+
+/** 디스크 이미지에서 실행 중 — 응용 프로그램 폴더로 옮기고 다시 연다 */
+function moveToApplications(): void {
+  quitting = true // 옮기면 앱이 바로 다시 열린다 — 끄기 안내를 건너뛴다
+  try {
+    if (!app.moveToApplicationsFolder()) quitting = false
+  } catch (e) {
+    quitting = false
+    report('error', 'move-app', '응용 프로그램 폴더로 옮기지 못했어요', e)
+  }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -244,7 +359,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, renderer }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, renderer, crashedLast }
   })
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -254,13 +369,18 @@ if (!app.requestSingleInstanceLock()) {
       throw new Error('잘못된 pty 인자')
     }
     await control().ready
-    await control().ptys.spawn(event.sender, paneId, {
-      cwd: o['cwd'],
-      cols: o['cols'] as number,
-      rows: o['rows'] as number,
-      shell: typeof o['shell'] === 'string' ? o['shell'] : null, // 경로 검사는 PtyManager(pickShell)
-      integration: o['integration'] !== false,
-    })
+    try {
+      await control().ptys.spawn(event.sender, paneId, {
+        cwd: o['cwd'],
+        cols: o['cols'] as number,
+        rows: o['rows'] as number,
+        shell: typeof o['shell'] === 'string' ? o['shell'] : null, // 경로 검사는 PtyManager(pickShell)
+        integration: o['integration'] !== false,
+      })
+    } catch (e) {
+      report('error', 'pty-spawn', '셸을 띄우지 못했어요', e)
+      throw e
+    }
   })
   ipcMain.handle(IPC.ptyAttach, async (event, paneId: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -284,6 +404,7 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.stateLoad, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     stateWriter.flush() // 새로 고침 직전에 받은 값을 먼저 쓰고 읽는다
+    const missing = !existsSync(join(app.getPath('userData'), 'state.json'))
     // 손상이면 마지막 정상 백업으로 (17단계)
     const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
@@ -291,6 +412,8 @@ if (!app.requestSingleInstanceLock()) {
     if (file.canWrite) {
       lastWritten = loaded.state
       secretOpts = optsFrom(loaded.state.settings)
+      updatePrefs = prefsFrom(loaded.state.settings)
+      updater?.prefsChanged()
       // 시작 백업 — 앱 버전이 바뀌었으면 '버전 올리기 전'(90일 보존). 같은 내용이면 만들지 않는다(새로 고침마다 쌓이지 않게)
       const prev = backups().lastVersion()
       backupNow(prev !== null && prev !== app.getVersion() ? 'version' : 'start')
@@ -298,10 +421,12 @@ if (!app.requestSingleInstanceLock()) {
       // 이미 남은 스크롤 파일을 한 번 가린다 — 스크롤 저장과 한 줄로
       if (!redactStarted) {
         redactStarted = true
-        saving = saving.then(() => scrollback().redactExisting(redactMarker(), sendRedact)).catch((e: unknown) => console.error('스크롤 정리 실패', e))
+        saving = saving.then(() => scrollback().redactExisting(redactMarker(), sendRedact)).catch((e: unknown) => report('error', 'scrollback-redact', '스크롤 정리에 실패했어요', e))
       }
     }
-    return loaded
+    // 첫 실행 안내(18단계) — 파일이 없었고, 안내를 끝낸 적이 없을 때. e2e 는 TASKMINAL_FIRST_RUN=seen 이 기본
+    const firstRun = missing && file.canWrite && process.env['TASKMINAL_FIRST_RUN'] !== 'seen' && !existsSync(firstRunFile())
+    return firstRun ? { ...loaded, firstRun } : loaded
   })
   // renderer 를 믿지 않는다: 크기 상한 · normalizeState 로 다시 검증한 값만 쓴다.
   ipcMain.on(IPC.stateSave, (event, raw: unknown) => {
@@ -314,7 +439,11 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (bytes > MAX_STATE_BYTES) return
     const state = normalizeState(raw, randomUUID)
-    if (stateFile?.canWrite) secretOpts = optsFrom(state.settings)
+    if (stateFile?.canWrite) {
+      secretOpts = optsFrom(state.settings)
+      updatePrefs = prefsFrom(state.settings)
+      updater?.prefsChanged()
+    }
     stateWriter.push(state)
   })
 
@@ -370,7 +499,7 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.on(IPC.redactFix, (event, action: unknown, name: unknown) => {
     if (!fromOurWindow(event) || !isRedactFix(action) || typeof name !== 'string') return
-    saving = saving.then(() => scrollback().fixRedact(action, name, redactMarker(), sendRedact)).catch((e: unknown) => console.error('스크롤 정리 실패', e))
+    saving = saving.then(() => scrollback().fixRedact(action, name, redactMarker(), sendRedact)).catch((e: unknown) => report('error', 'scrollback-redact', '스크롤 정리에 실패했어요', e))
   })
 
   // 스크롤 저장 — renderer 를 믿지 않는다: paneId 검사 · pane 당 바이트 상한은 ScrollbackStore, live 수 상한은 여기
@@ -379,7 +508,7 @@ if (!app.requestSingleInstanceLock()) {
     return scrollback().load(paneId)
   })
   // 덤이라 실패해도 알림은 띄우지 않는다 — 다음 주기가 다시 쓴다
-  const logError = (error: Error | null) => error && console.error('스크롤을 저장하지 못함', error)
+  const logError = (error: Error | null) => error && report('warn', 'scrollback-save', '스크롤을 저장하지 못했어요', error)
   const liveOf = (raw: unknown): { live: unknown[]; panes: unknown } | null => {
     const r = (raw ?? {}) as Record<string, unknown>
     return Array.isArray(r['live']) && r['live'].length <= MAX_LIVE_PANES ? { live: r['live'], panes: r['panes'] } : null
@@ -441,6 +570,40 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event) || !isHostAction(action)) return
     if (action === 'quit-all') return void quitAll()
     void hostControl?.action(action)
+  })
+
+  // ─── 18단계: 업데이트 · 오류 기록 · 첫 실행 ───
+  ipcMain.handle(IPC.updateView, (event): UpdateView => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return updater?.view() ?? { state: 'idle', current: app.getVersion() }
+  })
+  ipcMain.on(IPC.updateAction, (event, action: unknown) => {
+    if (!fromOurWindow(event) || !isUpdateAction(action) || !updater) return
+    if (action === 'check') void updater.check()
+    else if (action === 'download') void updater.download()
+    else if (action === 'install') updater.install()
+    else moveToApplications()
+  })
+  ipcMain.handle(IPC.errlogList, (event, level: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return errlog().rows(level === 'error' || level === 'warn' ? level : undefined)
+  })
+  ipcMain.on(IPC.errlogOpen, (event) => {
+    if (!fromOurWindow(event)) return
+    try {
+      mkdirSync(errlog().dir, { recursive: true, mode: 0o700 })
+    } catch {
+      // 열기에서 알린다
+    }
+    void shell.openPath(errlog().dir)
+  })
+  ipcMain.on(IPC.firstRunDone, (event) => {
+    if (!fromOurWindow(event)) return
+    try {
+      writeFileSync(firstRunFile(), String(Date.now()), { mode: 0o600 })
+    } catch (e) {
+      report('warn', 'first-run', '첫 실행 안내를 끝낸 것을 저장하지 못했어요', e)
+    }
   })
 
   ipcMain.handle(IPC.pickFolder, async (event): Promise<string | null> => {
@@ -508,7 +671,16 @@ if (!app.requestSingleInstanceLock()) {
       stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
     } finally {
       hostControl?.dispose()
+      try {
+        unlinkSync(runningFile()) // 정상으로 끝남 — 다음 실행이 '갑자기 꺼짐' 으로 보지 않게
+      } catch {
+        // 없으면 그만
+      }
     }
+  })
+  // 도우미 프로세스(GPU · 네트워크 …)가 비정상으로 끝나면 기록만 (화면 renderer 는 창의 render-process-gone 이 맡는다)
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') report('warn', 'child-gone', `도우미 프로세스가 끝났어요 (${details.type})`, `${details.reason} (${details.exitCode})`)
   })
 
   void app.whenReady().then(() => {
@@ -517,8 +689,22 @@ if (!app.requestSingleInstanceLock()) {
       const icon = join(app.getAppPath(), 'resources', 'icon', 'icon.png')
       if (existsSync(icon)) app.dock?.setIcon(icon)
     }
+    // 오류 기록 폴더: ~/Library/Logs/Taskminal (e2e 는 임시 userData 안)
+    app.setAppLogsPath(userDataOverride ? join(userDataOverride, 'logs') : undefined)
+    errlog().prune()
+    crashedLast = existsSync(runningFile())
+    if (crashedLast) errlog().write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
+    try {
+      writeFileSync(runningFile(), String(process.pid), { mode: 0o600 })
+    } catch (e) {
+      report('warn', 'running-mark', '실행 표시 파일을 쓰지 못했어요', e)
+    }
     installAppMenu()
-    hostControl = createHostControl(zshIntegrationDir, allowedShells)
+    hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error))
+    updater = createUpdater()
+    const firstMs = Number(process.env['TASKMINAL_UPDATE_FIRST_MS'])
+    setTimeout(() => void updater?.check(), Number.isInteger(firstMs) && firstMs >= 0 ? firstMs : UPDATE_FIRST_DELAY_MS).unref()
+    setInterval(() => void updater?.check(), UPDATE_CHECK_MS).unref()
     // 바뀐 게 있으면 한 시간마다 '자동' 백업 — 하루 하나 보존 규칙과 함께 '그날의 마지막' 이 남는다
     setInterval(() => {
       if (!changedSinceAuto || !stateFile?.canWrite) return

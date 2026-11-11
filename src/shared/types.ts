@@ -138,6 +138,11 @@ export interface Settings {
   secretCustom: Array<{ name: string; pattern: string }>
   /** '비밀값 아님' 으로 고른 값 — 원문이 아니라 해시만 */
   secretAllow: SecretAllow[]
+  // 업데이트 (18단계)
+  /** 새 버전을 뒤에서 내려받아 두고 묻기 (끄면 확인만) */
+  updateDownload: boolean
+  /** '이 버전 건너뛰기' 로 고른 버전 ('' = 없음) */
+  updateSkip: string
 }
 
 export interface SecretAllow {

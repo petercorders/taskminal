@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 // @ts-expect-error — 빌드 도구 스크립트(.mjs)라 타입이 없다
-import { checkPackage } from '../../scripts/check-package.mjs'
+import { checkPackage, checkRelease } from '../../scripts/check-package.mjs'
 
 // 14단계: 만든 .app 을 실행하지 않고 안을 읽어 확인하는 검사기 — 가짜 .app 으로 판정을 본다.
 let root: string
@@ -26,6 +26,8 @@ beforeEach(async () => {
   )
   mkdirSync(res, { recursive: true })
   writeFileSync(join(res, 'icon.icns'), 'x')
+  // 18단계: 자동 업데이트가 읽는 받는 곳 (electron-builder publish)
+  writeFileSync(join(res, 'app-update.yml'), 'owner: petercorders\nrepo: taskminal\nprovider: github\nupdaterCacheDirName: taskminal-updater\n')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
   for (const f of ['out/main/index.js', 'out/main/host.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
@@ -138,5 +140,69 @@ describe('check-package (14단계)', () => {
     }
     const problems = (await checkPackage(appPath, { arch: () => 'arm64', verify: broken })) as string[]
     expect(problems.join('\n')).toContain('code has no resources')
+  })
+})
+
+describe('check-package (18단계)', () => {
+  it('dir 패키징본(npm run package)은 app-update.yml 이 없어도 통과 — electron-builder 는 dmg · zip 일 때만 넣는다', async () => {
+    rmSync(join(appPath, 'Contents/Resources/app-update.yml'))
+    expect((await check()).join('\n')).not.toContain('app-update.yml')
+  })
+
+  describe('--release', () => {
+    const DEV_ID = 'Executable=/x\nIdentifier=io.peterbong.taskminal\nCodeDirectory v=20500 size=1 flags=0x10000(runtime) hashes=1\nAuthority=Developer ID Application: KiBong Kim (ABCDE12345)\nAuthority=Developer ID Certification Authority\nAuthority=Apple Root CA\nTeamIdentifier=ABCDE12345\n'
+    let dist: string
+    beforeEach(() => {
+      dist = join(root, 'dist')
+      mkdirSync(dist)
+      writeFileSync(join(appPath, 'Contents/Info.plist'), `<plist><dict>${ID}${NAME}${ICON}<key>CFBundleShortVersionString</key><string>0.1.1</string></dict></plist>`)
+      for (const f of ['Taskminal-0.1.1-arm64.dmg', 'Taskminal-0.1.1-arm64-mac.zip', 'latest-mac.yml']) writeFileSync(join(dist, f), 'x')
+    })
+    const ok = () => undefined
+    const deps = (codesign: (p: string) => string, more: Record<string, unknown> = {}) => ({ codesign, spctl: ok, stapler: ok, ...more })
+    const release = (d: Record<string, unknown>) => checkRelease(appPath, dist, d) as string[]
+
+    it('Developer ID · 같은 팀 · hardened runtime · spctl · staple · 산출물이 다 있으면 통과', () => {
+      expect(release(deps(() => DEV_ID))).toEqual([])
+    })
+    it('ad-hoc · Apple Development 서명이면 — 다른 Mac 에서 막힌다', () => {
+      const adhoc = 'CodeDirectory v=20500 flags=0x10002(adhoc,runtime)\nSignature=adhoc\nTeamIdentifier=not set\n'
+      const all = release(deps(() => adhoc)).join('\n')
+      expect(all).toContain('Developer ID Application')
+      expect(all).toContain('팀 ID')
+    })
+    it('spawn-helper · pty.node 가 다른 팀(또는 서명 없음)이면 — 공증이 거절한다', () => {
+      const all = release(deps((p) => (p.endsWith('spawn-helper') ? DEV_ID.replace(/ABCDE12345/g, 'ZZZZZ99999') : DEV_ID))).join('\n')
+      expect(all).toContain('spawn-helper')
+      expect(all).not.toContain('pty.node')
+    })
+    it('hardened runtime 이 꺼져 있으면 — 공증이 거절한다', () => {
+      expect(release(deps(() => DEV_ID.replace('flags=0x10000(runtime)', 'flags=0x0(none)'))).join('\n')).toContain('hardened runtime')
+    })
+    it('spctl · staple 이 실패하면', () => {
+      const fail = () => {
+        throw Object.assign(new Error('x'), { stderr: 'rejected\nsource=Unnotarized Developer ID' })
+      }
+      const all = release(deps(() => DEV_ID, { spctl: fail, stapler: fail })).join('\n')
+      expect(all).toContain('spctl')
+      expect(all).toContain('Unnotarized')
+      expect(all).toContain('staple')
+    })
+    it('app-update.yml 이 없거나 받는 곳이 다르면 — 자동 업데이트가 엉뚱한 곳을 본다', () => {
+      writeFileSync(join(appPath, 'Contents/Resources/app-update.yml'), 'provider: generic\nurl: http://nas.local/\n')
+      expect(release(deps(() => DEV_ID)).join('\n')).toContain('app-update.yml')
+      rmSync(join(appPath, 'Contents/Resources/app-update.yml'))
+      expect(release(deps(() => DEV_ID)).join('\n')).toContain('app-update.yml')
+    })
+    it('dmg · zip · latest-mac.yml 이 그 버전으로 없으면', () => {
+      rmSync(join(dist, 'Taskminal-0.1.1-arm64.dmg'))
+      rmSync(join(dist, 'latest-mac.yml'))
+      writeFileSync(join(dist, 'Taskminal-0.1.0-arm64-mac.zip'), 'x')
+      rmSync(join(dist, 'Taskminal-0.1.1-arm64-mac.zip'))
+      const all = release(deps(() => DEV_ID)).join('\n')
+      expect(all).toContain('.dmg')
+      expect(all).toContain('-mac.zip')
+      expect(all).toContain('latest-mac.yml')
+    })
   })
 })

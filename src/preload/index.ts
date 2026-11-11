@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { BackupInfo } from '../shared/backup'
 import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type RedactStatus, type ScrollbackEntry } from '../shared/ipc'
+import type { LogRow } from '../shared/errlog'
+import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { WorktreeResult } from '../shared/worktree'
@@ -68,6 +70,16 @@ const api: TaskminalApi = {
     kill: (paneIds) => ipcRenderer.send(IPC.hostKill, paneIds),
     action: (action) => ipcRenderer.send(IPC.hostAction, action),
   },
+  update: {
+    view: () => ipcRenderer.invoke(IPC.updateView) as Promise<UpdateView>,
+    onView: (listener) => subscribe<[UpdateView]>(IPC.updateView, listener),
+    action: (action) => ipcRenderer.send(IPC.updateAction, action),
+  },
+  errlog: {
+    list: (level) => ipcRenderer.invoke(IPC.errlogList, level) as Promise<LogRow[]>,
+    openFolder: () => ipcRenderer.send(IPC.errlogOpen),
+  },
+  firstRunDone: () => ipcRenderer.send(IPC.firstRunDone),
 }
 
 contextBridge.exposeInMainWorld('taskminal', api)

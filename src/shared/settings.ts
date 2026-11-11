@@ -57,6 +57,8 @@ export function defaultExtraSettings(): ExtraSettings {
     maskKindsOff: SECRET_TOGGLES.filter((t) => !t.screenDefault).map((t) => t.id),
     secretCustom: [],
     secretAllow: [],
+    updateDownload: true,
+    updateSkip: '',
   }
 }
 
@@ -143,6 +145,8 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     maskKindsOff: parseKindsOff(v['maskKindsOff'], d.maskKindsOff),
     secretCustom: parseCustom(v['secretCustom']),
     secretAllow: parseAllow(v['secretAllow']),
+    updateDownload: bool(v['updateDownload'], d.updateDownload),
+    updateSkip: typeof v['updateSkip'] === 'string' && /^\d+\.\d+\.\d+[\w.-]{0,40}$/.test(v['updateSkip']) ? v['updateSkip'] : d.updateSkip,
   }
 }
 

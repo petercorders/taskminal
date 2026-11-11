@@ -35,6 +35,10 @@ export const SHORTCUTS = [
   { command: 'mask-toggle', accel: 'Shift+Command+H', label: '화면에서 비밀값 가리기 켜기/끄기' },
   { command: 'mask-next', accel: 'Alt+Command+Right', label: '다음 가린 칸' },
   { command: 'mask-prev', accel: 'Alt+Command+Left', label: '이전 가린 칸' },
+  // 출시 기본기(18단계) — 키 없이 ⌘P · 앱 메뉴('업데이트 확인…')로
+  { command: 'update-check', accel: '', label: '업데이트 확인' },
+  { command: 'error-log', accel: '', label: '오류 기록 열기' },
+  { command: 'first-run', accel: '', label: '첫 실행 안내 다시 보기' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

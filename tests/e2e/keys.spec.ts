@@ -275,11 +275,13 @@ test('앱 메뉴: 항목을 누르면 같은 명령, 단축키 표시는 키 표
       roles: all.map((i) => i.role ?? ''),
       newTab: { accel: t.accelerator, registered: t.registerAccelerator },
       roleAccels: all.filter((i) => i.role).map((i) => `${i.role}:${i.accelerator ?? ''}`),
-      commands: all.filter((i) => i.id && !i.role).map((i) => `${i.id}:${i.accelerator}`),
+      commands: all.filter((i) => i.id && !i.role && i.accelerator).map((i) => `${i.id}:${i.accelerator}`),
+      unkeyed: all.filter((i) => i.id && !i.role && !i.accelerator).map((i) => i.id),
     }
   })
   // 키 표의 명령(키가 있는 것)이 모두 메뉴에 한 번씩, 같은 단축키로 (표와 메뉴가 따로 놀지 않게) — 키 없는 명령은 ⌘P 에만
   expect([...info.commands].sort()).toEqual(SHORTCUTS.filter((s) => s.accel).map((s) => `${s.command}:${s.accel}`).sort())
+  expect(info.unkeyed).toEqual(['update-check']) // 18단계: 키 없이 앱 메뉴에 있는 것은 '업데이트 확인…' 하나
   expect(info.roles).not.toContain('reload')
   expect(info.roles).not.toContain('forcereload')
   expect(info.roles).toEqual(expect.arrayContaining(['copy', 'paste', 'close']))

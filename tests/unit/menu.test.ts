@@ -12,16 +12,23 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: (t: unknown) => t, setApplicationMenu: () => {} },
 }))
 
-function commandsOf(keys: Readonly<Record<string, string>> = {}): string[] {
-  const out: string[] = []
+function itemsOf(keys: Readonly<Record<string, string>> = {}): MenuItemConstructorOptions[] {
+  const out: MenuItemConstructorOptions[] = []
   const walk = (items: readonly MenuItemConstructorOptions[]) => {
     for (const i of items) {
-      if (i.id && !i.role) out.push(`${i.id}:${String(i.accelerator)}`)
+      if (i.id && !i.role) out.push(i)
       if (Array.isArray(i.submenu)) walk(i.submenu)
     }
   }
   walk(buildAppMenu(false, keys) as unknown as MenuItemConstructorOptions[])
-  return out.sort()
+  return out
+}
+/** 단축키가 붙은 메뉴 항목 — 키 없는 항목(업데이트 확인… 등)은 키 표 대조에서 뺀다. 키가 있어야 할 명령이 키 없이 들어가면 기대 목록에서 빠져 실패한다 */
+function commandsOf(keys: Readonly<Record<string, string>> = {}): string[] {
+  return itemsOf(keys)
+    .filter((i) => i.accelerator !== undefined)
+    .map((i) => `${i.id}:${String(i.accelerator)}`)
+    .sort()
 }
 
 describe('앱 메뉴 ↔ 키 표', () => {
@@ -32,5 +39,11 @@ describe('앱 메뉴 ↔ 키 표', () => {
     const keys = { 'new-tab': 'Command+Shift+T' }
     const want = shortcutTable(keys).filter((s) => s.accel).map((s) => `${s.command}:${s.accel}`).sort()
     expect(commandsOf(keys)).toEqual(want)
+  })
+  it('키 없는 메뉴 항목은 키 표에서 키 없는 명령만 — 업데이트 확인… 은 앱 메뉴에 (18단계)', () => {
+    const unkeyed = itemsOf().filter((i) => i.accelerator === undefined)
+    expect(unkeyed.map((i) => i.id)).toEqual(['update-check'])
+    expect(unkeyed[0]!.label).toBe('업데이트 확인…')
+    expect(SHORTCUTS.find((s) => s.command === 'update-check')!.accel).toBeFalsy()
   })
 })

@@ -2,7 +2,7 @@
 //   node scripts/check-package.mjs dist/mac-arm64/Taskminal.app
 // 문제마다 한 줄, 있으면 exit 1. 실행 확인(셸 · which node · 한글)은 따로 — 이 검사는 '빠진 파일 · 권한' 을 잡는다.
 import { listPackage } from '@electron/asar'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -87,13 +87,65 @@ export async function checkPackage(appPath, { arch = lipoArch, verify = codesign
   return problems
 }
 
+const codesignInfo = (p) => {
+  const r = spawnSync('/usr/bin/codesign', ['-dvv', p], { encoding: 'utf8' })
+  return `${r.stdout ?? ''}${r.stderr ?? ''}`
+}
+const spctlAssess = (app) => execFileSync('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose', app], { stdio: 'pipe' })
+const staplerValidate = (app) => execFileSync('/usr/bin/xcrun', ['stapler', 'validate', app], { stdio: 'pipe' })
+const firstLine = (e) => String(e.stderr ?? e).trim().split('\n').filter(Boolean).slice(-1)[0] ?? String(e)
+
+/**
+ * 배포본 검사 (18단계, npm run release 끝) — Developer ID 서명 · 팀 ID 가 node-pty 까지 같은지 · hardened runtime ·
+ * Gatekeeper(spctl) · 공증 staple · dmg/zip/latest-mac.yml. @returns {string[]} 문제 목록
+ */
+export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl = spctlAssess, stapler = staplerValidate } = {}) {
+  const problems = []
+  const info = codesign(appPath)
+  const team = /TeamIdentifier=(\S+)/.exec(info)?.[1]
+  if (!/Authority=Developer ID Application: /.test(info)) problems.push('앱이 Developer ID Application 으로 서명되지 않음 — 다른 Mac 에서 "확인되지 않은 개발자" 로 막힌다')
+  if (!team || team === 'not') problems.push('앱 서명에 팀 ID 가 없음 (ad-hoc · 서명 없음)')
+  if (!/flags=\S*\(\S*runtime\S*\)/.test(info)) problems.push('앱에 hardened runtime 이 꺼져 있음 — 공증이 거절한다')
+  // 자동 업데이트의 받는 곳 — electron-builder 는 macOS 에서 dmg · zip 대상일 때만 넣는다(PublishManager). dir 패키징본엔 없는 게 맞다
+  const updateYml = join(appPath, 'Contents', 'Resources', 'app-update.yml')
+  const yml = existsSync(updateYml) ? readFileSync(updateYml, 'utf8') : null
+  if (yml === null) problems.push('Resources/app-update.yml 없음 — 자동 업데이트가 받는 곳을 모른다 (electron-builder publish)')
+  else if (!/provider: github/.test(yml) || !/owner: petercorders/.test(yml) || !/repo: taskminal/.test(yml)) problems.push(`app-update.yml 의 받는 곳이 GitHub petercorders/taskminal 이 아님: ${yml.trim().replace(/\n/g, ' · ')}`)
+  const ptyRoot = join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules', 'node-pty')
+  const ptyDir = PTY_DIRS.find((d) => existsSync(join(ptyRoot, d, 'pty.node')))
+  if (ptyDir && team) {
+    for (const f of ['spawn-helper', 'pty.node']) {
+      const t = /TeamIdentifier=(\S+)/.exec(codesign(join(ptyRoot, ptyDir, f)))?.[1]
+      if (t !== team) problems.push(`${ptyDir}/${f} 의 팀 ID(${t ?? '없음'}) 가 앱(${team})과 다름 — 공증이 거절하거나 셸이 안 뜬다`)
+    }
+  }
+  try {
+    spctl(appPath)
+  } catch (e) {
+    problems.push(`Gatekeeper 가 거절 (spctl --assess): ${firstLine(e)}`)
+  }
+  try {
+    stapler(appPath)
+  } catch (e) {
+    problems.push(`공증 표가 붙지 않음 (stapler validate — staple): ${firstLine(e)}`)
+  }
+  const plistPath = join(appPath, 'Contents', 'Info.plist')
+  const version = existsSync(plistPath) ? plistValue(readFileSync(plistPath, 'utf8'), 'CFBundleShortVersionString') : null
+  const files = existsSync(distDir) ? readdirSync(distDir) : []
+  if (!files.some((f) => f.endsWith('.dmg') && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} 의 .dmg(설치용) 없음`)
+  if (!files.some((f) => f.endsWith('-mac.zip') && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} 의 -mac.zip(자동 업데이트용) 없음`)
+  if (!files.includes('latest-mac.yml')) problems.push('dist 에 latest-mac.yml(자동 업데이트 목록) 없음')
+  return problems
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const app = process.argv[2]
   if (!app) {
-    console.error('사용법: node scripts/check-package.mjs <Taskminal.app 경로>')
+    console.error('사용법: node scripts/check-package.mjs <Taskminal.app 경로> [--release <dist 폴더>]')
     process.exit(2)
   }
-  const problems = await checkPackage(app)
+  const releaseAt = process.argv.indexOf('--release')
+  const problems = [...(await checkPackage(app)), ...(releaseAt > 0 ? checkRelease(app, process.argv[releaseAt + 1] ?? 'dist') : [])]
   for (const p of problems) console.log(`✗ ${p}`)
   if (problems.length) process.exit(1)
   console.log(`✓ 패키지 검사 통과: ${app}`)

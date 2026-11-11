@@ -41,7 +41,17 @@ export const IPC = {
   stateImport: 'state:import', // invoke → { name, state } | null(취소) · 못 읽으면 예외
   redactStatus: 'redact:status', // invoke → RedactStatus / main → renderer: 바뀔 때마다
   redactFix: 'redact:fix', // send('retry' | 'delete', 파일 이름)
+  // 18단계 출시 기본기
+  updateView: 'update:view', // invoke → UpdateView / main → renderer: 바뀔 때마다
+  updateAction: 'update:action', // send(UpdateAction)
+  errlogList: 'errlog:list', // invoke(level?) → LogRow[] (최근 7일, 묶은 것)
+  errlogOpen: 'errlog:open', // send — 오류 기록 폴더를 Finder 로
+  firstRunDone: 'app:first-run-done', // send — 첫 실행 안내를 끝냄(다시 띄우지 않게)
 } as const
+
+export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const
+export type UpdateAction = (typeof UPDATE_ACTIONS)[number]
+export const isUpdateAction = (v: unknown): v is UpdateAction => typeof v === 'string' && (UPDATE_ACTIONS as readonly string[]).includes(v)
 
 /** 이미 남은 스크롤 파일 정리(17단계) 상태 */
 export interface RedactStatus {
@@ -106,6 +116,8 @@ export interface AppInfo {
   cwdPollMs: number
   /** 터미널 그리기 — 보이는 pane 은 WebGL(기본), 시험은 TASKMINAL_RENDERER=dom 으로 DOM (15e) */
   renderer: RendererMode
+  /** 지난번 실행이 정상으로 끝나지 않았다(18단계 — running 표시 파일) */
+  crashedLast: boolean
 }
 
 export interface ScrollbackEntry {
@@ -147,4 +159,6 @@ export interface LoadedState {
   notice: null | 'corrupt' | 'recovered' | 'repaired' | 'newer'
   /** recovered: 되살린 백업의 시각 */
   recoveredAt?: number
+  /** 처음 실행 — state.json 이 없었고 첫 실행 안내를 아직 끝내지 않았다 (18단계) */
+  firstRun?: boolean
 }

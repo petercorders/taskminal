@@ -76,6 +76,20 @@ export interface HostApi {
   action(action: HostAction): void
 }
 
+/** 자동 업데이트 (18단계) */
+export interface UpdateApi {
+  view(): Promise<import('../shared/update').UpdateView>
+  onView(listener: (view: import('../shared/update').UpdateView) => void): () => void
+  action(action: import('../shared/ipc').UpdateAction): void
+}
+
+/** 오류 기록 (18단계) — 이 Mac 에만 */
+export interface ErrlogApi {
+  /** 최근 7일, 같은 오류는 묶어서 · level 로 거르기 */
+  list(level?: 'error' | 'warn'): Promise<import('../shared/errlog').LogRow[]>
+  openFolder(): void
+}
+
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
@@ -102,6 +116,10 @@ export interface TaskminalApi {
   host: HostApi
   backup: BackupApi
   redact: RedactApi
+  update: UpdateApi
+  errlog: ErrlogApi
+  /** 첫 실행 안내를 끝냈다 — 다시 띄우지 않는다 */
+  firstRunDone(): void
 }
 
 declare global {

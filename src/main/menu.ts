@@ -34,6 +34,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
       label: app.name,
       submenu: [
         { role: 'about' },
+        // 18단계: 누르면 확인하고 설정 › 정보에서 결과를 보여 준다
+        { ...item('update-check'), label: '업데이트 확인…' },
         { type: 'separator' },
         item('settings'),
         { type: 'separator' },

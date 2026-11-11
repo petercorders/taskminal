@@ -1754,3 +1754,191 @@ input[type='checkbox'] {
 .xterm .secret-mask:focus-visible {
   outline: 2px solid var(--accent);
 }
+
+/* ─── 출시 기본기 (18단계) ─── */
+.host-banner.acc {
+  border-left: 3px solid var(--accent);
+}
+.sidebar-foot {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 12px 0;
+  background: var(--panel);
+}
+.sidebar-update {
+  width: 100%;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  text-align: left;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.update-status.ok {
+  color: var(--done);
+}
+.update-status.run {
+  color: var(--running);
+}
+.update-status.err {
+  color: var(--failed);
+}
+.errlog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.errlog-filters {
+  display: flex;
+  gap: 6px;
+}
+.errlog-filters .chip {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.errlog-filters .chip.on {
+  background: var(--raised);
+  color: var(--fg);
+}
+.errlog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.errlog-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.errlog-row + .errlog-row {
+  border-top: 1px solid var(--line);
+}
+.errlog-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--failed);
+}
+.errlog-row.warn .errlog-dot {
+  background: var(--waiting);
+}
+.errlog-msg {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.errlog-msg code {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.errlog-when {
+  color: var(--muted);
+  flex: none;
+}
+.errlog-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.errlog-empty span {
+  color: var(--muted);
+}
+.dialog.first-run {
+  width: 520px;
+}
+.first-run p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.first-run h2 {
+  margin: 4px 0 8px;
+  font-size: 16px;
+}
+.first-run-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.first-run-step {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.first-run-step.on {
+  background: var(--accent);
+}
+.first-run-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.first-run-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.first-run-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+}
+.first-run-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.first-run-option span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.first-run-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.first-run-code code {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

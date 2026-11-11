@@ -8,12 +8,14 @@ import { TemplateEditor } from './TemplateEditor'
 import { HostSection } from './HostSection'
 import { BackupSection } from './BackupSection'
 import { PrivacySection } from './PrivacySection'
+import { AboutSection } from './AboutSection'
+import type { UpdateView } from '../../shared/update'
 import type { Restored } from '../../shared/backup'
 import type { BackupMark } from '../../shared/ipc'
 
-type SectionId = 'general' | 'look' | 'term' | 'host' | 'notify' | 'privacy' | 'backup' | 'keys' | 'tasks'
+type SectionId = 'general' | 'look' | 'term' | 'host' | 'notify' | 'privacy' | 'backup' | 'keys' | 'tasks' | 'about'
 /** ⌘P 로 바로 여는 칸 */
-export type SettingsJump = 'host' | 'backup' | 'privacy'
+export type SettingsJump = 'host' | 'backup' | 'privacy' | 'about'
 const SECTIONS: Array<{ id: SectionId; title: string }> = [
   { id: 'general', title: '일반' },
   { id: 'look', title: '모양' },
@@ -24,6 +26,7 @@ const SECTIONS: Array<{ id: SectionId; title: string }> = [
   { id: 'backup', title: '백업 · 되돌리기' },
   { id: 'keys', title: '단축키' },
   { id: 'tasks', title: '일감 관리' },
+  { id: 'about', title: '정보' },
 ]
 
 interface Props {
@@ -38,6 +41,10 @@ interface Props {
   onRestore(make: (cur: AppState) => Restored | null, mark: BackupMark): Promise<string | null>
   /** 실행 중인 명령 수 — 셸 지킴이 다시 시작 확인 */
   busy?: number
+  /** 업데이트 상태 (18단계 — 설정 › 정보) */
+  update?: UpdateView | null
+  /** 첫 실행 안내 다시 보기 */
+  onFirstRun?(): void
   onClose(): void
 }
 
@@ -132,7 +139,7 @@ const NOTIFY_ROWS: Record<NotifyKind, { title: string; desc: string }> = {
 /** 편집기를 새 템플릿으로 연다 — 템플릿 id 와 겹치지 않는 값 */
 const NEW_TEMPLATE = '\u0000new'
 
-export function SettingsView({ state, shortcuts, dispatch, newId, initialSection, busy = 0, onClose, onRestore }: Props) {
+export function SettingsView({ state, shortcuts, dispatch, newId, initialSection, busy = 0, update = null, onFirstRun = () => {}, onClose, onRestore }: Props) {
   const s = state.settings
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   // JSON 편집기: 템플릿 id · 'new'(새 템플릿)
@@ -191,6 +198,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
     host: <HostSection state={state} busy={busy} Row={Row} />,
     privacy: <PrivacySection s={s} patch={patch} Row={Row} Switch={Switch} />,
     backup: <BackupSection state={state} Row={Row} newId={newId} onRestore={onRestore} />,
+    about: <AboutSection s={s} patch={patch} Row={Row} Switch={Switch} update={update} onFirstRun={onFirstRun} />,
     general: (
       <>
         <Row title="앱을 열 때" keywords="시작 되살리기 목록 빈 창">

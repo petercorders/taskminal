@@ -32,7 +32,8 @@ export interface HostControl {
   dispose(): void
 }
 
-export function createHostControl(zshIntegrationDir: string | null, allowedShells: readonly string[]): HostControl {
+/** onDown: 지킴이에 연결하지 못함 · 끊김 — 오류 기록에 남긴다 (18단계) */
+export function createHostControl(zshIntegrationDir: string | null, allowedShells: readonly string[], onDown: (error?: string) => void = () => {}): HostControl {
   const userData = app.getPath('userData')
   const protocol = envInt('TASKMINAL_PTYHOST_PROTOCOL') ?? PTYHOST_PROTOCOL // 시험: 옛 버전 흉내
   const sockPath = socketPath(userData, protocol, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
@@ -74,6 +75,7 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
       } else if (s.state === 'reconnecting') patch({ state: 'reconnecting', attempt: s.attempt, of: s.of })
       else if (s.state === 'down') {
         patch({ state: 'down', error: s.error })
+        onDown(s.error)
         markReady()
       } else patch({ state: 'starting' })
     },

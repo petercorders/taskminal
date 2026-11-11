@@ -1,4 +1,5 @@
-# 14단계 패키징 — `npm run package` (빌드 → .app → 정적 검사). 개발자 서명 · 공증 · dmg 는 하지 않는다(개인 설치용, ad-hoc 서명만).
+# 14단계 패키징 — `npm run package` (빌드 → .app → 정적 검사). 이 Mac 용: ad-hoc 서명 · dir.
+# 18단계 배포 — `npm run release` (scripts/release.mjs): 같은 설정에 Developer ID 인증서 · dmg + zip 을 더하고 공증(APPLE_KEYCHAIN_PROFILE).
 appId: io.peterbong.taskminal
 productName: Taskminal
 directories:
@@ -33,5 +34,14 @@ mac:
   category: public.app-category.developer-tools
   # 개발자 인증서 없이 ad-hoc 서명 — null(서명 안 함)이면 Electron 링커 서명(Identifier=Electron)이 남아 번들 서명이 깨진다
   identity: "-"
-  # ad-hoc 서명에 hardened runtime 을 켜면 라이브러리 확인(같은 팀 서명만 허용)에 Electron Framework 가 걸려 안 뜰 수 있다 — 공증 안 하므로 끈다
-  hardenedRuntime: false
+  # 18단계: 공증에 필요한 hardened runtime 을 이 Mac 용에도 켠다(배포본과 같은 조건으로 시험 — tests/e2e/packaged.spec.ts).
+  # ad-hoc 에는 disable-library-validation 이 있어야 뜬다(electron-builder 경고 · 18단계 스파이크)
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+# 18단계: 자동 업데이트 받는 곳 = GitHub Releases (2026-11-11 사용자 결정, NAS 대신). app-update.yml 을 넣으려고 둔다 —
+# 게시는 하지 않는다(package · release 모두 --publish never). 릴리스 올리기는 사용자 확인 뒤.
+publish:
+  - provider: github
+    owner: petercorders
+    repo: taskminal

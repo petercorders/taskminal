@@ -10,6 +10,8 @@ export const runtime = {
   cwdPollMs: 15_000,
   /** 터미널 그리기 (15e) — appInfo 를 못 읽으면 DOM */
   renderer: 'dom' as RendererMode,
+  /** 지난번 실행이 정상으로 끝나지 않았다 (18단계) */
+  crashedLast: false,
 }
 
 /** 지금 WebGL 로 그리는 pane 수 · pane 마다 WebGL 실패 수 · 상한에 걸려 자리를 기다리는 pane 의 다시 해 보기 (15e) */

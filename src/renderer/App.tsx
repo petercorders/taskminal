@@ -28,6 +28,8 @@ import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
 import { dirtyPanes, osc7Panes, restoredWithText, runtime } from './runtime'
 import { HostBanners, useHostView, type StartupNotes } from './host-ui'
+import { UpdateBanners, useUpdateView } from './update-ui'
+import { FirstRun } from './FirstRun'
 import { summarizeResume } from '../shared/ptyhost'
 import { terminals } from './terminals'
 
@@ -50,6 +52,7 @@ const loadState = () =>
       runtime.home = info.home
       runtime.cwdPollMs = info.cwdPollMs
       runtime.renderer = info.renderer
+      runtime.crashedLast = info.crashedLast
       return window.taskminal.state.load()
     },
     () => window.taskminal.state.load(),
@@ -140,6 +143,10 @@ export function App() {
   const [backupError, setBackupError] = useState<string | null>(null)
   // 셸 지킴이 (16단계): 상태 · 처음 읽힐 때 정한 줄 · 확인 창
   const hostView = useHostView()
+  // 18단계: 업데이트 · 첫 실행 안내('first' = 처음 · 'again' = 다시 보기) · '다음에' 로 닫은 받아 둔 버전
+  const updateView = useUpdateView()
+  const [firstRun, setFirstRun] = useState<'first' | 'again' | null>(null)
+  const [laterVersion, setLaterVersion] = useState<string | null>(null)
   const [startup, setStartup] = useState<StartupNotes | null>(null)
   const [hostConfirm, setHostConfirm] = useState<'restart' | 'replace-old' | null>(null)
   // 팔레트에서 고른 출력 줄 — 그 pane 이 보이게 그린 뒤에 스크롤 · 선택한다(숨은 터미널에서 하면 스크롤이 맞지 않는다)
@@ -178,7 +185,8 @@ export function App() {
         loadedRef.current = state
         dispatch({ type: 'loaded', state })
         setLoad({ phase: 'ready', readOnly: loaded.readOnly, notice: loaded.notice, recoveredAt: loaded.recoveredAt })
-        if (startup === 'blank') setCreating({})
+        if (loaded.firstRun) setFirstRun('first')
+        else if (startup === 'blank') setCreating({})
       },
       (error: unknown) => {
         // 읽지 못했으면 저장도 하지 않는다 — 빈 상태가 실제 파일을 덮지 않게.
@@ -569,7 +577,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
@@ -608,6 +616,15 @@ export function App() {
       case 'privacy':
         setSettingsSection('privacy')
         return setSettingsOpen(true)
+      case 'update-check':
+        window.taskminal.update.action('check')
+        setSettingsSection('about')
+        return setSettingsOpen(true)
+      case 'error-log':
+        setSettingsSection('about')
+        return setSettingsOpen(true)
+      case 'first-run':
+        return setFirstRun('again')
       case 'mask-toggle': {
         const on = !state.settings.maskScreen
         dispatch({ type: 'settings/patch', patch: { maskScreen: on } })
@@ -781,6 +798,14 @@ export function App() {
         onNextAttention={() => runCommand('next-attention')}
         onConfirm={setHostConfirm}
       />
+      <UpdateBanners
+        view={updateView}
+        crashed={runtime.crashedLast}
+        later={laterVersion}
+        onLater={setLaterVersion}
+        onSkip={(version) => dispatch({ type: 'settings/patch', patch: { updateSkip: version } })}
+        onOpenLog={() => runCommand('error-log')}
+      />
       <div className="app-body">
         <Sidebar
           state={state}
@@ -798,6 +823,8 @@ export function App() {
           onSaveTemplate={(task) => openSaveTemplate(task, null)}
           onMenuClosed={refocus}
           branches={branches}
+          updateChip={updateView?.state === 'downloaded' && updateView.version === laterVersion ? laterVersion : null}
+          onUpdateChip={() => runCommand('error-log')}
         />
         <main className="workspace">
           {/* 전환해도 셸 · 화면이 남도록 본 탭의 pane 은 모두 마운트해 두고, 활성이 아닌 일감 · 탭은 숨긴다. */}
@@ -895,9 +922,30 @@ export function App() {
           initialSection={settingsSection ?? undefined}
           busy={busyTotal}
           onRestore={applyRestore}
+          update={updateView}
+          onFirstRun={() => {
+            setSettingsOpen(false)
+            setSettingsSection(null)
+            setFirstRun('again')
+          }}
           onClose={() => {
             setSettingsOpen(false)
             setSettingsSection(null)
+            refocus()
+          }}
+        />
+      )}
+      {firstRun && (
+        <FirstRun
+          home={runtime.home}
+          again={firstRun === 'again'}
+          onCreate={(cwd) => {
+            const name = cwd === runtime.home || cwd === '~' ? '홈' : cwd.replace(/\/+$/, '').split('/').pop() || '홈'
+            create({ name, cwd: cwdLike(cwd, '~', runtime.home), templateId: null, statusId: state.settings.statuses[0]?.id ?? '', groupId: null, color: null })
+          }}
+          onDone={() => {
+            if (firstRun === 'first') window.taskminal.firstRunDone()
+            setFirstRun(null)
             refocus()
           }}
         />
