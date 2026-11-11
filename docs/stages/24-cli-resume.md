@@ -143,3 +143,9 @@ e2e (`tests/e2e/cli.spec.ts` · `resume.spec.ts`, 저장소의 `resources/bin/ta
 - `tab new` · `pane split` · `chat new` 가 사용자의 활성 pane 을 바꿈 → 되돌린다(위).
 - 소켓 umask 077 이 await 동안 프로세스 전체에 걸려 있음 → `listen()` 호출 동안만(유닉스 소켓은 그 안에서 bind).
 - 고치지 않은 것: `TASKMINAL_TASK_ID` 가 CLI 로 만든 셸에는 빠질 수 있고 읽는 곳이 없음(계획대로 '찾을 수 있을 때만', design-gaps 에 적힌 이름이라 남김) · 소켓 경로 · userData 기본값 계산이 세 곳(cli-entry · index · host-control)에 겹침(지금 값은 같음, 묶는 리팩터는 다음에).
+
+## 계획에 없던 것 — '친 글자 앞부분이 셸에 안 닿음' 불안정의 원인
+- 이 단계 전체 검사에서 `restore.spec:70` · `find.spec:26` · `ports.spec:110/123` 이 앞부분 글자를 잃고 실패(다시 돌리면 통과). development.md 7절의 BACK2 · tabs:175 와 같은 무리라 원인을 봤다.
+- 원인: main `PtyManager.write` 는 spawn · attach 답으로 주인을 정하기 전의 키를 조용히 버린다. 시험은 클릭 뒤 프롬프트를 기다리지 않고 바로 친다(사람도 앱을 막 열고 바로 치면 같다).
+- 고침: `TerminalPane` 이 붙기 전에 친 키를 모아 두었다가 spawn · attach 가 끝나면 보낸다(상한 64KB, 셸을 못 띄우면 버림).
+- 확인: 경합이라 정해진 재현 시험은 만들지 못했다(spawn 을 늦출 시험용 손잡이가 없다). 고친 뒤 find · restore · tabs · safety · ports 를 3번씩(87개) 모두 통과, 전체 검사 206 개 모두 통과(이 단계에서 처음으로 불안정 0) — 원인이 이것뿐이라고는 단정하지 않는다.

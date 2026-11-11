@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (23단계 변경 검토 병합 — 단위 840 · e2e 193, 다음은 24단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (24단계 지휘와 이어받기 병합 — 단위 929 · e2e 206, 다음은 25단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -20,7 +20,8 @@
 | 21 대화 1 — Claude · 사이드바 | main 에 병합(브랜치 `stage-21-chat-claude`). 대화 pane(가짜 claude 로 e2e · stream-json · 허락/질문 카드 · `--resume` · 허락 방식 · ⇧⌘J 터미널 전환 · 가린 대화 기록 `<userData>/chat/*.jsonl`) + 사이드바 흐름 보기(상태 칸 · 개수 막대 · `/` 거르기 · 끌어 놓기 · 안 본 점). 계획 · 결과 `docs/stages/21-chat-claude.md` |
 | 22 대화 2 — Codex · 확장 | main 에 병합(브랜치 `stage-22-chat-codex`). Codex app-server 대화(가짜 codex 로 e2e · 같은 카드로 승인 · 로그인 없음 띠 · `thread/resume`) · 그림(📎 · ⌘V · 끌어 놓기) · 되감기 · 여기서 새 대화로 나누기(둘 다 앞 턴 끝에서 갈라진 새 세션, 파일은 그대로) · 대기열 · ⌘↩ 지금 보내기 · 여러 개 고르기. Codex 승인 · 질문 · 항목 줄은 로그인한 codex 로 **미확인**. 계획 · 결과 `docs/stages/22-chat-codex.md` |
 | 23 변경 검토 | main 에 병합(브랜치 `stage-23-review`). pane 종류 '변경'(⇧⌘G · ⌘P): 파일별 diff · 줄 골라 ⌫ 되돌리기(⌘Z · '되돌린 것' 7일, add 한 파일은 인덱스도 함께) · 체크한 파일만 `commit --only` · 막을 때만 경고(main 에 바로 · 비밀값) · 커밋 전 검사 실패 마지막 20줄 · 커밋 취소 · 대화 도구 줄의 'diff 열기 →' 카드 · 보일 때만 폴더 감시. 전체 보기 '± 변경' 칩은 그 화면이 없어 안 함. 계획 · 결과 `docs/stages/23-review.md` |
-| 24~25 1차 출시 | 24 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 24 지휘와 이어받기 | main 에 병합(브랜치 `stage-24-cli-resume`). `taskminal` 명령(`resources/bin/taskminal` → `out/main/cli.js`, 소켓 `<userData>/cli.sock` 0600): 일감 · 탭 · pane 바꾸기 · `pane send/read/wait` · `chat new/send/wait/read` · `notify` · `task note`, 앱 메뉴 '명령줄 도구 설치…' 로만 PATH 링크. 오래 안 본 일감의 이어받기 요약 카드(⌥⌘R) · 일감 메모 칸(⌥⌘M). 계획 · 결과 `docs/stages/24-cli-resume.md` |
+| 25 1차 출시 | 다음 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -161,6 +162,16 @@
 - 막 연 pane 은 첫 읽기 전이라 커밋 칸이 없다 — 포커스 요청은 기억했다가 그려진 뒤에 준다.
 - macOS 임시 폴더는 `/var` → `/private/var` — git 이 돌려주는 뿌리와 비교하는 단위 시험은 `realpathSync(mkdtempSync(…))`.
 
+### 24 지휘와 이어받기
+계획 · 결과 `docs/stages/24-cli-resume.md`(0절 스파이크 = Claude Code 의 OSC 9 는 알려진 터미널에만 · 소켓 권한). 구조: `src/shared/cli.ts`(인자 · 요청 검증 · 이름 풀기 · list) · `src/shared/pane-watch.ts`(OSC 133 으로 pane wait, 가짜 시계) · `src/main/cli-server.ts`(소켓 · 창에 묻기 · 지킴이 · 대화) · `src/main/cli/cli-entry.ts`(명령 쪽) · `src/renderer/cli-bridge.ts`(창이 하는 일, reducer 동작) · `src/shared/resume.ts` · `ResumeCard.tsx` · `NotesPanel.tsx`. 짚어 둔 함정:
+- e2e 는 `runCli(userData, …)`(helpers) 로 저장소의 `resources/bin/taskminal` 을 부른다 — 시험 환경의 `TASKMINAL_*` 를 빼야 바깥 셸처럼 된다. `npm run build` 뒤에(`out/main/cli.js`).
+- 확인 필요인 일감은 사이드바 위 '확인 필요' 칸으로 옮겨 가 `task-row` 가 사라진다(`attention-row`) — 일감 줄은 `li[data-task-name=…]` 로 찾는다.
+- e2e 에서 앱을 다시 띄우면 `win` 이 바뀐다 — 미리 만든 locator 는 옛 창을 본다. 부를 때마다 만든다.
+- 요약 카드는 '보면 꺼지는 확인 필요' 보다 먼저 계산해야 한다 — App 의 효과 선언 순서(이어받기 효과가 `viewedPane` 효과 위)에 기댄다. 카드는 연 순간의 사실을 떠 둔다.
+- `process.umask` 는 프로세스 전체 — await 를 넘겨 두지 않는다(유닉스 소켓은 `listen()` 호출 안에서 bind).
+- 명령이 만든 탭 · pane 은 사용자가 보던 탭 · pane 으로 되돌린다(`keepFocus`) — 치던 키가 다른 pane 으로 가지 않게.
+- 커밋을 둘로 나눌 때 한 파일에 두 기능이 섞이면 hunk 대신 그 커밋용 파일을 만들어 `git update-index --cacheinfo` 로 올리고, `git checkout-index -a --prefix=<임시>` + node_modules 링크로 그 트리를 따로 컴파일했다.
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -171,6 +182,7 @@
 - 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인. 19단계 전체 실행 3번 중 1번 다시 나옴: 받은 화면이 `echo BACK$((1+1)) ` 뿐 — **프롬프트가 한 번도 안 그려졌다**(입력은 tty 가 되돌린 글자). 시험은 프롬프트를 기다리지 않고 친다. 지킴이 `spawn` 은 같은 paneId 의 끝나지 않은 세션이 있으면 그 세션에 붙는다(`host-core.ts` spawn 의 `old && !old.exited`) — 지운 B 의 셸(SIGHUP · 2초 뒤 SIGKILL)과 되살린 B 가 같은 `p2` 를 쓰므로 후보지만, 지우기 → 되살리기 사이가 몇 초라 확인 못 함. 다음에 볼 것: 실패 때 지킴이 `list` 로 p2 세션의 pid · killed · 시작 시각을 남기기.
 - 22단계 전체 검사에서 한 번씩 불안정: `safety.spec` '일감 지우기 → … 되살리기' 의 셸 출력 기다림 · `sidebar-flow.spec` 의 afterEach `rmSync` ENOTEMPTY. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림 · 정리를 고친다.
 - 23단계 리뷰 뒤 전체 검사에서 한 번씩 불안정(처음 나옴): `persist.spec:93` ⌥⌘Q 묻기 전에 셸 자식 pid 하나가 이미 죽어 있음 · `ports.spec:56` python 서버 칩이 15초 안에 안 뜸. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림을 고친다.
+- 24단계 전체 검사에서 한 번(처음 나옴): `restore.spec:70` 이 되살린 pane 에 `echo "PWD=$PWD"` 를 쳤는데 앞 `echo "` 가 사라지고 `PWD=$PWD"` 만 들어가 `dquote>` 에 멈춤 — '이전 세션' 구분 줄이 그려진 직후였다. BACK2 · tabs:175 와 같은 '친 글자가 셸에 안 닿음' 무리(앞부분만 잃음). 같은 단계 첫 전체 검사에서는 `history.spec:201` afterEach `rmSync` ENOTEMPTY(sidebar-flow 와 같은 정리 문제) · `tabs.spec:231`(마지막 탭 닫고 새 탭 셸) 이 한 번씩 — 다시 돌리면 통과. 같은 검사 다음 판에 `find.spec:26`(`for` 가 사라짐) · `ports.spec:110/123`(서버 명령이 안 돌아 칩 없음)도 나와 원인을 봤다: **main 의 `PtyManager.write` 는 spawn · attach 답을 받아 주인을 정하기 전의 키를 조용히 버린다**(`owned()`), 시험은 프롬프트를 기다리지 않고 클릭 뒤 바로 친다. → `TerminalPane` 이 붙기 전에 친 키를 모아 두었다가 spawn · attach 가 끝나면 보낸다(상한 64KB, 24단계). 경합이라 정해진 재현 시험은 없다 — 고친 뒤 그 시험들을 3번씩 돌리고 전체 검사로 확인했다(결과는 `docs/stages/24-cli-resume.md`).
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
 - e2e `win.evaluate` 안에서는 `window` 대신 `globalThis`(tsconfig.node 에 DOM 이 없다).
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
