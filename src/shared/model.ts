@@ -128,7 +128,9 @@ export function createTask(input: NewTaskInput, settings: Settings, newId: NewId
   const id = newId()
   // 빈 폴더로 만든 일감은 저장 파일 검증(normalizeState)에서 버려진다 → 홈 폴더로
   const cwd = input.cwd.trim() || '~'
-  const template = settings.templates.find((t) => t.id === input.templateId)
+  // 원격 일감(25단계)은 셸 하나로 — 템플릿의 대화 · 검토 칸은 이 Mac 에서 도는 것이라 원격 폴더와 맞지 않는다
+  const host = input.host !== undefined && isSshHost(input.host) ? input.host : undefined
+  const template = host ? undefined : settings.templates.find((t) => t.id === input.templateId)
   const tabSpecs: TemplateTab[] = template && template.tabs.length ? template.tabs : [{ layout: { pane: {} } }]
   const panes: Record<Id, Pane> = {}
   const tabs = tabSpecs.map((tt) => expandTab(tt, cwd, newId, panes))
@@ -145,6 +147,7 @@ export function createTask(input: NewTaskInput, settings: Settings, newId: NewId
     activeTabId: tabs[0].id,
     panes,
     createdAt: now,
+    ...(host ? { host, remoteTmux: input.remoteTmux !== false } : {}),
     // 템플릿의 빠른 명령은 일감에 복사한다(▤) — 템플릿을 나중에 고쳐도 이미 만든 일감은 그대로
     ...(template?.quickCommands?.length ? { quickCommands: template.quickCommands.map((q) => ({ ...q, fromTemplate: template.name })) } : {}),
   }

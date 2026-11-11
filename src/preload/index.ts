@@ -40,6 +40,7 @@ const api: TaskminalApi = {
     onExit: (listener) => subscribe<[string, PtyExit]>(IPC.ptyExit, listener),
     cwds: (paneIds) => ipcRenderer.invoke(IPC.ptyCwds, paneIds) as Promise<Record<string, string>>,
   },
+  sshHosts: () => ipcRenderer.invoke(IPC.sshHosts) as Promise<string[]>,
   scrollback: {
     load: (paneId) => ipcRenderer.invoke(IPC.scrollbackLoad, paneId) as Promise<ScrollbackEntry | null>,
     save: (req) => ipcRenderer.send(IPC.scrollbackSave, req),

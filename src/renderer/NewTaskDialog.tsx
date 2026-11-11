@@ -3,6 +3,7 @@ import { Modal } from './Modal'
 import { defaultTaskCwd } from '../shared/model'
 import { cwdLike } from '../shared/cwd'
 import { checkBranchName } from '../shared/worktree'
+import { isRemotePath, isSshHost } from '../shared/remote'
 import { runtime } from './runtime'
 import type { AppState, NewTaskInput } from '../shared/types'
 
@@ -40,8 +41,23 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
   const [branch, setBranch] = useState('')
   const [busy, setBusy] = useState(false) // git 이 도는 동안 만들기 · 취소 · Esc 를 막는다
   const [error, setError] = useState<string | null>(null)
+  // 25단계 원격: 어디서 — 이 Mac ⌥1 / 원격 (SSH) ⌥2. 호스트 목록은 열 때마다 ~/.ssh/config 를 다시 읽는다(main 이 읽기만)
+  const [where, setWhere] = useState<'local' | 'remote'>('local')
+  const [host, setHost] = useState('')
+  const [remoteDir, setRemoteDir] = useState('~')
+  const [tmux, setTmux] = useState(true)
+  const [hosts, setHosts] = useState<string[]>([])
+  const remote = where === 'remote'
 
   useEffect(() => nameRef.current?.focus(), [])
+  useEffect(() => {
+    let alive = true
+    window.taskminal.sshHosts().then(
+      (h) => alive && setHosts(h),
+      () => {},
+    )
+    return () => void (alive = false)
+  }, [])
   useEffect(() => {
     let alive = true
     const dir = cwd.trim()
@@ -63,6 +79,14 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
     if (submitted.current) return // Enter 와 ⌘↩ 가 겹쳐도 한 번만
+    if (remote) {
+      const h = host.trim()
+      const dir = remoteDir.trim() || '~'
+      if (!isSshHost(h)) return setError('호스트를 확인하세요 — ~/.ssh/config 의 Host 이름이나 user@host')
+      if (!isRemotePath(dir)) return setError('원격 폴더를 확인하세요')
+      submitted.current = true
+      return onCreate({ name: name.trim() || h, cwd: dir, templateId: null, statusId, groupId: groupId || null, color, host: h, remoteTmux: tmux })
+    }
     const input = { name, cwd, templateId: template?.id ?? null, statusId, groupId: groupId || null, color }
     if (!worktreeOn) {
       submitted.current = true
@@ -88,6 +112,12 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
       e.preventDefault()
       void submit()
     }
+    // ⌥1 · ⌥2 — 글쇠 자리(code)로 본다: ⌥ 를 누르면 key 는 '¡' · '™' 가 된다
+    if (e.altKey && !e.metaKey && (e.code === 'Digit1' || e.code === 'Digit2')) {
+      e.preventDefault()
+      setWhere(e.code === 'Digit1' ? 'local' : 'remote')
+      setError(null)
+    }
   }
 
   const pickFolder = async () => {
@@ -107,16 +137,62 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
           </label>
 
           <div className="field">
-            <label htmlFor="new-task-cwd">작업 폴더</label>
-            <div className="field-row">
-              <input id="new-task-cwd" value={cwd} onChange={(e) => setCwd(e.target.value)} spellCheck={false} />
-              <button type="button" className="button" onClick={pickFolder}>
-                폴더 선택…
+            <span>어디서</span>
+            <div className="new-task-where" role="group" aria-label="어디서">
+              <button type="button" className="button" aria-pressed={!remote} onClick={() => (setWhere('local'), setError(null))} data-testid="where-local">
+                이 Mac <kbd>⌥1</kbd>
+              </button>
+              <button type="button" className="button" aria-pressed={remote} onClick={() => (setWhere('remote'), setError(null))} data-testid="where-remote">
+                원격 (SSH) <kbd>⌥2</kbd>
               </button>
             </div>
           </div>
 
-          {isRepo && (
+          {remote ? (
+            <>
+              <div className="field">
+                <label htmlFor="new-task-host">호스트</label>
+                <input
+                  id="new-task-host"
+                  list="new-task-hosts"
+                  value={host}
+                  onChange={(e) => (setHost(e.target.value), setError(null))}
+                  placeholder={hosts[0] ? `예: ${hosts[0]}` : '예: nas 또는 peter@192.168.0.10'}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                />
+                <datalist id="new-task-hosts">
+                  {hosts.map((h) => (
+                    <option key={h} value={h} />
+                  ))}
+                </datalist>
+                <p className="field-hint">
+                  {hosts.length ? `~/.ssh/config 의 Host ${hosts.length}개 — ↑↓ 로 고르기. ` : ''}
+                  앱은 비밀번호 · 키를 갖지 않아요 — ssh 설정 · ssh-agent 를 그대로 써요.
+                </p>
+              </div>
+              <label className="field">
+                <span>원격 폴더</span>
+                <input aria-label="원격 폴더" value={remoteDir} onChange={(e) => (setRemoteDir(e.target.value), setError(null))} spellCheck={false} />
+              </label>
+              <label className="check-row">
+                <input type="checkbox" checked={tmux} onChange={(e) => setTmux(e.target.checked)} data-testid="new-task-tmux" />
+                끊겨도 계속 돌게 (서버의 tmux 사용 — 없으면 그냥 셸)
+              </label>
+            </>
+          ) : (
+            <div className="field">
+              <label htmlFor="new-task-cwd">작업 폴더</label>
+              <div className="field-row">
+                <input id="new-task-cwd" value={cwd} onChange={(e) => setCwd(e.target.value)} spellCheck={false} />
+                <button type="button" className="button" onClick={pickFolder}>
+                  폴더 선택…
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!remote && isRepo && (
             <div className="field" data-testid="new-task-worktree">
               <label className="check-row">
                 <input
@@ -152,17 +228,19 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
             </p>
           )}
 
-          <label className="field">
-            <span>템플릿</span>
-            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} data-testid="new-task-template">
-              <option value="">없음 — 셸 하나</option>
-              {settings.templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!remote && (
+            <label className="field">
+              <span>템플릿</span>
+              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} data-testid="new-task-template">
+                <option value="">없음 — 셸 하나</option>
+                {settings.templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <div className="field-pair">
             <label className="field">
@@ -211,7 +289,6 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
               />
             </div>
           </fieldset>
-
         </fieldset>
 
         <footer className="dialog-actions">

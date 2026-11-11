@@ -18,6 +18,8 @@ export const runtime = {
   claudeTui: 'claude',
   /** 같은 것 — codex (22단계) */
   codexTui: 'codex',
+  /** 원격 다시 붙기 한 걸음 (25단계) */
+  sshRetryMs: 1000,
 }
 
 /** 지금 WebGL 로 그리는 pane 수 · pane 마다 WebGL 실패 수 · 상한에 걸려 자리를 기다리는 pane 의 다시 해 보기 (15e) */
@@ -36,3 +38,5 @@ export const restoredWithText = new Set<string>()
 export const findingPanes = new Set<string>()
 /** 셸 통합 신호(OSC 133)를 한 번이라도 보낸 pane — 명령 기록이 비어 있는 이유를 알릴 때 (19단계) */
 export const integratedPanes = new Set<string>()
+/** 원격(ssh) pane — 로컬 pid 가 아니라 lsof 폴더 · 포트 조사에서 뺀다 (25단계) */
+export const remotePanes = new Set<string>()

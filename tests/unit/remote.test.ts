@@ -65,11 +65,23 @@ describe('sshOutputSignal', () => {
     expect(sshOutputSignal('peter@nas: Permission denied (publickey).')).toEqual({ kind: 'auth' })
     expect(sshOutputSignal('hello')).toBeNull()
   })
+  it('지문을 거절(no)하거나 known_hosts 확인이 실패하면 refused — 키 바뀜 글이 함께 있으면 key-changed 가 먼저', () => {
+    expect(sshOutputSignal('Host key verification failed.')).toEqual({ kind: 'refused' })
+    expect(sshOutputSignal('@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @\nHost key verification failed.')).toEqual({ kind: 'key-changed' })
+  })
+  it('질문 뒤에 온 결과가 이긴다 — 같은 시도의 출력에 질문이 남아 있어도 거절 · 인증 실패를 알아본다', () => {
+    const q = 'ED25519 key fingerprint is SHA256:abc.\nAre you sure you want to continue connecting (yes/no)? '
+    expect(sshOutputSignal(q + 'no\nHost key verification failed.')).toEqual({ kind: 'refused' })
+    expect(sshOutputSignal(q + 'yes\nWarning: Permanently added\npeter@nas: Permission denied (publickey).')).toEqual({ kind: 'auth' })
+  })
 })
 
 describe('reconnectDelay', () => {
   it('1 · 2 · 4 · 8 · 8초, 다섯 번 넘으면 null', () => {
     expect(RECONNECT_TRIES).toBe(5)
-    expect([1, 2, 3, 4, 5, 6].map(reconnectDelay)).toEqual([1000, 2000, 4000, 8000, 8000, null])
+    expect([1, 2, 3, 4, 5, 6].map((n) => reconnectDelay(n))).toEqual([1000, 2000, 4000, 8000, 8000, null])
+  })
+  it('단위를 바꾸면(시험) 같은 배수로', () => {
+    expect([1, 2, 3, 4, 5, 6].map((n) => reconnectDelay(n, 10))).toEqual([10, 20, 40, 80, 80, null])
   })
 })

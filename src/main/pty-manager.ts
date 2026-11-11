@@ -89,7 +89,8 @@ export class PtyManager {
     return { attached: true, detachedMs }
   }
 
-  async spawn(owner: WebContents, paneId: string, opts: PtySpawnOptions): Promise<void> {
+  /** ssh: 원격 pane(25단계) — 셸 대신 이 파일(ssh)을 이 인자로, 로컬 폴더는 홈. 셸 통합은 넣지 않는다(원격 셸) */
+  async spawn(owner: WebContents, paneId: string, opts: PtySpawnOptions, ssh?: { file: string; args: string[] }): Promise<void> {
     const other = this.owners.get(paneId)
     if (other && other !== owner && !other.isDestroyed()) throw new Error('다른 창의 pane')
     const shell = pickShell(opts.shell, process.env['SHELL'], this.allowedShells)
@@ -98,10 +99,14 @@ export class PtyManager {
     const { r, early } = await this.request(owner, paneId, {
       op: 'spawn',
       paneId,
-      file: shell,
-      args: ['-l'],
-      cwd: resolveCwd(opts.cwd),
-      env: opts.integration === false ? env : integrationEnv(env, shell, this.zshIntegrationDir),
+      ...(ssh
+        ? { file: ssh.file, args: ssh.args, cwd: homedir(), env }
+        : {
+            file: shell,
+            args: ['-l'],
+            cwd: resolveCwd(opts.cwd),
+            env: opts.integration === false ? env : integrationEnv(env, shell, this.zshIntegrationDir),
+          }),
       cols: opts.cols,
       rows: opts.rows,
     })

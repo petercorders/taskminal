@@ -67,21 +67,36 @@ export function parseSshConfigHosts(text: string): string[] {
   return out
 }
 
-export type SshSignal = { kind: 'new-host'; fingerprint: string } | { kind: 'key-changed' } | { kind: 'auth' }
-/** pane 출력에서 ssh 의 알림을 알아본다 — 처음 보는 서버(지문) · 키 바뀜 · 인증 거절 */
+export type SshSignal = { kind: 'new-host'; fingerprint: string } | { kind: 'key-changed' } | { kind: 'auth' } | { kind: 'refused' }
+/** pane 출력에서 ssh 의 알림을 알아본다 — 처음 보는 서버(지문) · 키 바뀜 · 인증 거절 · 호스트 키 확인 실패(지문 거절) */
 export function sshOutputSignal(text: string): SshSignal | null {
+  // 끝난 결과가 질문보다 먼저 — 한 시도의 출력에 '처음 보는 서버' 질문이 남아 있어도 그 뒤의 거절 · 인증 실패를 본다
   if (/REMOTE HOST IDENTIFICATION HAS CHANGED/.test(text)) return { kind: 'key-changed' }
+  if (/Host key verification failed/.test(text)) return { kind: 'refused' }
+  if (/Permission denied \(/.test(text)) return { kind: 'auth' }
   if (/Are you sure you want to continue connecting/.test(text)) {
     const m = /([A-Z0-9-]+) key fingerprint is (SHA256:[A-Za-z0-9+/=]+)/.exec(text)
     return { kind: 'new-host', fingerprint: m ? `${m[1]} · ${m[2]}` : '' }
   }
-  if (/Permission denied \(/.test(text)) return { kind: 'auth' }
   return null
 }
 
+/** 원격 pane 의 연결 상태 — 일감 머리 띠 · 사이드바 점이 쓴다 */
+export type RemoteState =
+  | { kind: 'up' }
+  | { kind: 'new-host'; fingerprint: string }
+  | { kind: 'retry'; attempt: number; inMs: number }
+  | { kind: 'down'; why: 'gave-up' | 'key-changed' | 'auth' | 'refused' }
+
+/** 이만큼 붙어 있다 끊기면 새 끊김으로 보고 다섯 번을 처음부터 센다 */
+export const STABLE_MS = 15_000
+/** 연결 시도마다 ssh 알림을 찾는 출력 길이 — 그 뒤(원격 셸 안의 글)는 보지 않는다 */
+export const SIGNAL_SCAN_MAX = 16 * 1024
+
 export const RECONNECT_TRIES = 5
-const DELAYS = [1000, 2000, 4000, 8000, 8000]
-/** n 번째(1부터) 다시 붙기 전 기다림 — 다섯 번 넘으면 null */
-export function reconnectDelay(attempt: number): number | null {
-  return DELAYS[attempt - 1] ?? null
+const STEPS = [1, 2, 4, 8, 8]
+/** n 번째(1부터) 다시 붙기 전 기다림 — 다섯 번 넘으면 null. unit = 한 걸음(기본 1초, 시험은 TASKMINAL_SSH_RETRY_MS 로 줄인다) */
+export function reconnectDelay(attempt: number, unit = 1000): number | null {
+  const k = STEPS[attempt - 1]
+  return k === undefined ? null : k * unit
 }

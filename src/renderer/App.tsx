@@ -46,7 +46,9 @@ import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView, type SettingsJump } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
-import { dirtyPanes, integratedPanes, osc7Panes, restoredWithText, runtime } from './runtime'
+import { dirtyPanes, integratedPanes, osc7Panes, remotePanes, restoredWithText, runtime } from './runtime'
+import { RemoteBand } from './RemoteBand'
+import type { RemoteState } from '../shared/remote'
 import { PopupMenu, type PopupItem } from './PopupMenu'
 import { draftOf, QuickBar, QuickConfirm, QuickEditor, type QuickDraft } from './quick-ui'
 import { usePorts } from './ports-state'
@@ -80,6 +82,7 @@ const loadState = () =>
       runtime.codexTui = info.codexTui
       runtime.renderer = info.renderer
       runtime.crashedLast = info.crashedLast
+      runtime.sshRetryMs = info.sshRetryMs
       return window.taskminal.state.load()
     },
     () => window.taskminal.state.load(),
@@ -238,6 +241,9 @@ export function App() {
     | null
   >(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  // 25단계 원격: pane 마다 연결 상태 · 일감마다 '지금 다시' 횟수(바뀌면 끊긴 pane 이 다시 붙는다)
+  const [remoteStates, setRemoteStates] = useState<Readonly<Record<string, RemoteState>>>({})
+  const [reconnects, setReconnects] = useState<Readonly<Record<string, number>>>({})
   const [weeklyOpen, setWeeklyOpen] = useState(false)
   // 빠른 명령 (20단계): 누른 기록(런타임) · 메뉴 · 만들기 창 · 실행 확인. 단추는 id 로만 들고 누르는 순간 다시 찾는다
   const [quickRuns, setQuickRuns] = useState<Readonly<Record<string, QuickRun>>>({})
@@ -419,6 +425,8 @@ export function App() {
   useEffect(
     () =>
       window.taskminal.pty.onExit((paneId, exit) => {
+        // 원격 ssh 의 255 는 연결 끊김 — TerminalPane 이 다시 붙고 띠가 알린다(다섯 번 다 실패하면 확인 필요)
+        if (remotePanes.has(paneId) && exit.exitCode === 255 && !exit.signal) return
         deliverRef.current('exit', paneId, activityRef.current[paneId])
         if (cleanExit(exit)) dispatch({ type: 'pane/exited', paneId })
       }),
@@ -481,7 +489,7 @@ export function App() {
     if (!scrollReady) return
     let alive = true
     const timer = setInterval(() => {
-      const ids = [...terminals.keys()].filter((id) => !osc7Panes.has(id))
+      const ids = [...terminals.keys()].filter((id) => !osc7Panes.has(id) && !remotePanes.has(id)) // 원격 pane 의 pid 는 로컬 ssh
       if (ids.length === 0) return
       void window.taskminal.pty.cwds(ids).then(
         (found) => {
@@ -1361,6 +1369,25 @@ export function App() {
 
   // 앱 명령 하나 — 단축키(아래 keydown)와 앱 메뉴(main → onCommand)가 같은 길로 온다.
   // fromPalette: 팔레트에서 고른 명령 — 팔레트가 닫히는 중이라 '대화상자 열림' 규칙에 막히지 않게 한다
+  // ─── 25단계 원격 ───
+  const onRemoteState = (paneId: string, st: RemoteState) => {
+    setRemoteStates((prev) => (prev[paneId]?.kind === st.kind && JSON.stringify(prev[paneId]) === JSON.stringify(st) ? prev : { ...prev, [paneId]: st }))
+    // 다섯 번 다 실패하면 확인 필요(보고 있는 pane 이면 띠로 충분 — applyActivity 가 거른다)
+    if (st.kind === 'down' && st.why === 'gave-up') updateActivityRef.current(paneId, { type: 'notify', text: '원격에 다시 붙지 못했어요' })
+  }
+  const reconnectTask = (taskId: string) => setReconnects((prev) => ({ ...prev, [taskId]: (prev[taskId] ?? 0) + 1 }))
+  /** 일감의 띠에 보일 pane 하나 — 처음 보는 서버 > 못 붙음 > 다시 붙는 중 > 붙음 */
+  const taskRemote = (task: Task): { paneId: string; state: RemoteState } | null => {
+    if (!task.host) return null
+    const rank = { 'new-host': 3, down: 2, retry: 1, up: 0 } as const
+    let best: { paneId: string; state: RemoteState } | null = null
+    for (const id of Object.keys(task.panes)) {
+      const st = remoteStates[id]
+      if (st && (!best || rank[st.kind] > rank[best.state.kind])) best = { paneId: id, state: st }
+    }
+    return best
+  }
+
   const runCommand = (command: AppCommand, fromPalette = false) => {
     // 대화상자가 열려 있으면 뒤의 화면을 바꾸지 않는다 (⌘T 가 대화상자 뒤에서 탭을 만들지 않게)
     // 읽기가 끝나기 전에는 상태가 비어 있어 받지 않는다. 읽기에 실패한 실행(저장만 안 함)에서는 된다.
@@ -1443,6 +1470,12 @@ export function App() {
         }
         dispatch({ type: 'task/edit', id: t.id, patch: { statusId: to } })
         say(`‘${t.name}’ → ${state.settings.statuses.find((x) => x.id === to)?.name ?? to}`)
+        return refocus()
+      }
+      case 'remote-reconnect': {
+        const t = state.tasks.find((x) => x.id === state.activeTaskId)
+        if (t?.host) reconnectTask(t.id)
+        else if (!toastRef.current?.action) showToast({ text: '원격 일감에서만 다시 연결해요.' })
         return refocus()
       }
       case 'archive-open':
@@ -1693,6 +1726,10 @@ export function App() {
           state={viewState}
           onArchive={(t) => archive([t.id])}
           archivedCount={state.tasks.length - viewState.tasks.length}
+          remoteStateOf={(t) => {
+            const r = taskRemote(t)
+            return r ? (r.state.kind === 'up' ? 'up' : r.state.kind === 'down' ? 'down' : 'retry') : null
+          }}
           onOpenArchive={() => runCommand('archive-open')}
           onWeekly={() => runCommand('weekly')}
           suggestArchive={suggestions}
@@ -1785,6 +1822,34 @@ export function App() {
                     onClose={() => resumeClose(task.id)}
                   />
                 )}
+                {task.host &&
+                  (() => {
+                    const r = taskRemote(task)
+                    const host = task.host
+                    if (!r) return null
+                    return (
+                      <RemoteBand
+                        host={host}
+                        state={r.state}
+                        onAnswer={(yes) => {
+                          // ssh 자신의 질문에 답한다 — known_hosts 는 ssh 가 쓴다(앱은 쓰지 않음)
+                          window.taskminal.pty.write(r.paneId, yes ? 'yes\r' : 'no\r')
+                          setRemoteStates((prev) => ({ ...prev, [r.paneId]: { kind: 'up' } }))
+                          refocus()
+                        }}
+                        onRetry={() => {
+                          reconnectTask(task.id)
+                          refocus()
+                        }}
+                        onCopyFix={() =>
+                          void navigator.clipboard.writeText(`ssh-keygen -R ${host}`).then(
+                            () => showToast({ text: '복사했어요 — 터미널에서 붙여 넣어 옛 키를 지운 뒤 다시 시도하세요.' }),
+                            () => {},
+                          )
+                        }
+                      />
+                    )
+                  })()}
                 {/* 겹침 알림은 탭 줄 바로 아래 — 아래 알림(Toast)이 화면 아래를 덮는다 */}
                 {portClash && portClash.taskId === task.id && (
                   <PortConflictBar
@@ -1843,6 +1908,7 @@ export function App() {
                           onAllow={allowSecret}
                           chat={chatProps}
                           review={reviewProps(task.id)}
+                          remote={task.host ? { host: task.host, tmux: task.remoteTmux !== false, signal: reconnects[task.id] ?? 0, onState: onRemoteState } : undefined}
                         />
                       )}
                     </div>

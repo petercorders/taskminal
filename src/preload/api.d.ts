@@ -162,6 +162,8 @@ export interface TaskminalApi {
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi
+  /** ~/.ssh/config 의 Host 이름들 — 와일드카드 빼고(25단계, main 이 읽기만) */
+  sshHosts(): Promise<string[]>
   scrollback: ScrollbackApi
   state: StateApi
   host: HostApi

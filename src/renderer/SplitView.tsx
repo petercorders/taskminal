@@ -13,6 +13,7 @@ import { ChatPane } from './ChatPane'
 import { ReviewPane, type ReviewRequest } from './ReviewPane'
 import type { ToastSpec } from './Toast'
 import type { ChatPermission } from '../shared/chat'
+import type { RemoteState } from '../shared/remote'
 
 interface Props {
   tab: Tab
@@ -40,6 +41,8 @@ interface Props {
   onDragEnd(): void
   /** 화면에서 비밀값 가리기 (17단계) */
   mask: MaskSettings
+  /** 원격 일감 (25단계) — 이 탭의 터미널 pane 은 모두 같은 host 로 ssh. signal 이 바뀌면 끊긴 pane 이 지금 다시 붙는다 */
+  remote?: { host: string; tmux: boolean; signal: number; onState(paneId: Id, state: RemoteState): void } | undefined
   onAllow(paneId: Id, hit: { hash: string; kind: string }): void
   /** 대화 pane (21단계) */
   chat: {
@@ -75,7 +78,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow, chat, review }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow, chat, review, remote }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -217,6 +220,9 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onCwd={(path) => onCwd(pane.id, path)}
                 mask={mask}
                 onAllow={(hit) => onAllow(pane.id, hit)}
+                remote={remote ? { host: remote.host, tmux: remote.tmux } : undefined}
+                onRemote={remote ? (st) => remote.onState(pane.id, st) : undefined}
+                reconnectSignal={remote?.signal}
               />
             )}
             {pane && find.paneId === pane.id && <FindBar paneId={pane.id} signal={find.signal} {...(find.query !== undefined ? { initialQuery: find.query } : {})} onClose={find.onClose} shortcuts={find.shortcuts} />}

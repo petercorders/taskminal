@@ -12,11 +12,12 @@ import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
+import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, STABLE_MS, type RemoteState, type SshSignal } from '../shared/remote'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { safeToInsert, tailLines } from '../shared/history'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
-import { dirtyPanes, findingPanes, integratedPanes, osc7Panes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
+import { dirtyPanes, findingPanes, integratedPanes, osc7Panes, remotePanes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -48,6 +49,12 @@ interface Props {
   mask?: MaskSettings | undefined
   /** 칸 메뉴 '비밀값 아님' — 그 값(해시)을 다시 가리지 않기 */
   onAllow?(hit: { hash: string; kind: string }): void
+  /** 원격 일감의 pane (25단계) — 셸 대신 ssh. 띄울 때만 읽는다 */
+  remote?: { host: string; tmux: boolean } | undefined
+  /** 원격 연결 상태가 바뀌었다 — 띠 · 점 */
+  onRemote?(state: RemoteState): void
+  /** 값이 바뀌면 지금 다시 붙는다(⌘R · 띠 버튼) — 붙어 있거나 붙는 중이면 아무것도 안 함 */
+  reconnectSignal?: number | undefined
 }
 
 /** 셸이 붙기 전에 친 키를 모아 두는 상한 (붙여넣기 한 번쯤) */
@@ -110,7 +117,7 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, startInsert, onCommandDone, onCwd, mask = NO_MASK, onAllow }: Props) {
+export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, startInsert, onCommandDone, onCwd, mask = NO_MASK, onAllow, remote, onRemote, reconnectSignal }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
@@ -129,6 +136,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
   cwdRef.current = cwd
   const onCwdRef = useRef(onCwd)
   onCwdRef.current = onCwd
+  const remoteRef = useRef(remote)
+  remoteRef.current = remote
+  const onRemoteRef = useRef(onRemote)
+  onRemoteRef.current = onRemote
+  const reconnectRef = useRef<() => void>(() => {})
   const refitRef = useRef<() => void>(() => {})
   // 화면 가리기 (17단계)
   const maskRef = useRef(mask)
@@ -318,15 +330,59 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       return changed
     }
 
+    // 25단계 원격 — 띄울 때의 host 로 정한다(일감의 host 는 만든 뒤 바뀌지 않는다)
+    const remote = remoteRef.current
+    if (remote) remotePanes.add(paneId)
+    const reportRemote = (st: RemoteState) => onRemoteRef.current?.(st)
+    let sshOut = '' // 이번 연결 시도의 앞부분 출력 — ssh 의 알림(지문 · 키 바뀜 · 인증)을 찾는다
+    let sshSeen: SshSignal['kind'] | null = null
+    let attempt = 0 // 이어진 실패 수(1부터) — 오래 붙어 있다 끊기면 처음부터
+    let spawnedAt = 0
+    let spawning = false
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    const scanSsh = (data: string) => {
+      if (sshOut.length >= SIGNAL_SCAN_MAX) return
+      sshOut += data
+      const sig = sshOutputSignal(sshOut)
+      if (!sig || sig.kind === sshSeen) return
+      sshSeen = sig.kind
+      if (sig.kind === 'new-host') reportRemote({ kind: 'new-host', fingerprint: sig.fingerprint })
+    }
+
     const offData = pty.onData((id, data) => {
       if (id !== paneId) return
       term.write(data)
       dirtyPanes.add(paneId)
+      if (remote) scanSsh(data)
     })
     // 깨끗하게 끝나면(exit 0) App 이 pane 을 바로 닫는다. 아니면 이유를 보여 주고 다음 키에 닫는다.
     let ended = false
     const offExit = pty.onExit((id, exit) => {
       if (id !== paneId || cleanExit(exit)) return
+      // 원격: ssh 가 255 로 끝나면 연결 문제 — 키 바뀜 · 인증 거절 · 지문 거절이면 멈추고, 아니면 1 · 2 · 4 · 8 · 8 걸음 뒤 같은 pane id 로 다시
+      if (remote && exit.exitCode === 255 && !exit.signal) {
+        live = false
+        early = []
+        const stop = sshSeen === 'key-changed' || sshSeen === 'auth' || sshSeen === 'refused' ? sshSeen : null
+        if (stop) {
+          term.write(`\r\n\x1b[2m[연결하지 않았어요 — ${stop === 'key-changed' ? '서버 키가 바뀌었어요' : stop === 'auth' ? '키 인증이 거절됐어요' : '서버를 확인하지 않았어요'} · ⌘R 로 다시]\x1b[0m\r\n`)
+          return reportRemote({ kind: 'down', why: stop })
+        }
+        if (Date.now() - spawnedAt >= STABLE_MS) attempt = 0
+        attempt++
+        const wait = reconnectDelay(attempt, runtime.sshRetryMs)
+        if (wait === null) {
+          term.write(`\r\n\x1b[2m[${remote.host} 에 다시 붙지 못했어요 · ⌘R 로 다시]\x1b[0m\r\n`)
+          return reportRemote({ kind: 'down', why: 'gave-up' })
+        }
+        term.write(`\r\n\x1b[2m[${remote.host} 와 연결이 끊겼어요 · ${Math.ceil(wait / 1000)}초 뒤 다시 붙어요 (${attempt}/5) — 그동안 친 키는 버려요]\x1b[0m\r\n`)
+        reportRemote({ kind: 'retry', attempt, inMs: wait })
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined
+          spawn()
+        }, wait)
+        return
+      }
       ended = true
       const how = exit.signal ? `신호 ${exit.signal}` : `exit ${exit.exitCode}`
       term.write(`\r\n\x1b[2m[셸이 끝났습니다 — ${how} · 아무 키나 누르면 이 pane 을 닫습니다]\x1b[0m\r\n`)
@@ -355,6 +411,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
       if (live) return send(data)
+      if (remote && (attempt > 0 || sshSeen)) return // 원격이 끊긴 동안 친 키는 버린다(띠가 알린다) — 모아 두는 것은 첫 연결만
       if (earlyLen + data.length > EARLY_INPUT_MAX) return // 셸이 끝내 안 뜨면 끝없이 쌓지 않는다
       early.push(data)
       earlyLen += data.length
@@ -363,19 +420,35 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
     fitNow()
     const spawn = () => {
-      if (disposed) return
-      pty.spawn(paneId, { cwd: cwdRef.current, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
+      if (disposed || spawning) return
+      spawning = true
+      sshOut = ''
+      sshSeen = null
+      pty.spawn(paneId, { cwd: cwdRef.current, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration, ...(remote ? { remote } : {}) }).then(
         () => {
+          spawning = false
+          spawnedAt = Date.now()
           if (!disposed) goLive()
+          if (remote && !disposed && sshSeen !== 'new-host') reportRemote({ kind: 'up' })
           // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
           if (disposed || !startRef.current.command) return
           startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
         },
         (error: unknown) => {
+          spawning = false
           early = []
           term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
+          if (remote && !disposed) reportRemote({ kind: 'down', why: 'gave-up' })
         },
       )
+    }
+    // ⌘R · 띠 '지금 다시' — 대기 중이면 기다림을 지우고 지금, 처음부터 다섯 번. 붙어 있거나 붙는 중이면 아무것도 안 함
+    reconnectRef.current = () => {
+      if (!remote || disposed || live || spawning || ended) return
+      clearTimeout(retryTimer)
+      retryTimer = undefined
+      attempt = 0
+      spawn()
     }
     // 이전 출력 되살리기 — 셸보다 먼저 쓰고, 이번 실행에서 pane 당 한 번. 되살린 글에는 OSC 가 없어 시작 명령 · 활동 신호가 돌지 않는다.
     // 읽기 실패 · 깨진 파일이면 되살리지 않고 셸만 띄운다.
@@ -406,7 +479,9 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         if (!r.attached) return restoreThenSpawn()
         restoredPanes.add(paneId)
         pty.resize(paneId, term.cols, term.rows)
+        spawnedAt = Date.now()
         goLive()
+        if (remote) reportRemote({ kind: 'up' })
       },
       () => {
         if (!disposed) restoreThenSpawn()
@@ -502,6 +577,9 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       observer.disconnect()
       cancelAnimationFrame(frame)
       clearTimeout(startTimer)
+      clearTimeout(retryTimer) // 다시 붙기 대기 중 닫힌 pane 에 spawn 하지 않는다
+      reconnectRef.current = () => {}
+      if (remote) remotePanes.delete(paneId)
       input.dispose()
       keys.dispose()
       selection.dispose()
@@ -515,6 +593,13 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       term.dispose()
     }
   }, [paneId])
+
+  // ⌘R · 띠 '지금 다시' (25단계) — 처음 값(마운트)에는 돌지 않는다
+  const firstReconnect = useRef(reconnectSignal)
+  useEffect(() => {
+    if (reconnectSignal === firstReconnect.current) return
+    reconnectRef.current()
+  }, [reconnectSignal])
 
   // 설정이 바뀌면 바로. 글꼴 · 크기 · 줄 간격은 칸 수를 바꾼다 → 셸에도 새 크기를 알린다 (숨은 pane 은 다시 보일 때 ResizeObserver 가 맞춘다)
   useEffect(() => {

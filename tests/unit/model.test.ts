@@ -89,6 +89,16 @@ describe('defaultSettings', () => {
 })
 
 describe('createTask', () => {
+  test('원격(25단계): host · tmux 를 남기고 템플릿은 쓰지 않는다(셸 하나) · 잘못된 host 는 로컬 일감으로', () => {
+    const t = createTask(input({ templateId: 'tpl-flutter', host: 'nas', remoteTmux: false, cwd: '~/work' }), settingsWith(flutterTemplate), ids(), 0)
+    expect(t).toMatchObject({ host: 'nas', remoteTmux: false, cwd: '~/work' })
+    expect(Object.keys(t.panes)).toHaveLength(1)
+    expect(Object.values(t.panes)[0]).toEqual({ id: expect.any(String), cwd: '~/work' })
+    const bad = createTask(input({ host: '-oProxyCommand=x' }), defaultSettings(), ids(), 0)
+    expect(bad.host).toBeUndefined()
+    expect(bad.remoteTmux).toBeUndefined()
+  })
+
   test('템플릿 없이 만들면 탭 하나 · pane 하나 · 일감 폴더', () => {
     const t = createTask(input(), defaultSettings(), ids(), 1000)
     expect(t).toMatchObject({ id: 'id1', name: '정산 화면', cwd: '/Users/me/app', statusId: 'doing', groupId: null, createdAt: 1000 })

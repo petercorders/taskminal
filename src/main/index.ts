@@ -16,6 +16,7 @@ import { isAccel, isAppCommand } from '../shared/keymap'
 import { MAX_LINK, webUrl } from '../shared/links'
 import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
+import { isRemotePath, isSshHost, parseSshConfigHosts, sshArgs } from '../shared/remote'
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onCliInstall, onQuitAll } from './menu'
 import { CliServer } from './cli-server'
@@ -279,6 +280,22 @@ const portPollMs = ((): number => {
   const v = Number(process.env['TASKMINAL_PORT_POLL_MS'])
   return Number.isInteger(v) && v >= 100 ? v : 3000
 })()
+// 25단계 원격 다시 붙기의 한 걸음 — 시험은 줄인다
+const sshRetryMs = ((): number => {
+  const v = Number(process.env['TASKMINAL_SSH_RETRY_MS'])
+  return Number.isInteger(v) && v >= 10 ? v : 1000
+})()
+// ssh 실행 파일 — 시험은 TASKMINAL_SSH 로 가짜(절대 경로만)
+const sshFile = (): string => {
+  const v = process.env['TASKMINAL_SSH']
+  return v && v.startsWith('/') ? v : '/usr/bin/ssh'
+}
+// ControlMaster 소켓 폴더 — 나만 읽고 쓰게(0700). 소켓 이름은 ssh 가 %C(해시)로 짧게 만든다
+const sshControlDir = (): string => {
+  const dir = join(app.getPath('userData'), 'ssh')
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  return dir
+}
 // 15e: 터미널 그리기 — 시험(e2e)은 DOM 의 글을 읽으므로 playwright 설정이 dom 을 넣는다
 const renderer: RendererMode = process.env['TASKMINAL_RENDERER'] === 'dom' ? 'dom' : 'webgl'
 let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready) 만든다
@@ -530,7 +547,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, sshRetryMs, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
   })
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -539,19 +556,37 @@ if (!app.requestSingleInstanceLock()) {
     if (!isPaneId(paneId) || typeof o['cwd'] !== 'string' || !validSize(o['cols'], o['rows'])) {
       throw new Error('잘못된 pty 인자')
     }
+    // 25단계 원격: host 는 옵션 주입 · 셸 글자를 막고(isSshHost), cwd 는 원격 명령 안에서 따옴표로 감싼다(isRemotePath)
+    const rem = o['remote'] as Record<string, unknown> | undefined
+    if (rem !== undefined && (typeof rem !== 'object' || rem === null || typeof rem['host'] !== 'string' || !isSshHost(rem['host']) || !isRemotePath(o['cwd']))) {
+      throw new Error('잘못된 원격 인자')
+    }
     await control().ready
     try {
-      await control().ptys.spawn(event.sender, paneId, {
-        cwd: o['cwd'],
-        cols: o['cols'] as number,
-        rows: o['rows'] as number,
-        shell: typeof o['shell'] === 'string' ? o['shell'] : null, // 경로 검사는 PtyManager(pickShell)
-        integration: o['integration'] !== false,
-      })
+      const ssh = rem ? { file: sshFile(), args: sshArgs({ host: rem['host'] as string, cwd: o['cwd'], paneId, tmux: rem['tmux'] !== false, controlDir: sshControlDir() }) } : undefined
+      await control().ptys.spawn(
+        event.sender,
+        paneId,
+        {
+          cwd: o['cwd'],
+          cols: o['cols'] as number,
+          rows: o['rows'] as number,
+          shell: typeof o['shell'] === 'string' ? o['shell'] : null, // 경로 검사는 PtyManager(pickShell)
+          integration: o['integration'] !== false,
+        },
+        ssh,
+      )
     } catch (e) {
       report('error', 'pty-spawn', '셸을 띄우지 못했어요', e)
       throw e
     }
+  })
+  // 25단계: 새 일감 대화상자의 호스트 목록 — ~/.ssh/config 를 읽기만(없거나 못 읽으면 빈 목록, Include 는 따라가지 않는다)
+  ipcMain.handle(IPC.sshHosts, async (event): Promise<string[]> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const file = process.env['TASKMINAL_SSH_CONFIG'] || join(homedir(), '.ssh', 'config')
+    const text = await readFile(file, 'utf8').catch(() => '')
+    return parseSshConfigHosts(text.slice(0, 1_000_000)).slice(0, 500)
   })
   ipcMain.handle(IPC.ptyAttach, async (event, paneId: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')

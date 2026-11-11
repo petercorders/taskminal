@@ -220,6 +220,10 @@ export interface NewTaskInput {
   statusId: Id
   groupId: Id | null
   color: string | null
+  /** 원격 일감 (25단계) — cwd 는 그 호스트의 경로 */
+  host?: string
+  /** 서버의 tmux 로 이어 붙기 — 기본 켬 */
+  remoteTmux?: boolean
 }
 
 /** 렌더러 ↔ main 사이 컨텍스트 메뉴 항목 */

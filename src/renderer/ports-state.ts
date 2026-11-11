@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PaneActivity } from '../shared/activity'
 import { createPortPoller, mergePorts, type PortChip, type ProbeResult } from '../shared/ports'
-import { integratedPanes, runtime } from './runtime'
+import { integratedPanes, remotePanes, runtime } from './runtime'
 import { terminals } from './terminals'
 
 /** 창에 포커스가 없을 때 주기 배수 (3초 → 15초) */
@@ -41,8 +41,9 @@ export function usePorts(ready: boolean, activity: Readonly<Record<string, PaneA
 
   const tick = () => {
     const act = activityRef.current
+    // 원격 pane 은 로컬 pid 가 ssh 라 빼고(25단계 — 원격 포트 감지는 하지 않음)
     const ids = [...terminals.keys()].filter(
-      (id) => act[id]?.busy || !integratedPanes.has(id) || chipsRef.current[id]?.some((c) => c.closedAt === undefined),
+      (id) => !remotePanes.has(id) && (act[id]?.busy || !integratedPanes.has(id) || chipsRef.current[id]?.some((c) => c.closedAt === undefined)),
     )
     // 물을 pane 이 없어도 닫힌 칩의 10초는 지나가야 한다
     if (ids.length === 0) apply({ ok: true, ports: {} }, [])

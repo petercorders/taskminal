@@ -27,6 +27,7 @@ export const IPC = {
   gitWorktreeAdd: 'git:worktree-add', // invoke(폴더, 브랜치) → { ok, path } | { ok: false, error } — 새 일감을 worktree 에서 (15f)
   ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
   ptyAttach: 'pty:attach', // invoke(paneId) → PtyAttachResult — 셸 지킴이에 남은 셸에 다시 붙기 (16단계)
+  sshHosts: 'ssh:hosts', // invoke → ~/.ssh/config 의 Host 이름들 (25단계, 읽기만)
   hostView: 'host:view', // invoke → HostView / main → renderer: 바뀔 때마다
   hostSessions: 'host:sessions', // invoke(clearUnseen) → SessionInfo[]
   hostTail: 'host:tail', // invoke(paneId) → 마지막 20줄
@@ -158,6 +159,8 @@ export interface AppInfo {
   renderer: RendererMode
   /** 지난번 실행이 정상으로 끝나지 않았다(18단계 — running 표시 파일) */
   crashedLast: boolean
+  /** 원격 다시 붙기의 한 걸음(1 · 2 · 4 · 8 · 8 배) — 기본 1초, 시험은 TASKMINAL_SSH_RETRY_MS 로 줄인다 (25단계) */
+  sshRetryMs: number
 }
 
 export interface ScrollbackEntry {
@@ -181,6 +184,8 @@ export interface PtySpawnOptions {
   shell?: string | null
   /** 셸 통합(zsh) — 끄면 사용자 설정만 읽는다 */
   integration?: boolean
+  /** 원격 일감(25단계) — 있으면 셸 대신 ssh 를 띄우고 cwd 는 그 호스트의 경로. main 이 host · cwd 를 다시 검사 */
+  remote?: { host: string; tmux: boolean }
 }
 
 export interface PtyExit {
