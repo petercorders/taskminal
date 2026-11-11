@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addChatTab, chatToTerminal, createTask, defaultSettings, normalizeState, setChatSession, splitActivePaneChat, tabLabel } from '../../src/shared/model'
+import { addChatTab, branchChat, chatRewound, chatToTerminal, createTask, defaultSettings, normalizeState, setChatSession, splitActivePaneChat, tabLabel } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
 
 function ids() {
@@ -64,5 +64,57 @@ describe('대화 pane 모델', () => {
     for (const p of Object.values(raw.tasks[0].panes) as { kind?: string; chat?: { sessionId: string } }[]) if (p.kind === 'chat') p.chat!.sessionId = '../../etc; rm'
     const bad = normalizeState(raw, ids())
     expect(Object.values(bad.tasks[0]!.panes).find((p) => p.kind === 'chat')!.chat).toEqual({ agent: 'claude' })
+  })
+
+  // ─── 22단계: 에이전트 · 되감기 · 나누기 ───
+  const chatOf = (t: ReturnType<typeof task>, id: string) => t.panes[id]!.chat
+  const save = (t: ReturnType<typeof task>) => {
+    const st: AppState = { version: 1, tasks: [t], activeTaskId: t.id, settings: defaultSettings() }
+    return normalizeState(JSON.parse(JSON.stringify(st)), ids()).tasks[0]!
+  }
+  it('Codex 대화 pane: 탭 이름 · 저장 · 되읽기에서 에이전트를 지킨다 · 모르는 에이전트는 claude', () => {
+    const t = addChatTab(task(), ids(), 'codex')
+    const pid = t.tabs.at(-1)!.activePaneId
+    expect(tabLabel(t, t.tabs.at(-1)!)).toBe('Codex 대화')
+    const s1 = setChatSession(t, pid, 'th-1')
+    expect(chatOf(s1, pid)).toEqual({ agent: 'codex', sessionId: 'th-1' })
+    expect(Object.values(save(s1).panes).find((p) => p.kind === 'chat')!.chat).toEqual({ agent: 'codex', sessionId: 'th-1' })
+    const raw = JSON.parse(JSON.stringify({ version: 1, tasks: [s1], activeTaskId: s1.id, settings: defaultSettings() }))
+    for (const p of Object.values(raw.tasks[0].panes) as { kind?: string; chat?: { agent: string } }[]) if (p.kind === 'chat') p.chat!.agent = 'gpt'
+    expect(Object.values(normalizeState(raw, ids()).tasks[0]!.panes).find((p) => p.kind === 'chat')!.chat).toEqual({ agent: 'claude', sessionId: 'th-1' })
+  })
+  it('chatRewound: forkAt 을 남기고 재시작 뒤에도 남는다 · null 이면 세션을 지운다 · 새 세션이 뜨면 forkAt 이 지워진다', () => {
+    const c = addChatTab(task(), ids(), 'codex')
+    const pid = c.tabs.at(-1)!.activePaneId
+    const t = setChatSession(c, pid, 'th-1')
+    const r = chatRewound(t, pid, 'turn-1')
+    expect(chatOf(r, pid)).toEqual({ agent: 'codex', sessionId: 'th-1', forkAt: 'turn-1' })
+    expect(Object.values(save(r).panes).find((p) => p.kind === 'chat')!.chat).toEqual({ agent: 'codex', sessionId: 'th-1', forkAt: 'turn-1' })
+    expect(chatOf(chatRewound(t, pid, null), pid)).toEqual({ agent: 'codex' })
+    expect(chatOf(setChatSession(r, pid, 'th-1'), pid)).toEqual({ agent: 'codex', sessionId: 'th-1' }) // 같은 id 여도 forkAt 은 지운다
+    expect(chatRewound(t, t.tabs[0]!.activePaneId, 'x')).toBe(t) // 터미널 pane 은 그대로
+  })
+  it('branchChat: 오른쪽에 같은 에이전트 · 같은 세션 + forkAt, 세션이 없으면 그대로', () => {
+    const c = addChatTab(task(), ids(), 'codex')
+    const pid = c.tabs.at(-1)!.activePaneId
+    expect(branchChat(c, pid, 'np', 'turn-1')).toBe(c) // 세션 없음
+    const t = setChatSession(c, pid, 'th-1')
+    const b = branchChat(t, pid, 'np', 'turn-1')
+    expect(b.panes['np']).toMatchObject({ kind: 'chat', chat: { agent: 'codex', sessionId: 'th-1', forkAt: 'turn-1' } })
+    expect(chatOf(b, pid)).toEqual({ agent: 'codex', sessionId: 'th-1' })
+    const tab = b.tabs.at(-1)!
+    expect(tab.layout).toMatchObject({ type: 'split', dir: 'right', a: { paneId: pid }, b: { paneId: 'np' } })
+    expect(tab.activePaneId).toBe('np')
+  })
+  it('chatToTerminal: codex 는 `codex resume <id>` · 아직 안 보낸 되감기면 옛 세션 대신 새로', () => {
+    const c = addChatTab(task(), ids(), 'codex')
+    const pid = c.tabs.at(-1)!.activePaneId
+    const t = setChatSession(c, pid, 'th-1')
+    let n = 0
+    const nid = () => `t${++n}`
+    const a = chatToTerminal(t, pid, nid, '/bin/codex')!
+    expect(a.task.panes[a.paneId]!.pendingCommand).toBe('/bin/codex resume th-1')
+    const r = chatToTerminal(chatRewound(t, pid, 'turn-1'), pid, nid, '/bin/codex')!
+    expect(r.task.panes[r.paneId]!.pendingCommand).toBe('/bin/codex')
   })
 })

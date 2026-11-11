@@ -57,8 +57,9 @@ test('새 대화 → 처음 화면 → 보내기: 글 · 도구 묶음 줄 · �
   await launch()
   // ⌘P 로도 열 수 있다
   await win.keyboard.press('Meta+p')
-  await win.keyboard.type('새 대화')
+  await win.keyboard.type('새 대화 (Claude)') // 22단계: '새 대화' 만 치면 Codex · Claude 둘 다 나오고 짧은 이름이 위
   await win.keyboard.press('Enter')
+  await expect(chat()).toHaveAttribute('data-agent', 'claude')
   await expect(chat().getByTestId('chat-empty')).toBeVisible()
   await expect(input()).toBeFocused()
   await say('안녕')
@@ -68,7 +69,7 @@ test('새 대화 → 처음 화면 → 보내기: 글 · 도구 묶음 줄 · �
   await expect(chat().getByTestId('chat-status')).toContainText('✓ 끝남')
   await tools.getByRole('button').click()
   await expect(tools.getByTestId('chat-tool-item')).toContainText('export const a = 1')
-  await expect(chat().getByTestId('chat-block').first()).toHaveText('안녕')
+  await expect(chat().getByTestId('chat-block').first().getByTestId('chat-user-text')).toHaveText('안녕')
   await win.screenshot({ path: 'test-results/chat-basic.png' })
 })
 
@@ -170,18 +171,22 @@ test('로그인 없음 · 갑자기 끝남 · 다시 시도', async () => {
   expect(argvs()).toHaveLength(2) // 끝난 프로세스 대신 새로 띄움
 })
 
-test('⌘. 멈춤 → 실패가 아니라 멈춤 · 실행 중 ↩ 는 보내지 않음', async () => {
+test('⌘. 멈춤 → 실패가 아니라 멈춤 · 실행 중 ↩ 는 대기열에 들고 멈춤 뒤엔 멈춰 둔다', async () => {
   await launch()
   await command('chat-new')
   await say('slow job')
   await expect(chat().getByTestId('chat-status')).toContainText('실행 중')
-  await say('끼어들기')
-  await expect(chat().getByTestId('chat-hint')).toHaveText('끝나면 보낼 수 있어요 · ⌘. 멈춤')
-  await expect(input()).toHaveValue('끼어들기')
+  await say('끼어들기') // 22단계: 도는 중 ↩ 는 대기열로
+  await expect(chat().getByTestId('chat-queue')).toContainText('대기 1')
+  await expect(input()).toHaveValue('')
   await input().press('Meta+.')
   await expect(chat().getByTestId('chat-status')).toHaveText('■ 멈춤(내가 멈춤)')
   await expect(chat().getByTestId('chat-band')).toHaveCount(0)
+  await expect(chat().getByTestId('chat-queue')).toContainText('대기 1 · 멈춤') // 멈춤 뒤엔 저절로 보내지 않는다
   expect(fakeLog().filter((l) => l.stdin?.type === 'user')).toHaveLength(1)
+  await chat().getByTestId('chat-queue-resume').click()
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 끼어들기')
+  await expect(chat().getByTestId('chat-queue')).toHaveCount(0)
 })
 
 test('허락 카드가 열린 채 프로세스가 끝나면 카드는 응답 없이 끝남', async () => {
@@ -230,4 +235,132 @@ test('리뷰: 턴 도중 앱을 끄면 다시 켤 때 멈춤으로 닫히고 바
   await expect(chat().getByTestId('chat-status')).toContainText('멈춤')
   await say('다시')
   await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 다시')
+})
+
+// ─── 22단계: 그림 · 되감기 · 나누기 · 대기열 · 여러 개 고르기 · 가린 글 (가짜 claude) ───
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+type UserMsg = { type: string; message?: { content?: Array<{ type: string; text?: string; source?: { type: string; media_type: string; data: string } }> } }
+const userLines = () => fakeLog().filter((l) => l.stdin?.type === 'user').map((l) => l.stdin as unknown as UserMsg)
+const userTexts = () => userLines().map((u) => (u.message?.content ?? []).map((c) => c.text ?? '').join(''))
+const argOf = (argv: string[], k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined)
+
+test('그림 붙여넣기(⌘V) → 칩 → 보내기 → claude stdin 에 image 블록', async () => {
+  await launch()
+  await command('chat-new')
+  await input().evaluate((el, b64) => {
+    const bin = atob(b64)
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+    const dt = new DataTransfer()
+    dt.items.add(new File([bytes], 'shot.png', { type: 'image/png' }))
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  }, PNG)
+  await expect(chat().getByTestId('chat-images')).toContainText('🖼 shot.png')
+  await say('see')
+  await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: see · 그림 1')
+  await expect(chat().getByTestId('chat-user-images')).toContainText('🖼 shot.png')
+  const content = userLines()[0]!.message!.content!
+  expect(content.find((c) => c.type === 'image')!.source).toEqual({ type: 'base64', media_type: 'image/png', data: PNG })
+  await win.screenshot({ path: 'test-results/chat-image.png' })
+})
+
+test('되감기 → 이후 사라짐 · 재시작 뒤에도 사라진 채 · 다음 보내기는 --fork-session --resume-session-at', async () => {
+  await launch()
+  await command('chat-new')
+  await say('하나')
+  await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: 하나')
+  await say('둘')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 둘')
+  expect(argvs()[0]).not.toContain('--resume') // 처음 띄움
+  const users = chat().locator('[data-kind="user"]')
+  await users.nth(1).hover()
+  await users.nth(1).getByTestId('chat-rewind').click()
+  await expect(chat().getByTestId('rewind-confirm')).toContainText('이후 메시지 2개')
+  await input().press('Enter') // ↩ = 되돌리기
+  await expect(users).toHaveCount(1)
+  await expect(input()).toHaveValue('둘')
+  await app!.close()
+  app = undefined
+
+  await launch()
+  await expect(chat().locator('[data-kind="user"]')).toHaveCount(1)
+  await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: 하나')
+  await say('둘 다시')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 둘 다시')
+  const last = argvs().at(-1)!
+  expect(last).toContain('--fork-session')
+  expect(argOf(last, '--resume')).toMatch(/^sess-\d+$/)
+  expect(argOf(last, '--resume-session-at')).toMatch(/^u-\d+-2$/) // 첫 턴의 마지막 assistant 줄
+})
+
+test('나누기 → 오른쪽 새 대화에 그 턴까지 · 보내면 fork 인자 · 원래 대화는 그대로', async () => {
+  await launch()
+  await command('chat-new')
+  await say('하나')
+  await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: 하나')
+  await say('둘')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 둘')
+  const users = chat().locator('[data-kind="user"]')
+  await users.first().hover()
+  await users.first().getByTestId('chat-branch').click()
+  const panes = win.locator('[data-testid="task-view"][aria-hidden="false"] [data-testid="chat-pane"]')
+  await expect(panes).toHaveCount(2)
+  const right = panes.nth(1)
+  await expect(right.locator('[data-kind="user"]')).toHaveCount(1)
+  await expect(right.locator('[data-kind="text"]')).toHaveText('echo: 하나')
+  await expect(panes.nth(0).locator('[data-kind="user"]')).toHaveCount(2)
+  await win.screenshot({ path: 'test-results/chat-branch.png' })
+  await right.getByTestId('chat-input').fill('갈래')
+  await right.getByTestId('chat-input').press('Enter')
+  await expect(right.locator('[data-kind="text"]').last()).toHaveText('echo: 갈래')
+  const last = argvs().at(-1)!
+  expect(last).toContain('--fork-session')
+  expect(argOf(last, '--resume-session-at')).toMatch(/^u-\d+-2$/)
+})
+
+test('대기열: 느린 턴 중 ↩ 두 번 → 대기 2 · ⌘↩ 는 멈춘 뒤 첫 것 · 잘 끝나면 다음 것을 저절로', async () => {
+  await launch()
+  await command('chat-new')
+  await say('slow job')
+  await expect(chat().getByTestId('chat-status')).toContainText('실행 중')
+  await say('q1')
+  await say('q2')
+  await expect(chat().getByTestId('chat-queue')).toContainText('대기 2')
+  await expect(chat().getByTestId('chat-queue')).toContainText('q1')
+  await win.screenshot({ path: 'test-results/chat-queue.png' })
+  await input().press('Meta+Enter')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: q2')
+  await expect(chat().getByTestId('chat-queue')).toHaveCount(0)
+  expect(userTexts()).toEqual(['slow job', 'q1', 'q2'])
+})
+
+test('여러 개 고르기: 1 · 3 → 답이 "시험, 린트"', async () => {
+  await launch()
+  await command('chat-new')
+  await say('multi')
+  const card = chat().getByTestId('ask-card')
+  await expect(card).toContainText('여러 개 고를 수 있어요')
+  await input().press('1')
+  await input().press('3')
+  await expect(card.getByRole('checkbox', { name: /시험/ })).toHaveAttribute('aria-checked', 'true')
+  await expect(card.getByRole('checkbox', { name: /문서/ })).toHaveAttribute('aria-checked', 'false')
+  await expect(card.getByRole('checkbox', { name: /린트/ })).toHaveAttribute('aria-checked', 'true')
+  await win.screenshot({ path: 'test-results/chat-multi.png' })
+  await input().press('Enter')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('고른 것: 시험, 린트')
+})
+
+test('가린 글: 비밀값이 든 메시지를 되감으면 입력창에 넣지 않고 안내', async () => {
+  await launch()
+  await command('chat-new')
+  await say('키는 sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKE0123456789 이에요')
+  await expect(chat().locator('[data-kind="text"]')).toContainText('‹가림')
+  const users = chat().locator('[data-kind="user"]')
+  await expect(users.first()).toContainText('‹가림')
+  await users.first().hover()
+  await users.first().getByTestId('chat-rewind').click()
+  await chat().getByTestId('rewind-confirm').getByRole('button', { name: '되돌리기 ↩' }).click()
+  await expect(users).toHaveCount(0)
+  await expect(input()).toHaveValue('')
+  await expect(chat().getByTestId('chat-hint')).toHaveText('가린 글이 있어 입력창에 다시 넣지 않았어요')
+  await expect(chat()).not.toContainText('FAKEFAKEFAKE')
 })
