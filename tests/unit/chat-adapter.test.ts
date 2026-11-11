@@ -8,7 +8,8 @@ class FakeChild extends EventEmitter implements ChildLike {
   killed = false
   stdout = new EventEmitter()
   stderr = new EventEmitter()
-  stdin = { write: (s: string) => (this.written.push(s), true), end: () => {} }
+  // 실제 stdin 처럼 EventEmitter — 받는 이가 없는 'error' 는 throw 한다
+  stdin = Object.assign(new EventEmitter(), { write: (s: string) => (this.written.push(s), true), end: () => {} })
   kill() {
     this.killed = true
     return true
@@ -151,5 +152,32 @@ describe('ClaudeSession', () => {
     children[0]!.emit('exit', 0, null)
     s.send('y')
     expect(calls[1]).toEqual(expect.arrayContaining(['--permission-mode', 'auto']))
+  })
+
+  it('리뷰: 끝난 프로세스의 stdin EPIPE 는 main 을 죽이지 않는다', () => {
+    const { s, children } = setup()
+    s.send('하나')
+    expect(() => children[0]!.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))).not.toThrow()
+  })
+  it('리뷰: 위험한 요청은 창이 늘 허락을 보내도 이번 한 번만', () => {
+    const { s, children } = setup()
+    s.send('하나')
+    children[0]!.out(perm('r1', 'rm -rf build'))
+    expect(s.answer('r1', { how: 'always' })).toBe(true)
+    children[0]!.out(perm('r2', 'rm -rf build'))
+    expect(children[0]!.sent().filter((l) => (l as { type: string }).type === 'control_response')).toHaveLength(1) // r2 는 저절로 허락되지 않는다
+    expect(s.answer('r2', { how: 'allow' })).toBe(true)
+  })
+  it('리뷰: 질문 답의 키는 원래 질문 글 — 창이 가린 글을 키로 보내도 같은 자리로 맞춘다', () => {
+    const { s, children } = setup()
+    s.send('하나')
+    const questions = [
+      { question: '키 sk-ant-api03-원문 을 쓸까요?', options: [{ label: '예' }, { label: '아니오' }] },
+      { question: '어디에?', options: [{ label: '여기' }] },
+    ]
+    children[0]!.out({ type: 'control_request', request_id: 'q1', request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', input: { questions } } })
+    s.answer('q1', { how: 'answer', answers: { '키 ‹가림› 을 쓸까요?': '예', '어디에?': '여기' } })
+    const resp = children[0]!.sent().find((l) => (l as { type: string }).type === 'control_response') as { response: { response: { updatedInput: { answers: unknown } } } }
+    expect(resp.response.response.updatedInput.answers).toEqual({ '키 sk-ant-api03-원문 을 쓸까요?': '예', '어디에?': '여기' })
   })
 })

@@ -218,3 +218,16 @@ test('비밀값: 화면 · 대화 파일에 원문이 없다', async () => {
   expect(raw).toContain('‹가림')
   expect(raw).not.toContain('FAKEFAKEFAKE')
 })
+
+test('리뷰: 턴 도중 앱을 끄면 다시 켤 때 멈춤으로 닫히고 바로 다시 보낼 수 있다', async () => {
+  await launch()
+  await command('chat-new')
+  await say('slow job')
+  await expect(chat().getByTestId('chat-status')).toContainText('실행 중')
+  await app!.close()
+  app = undefined
+  await launch()
+  await expect(chat().getByTestId('chat-status')).toContainText('멈춤')
+  await say('다시')
+  await expect(chat().locator('[data-kind="text"]').last()).toHaveText('echo: 다시')
+})

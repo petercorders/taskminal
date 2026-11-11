@@ -7,6 +7,7 @@ import {
   claudeControlLine,
   claudeLineToEvents,
   claudeUserLine,
+  isDangerousTool,
   permissionMode,
   type ChatDecision,
   type ChatEvent,
@@ -15,7 +16,8 @@ import {
 import { isObj } from '../../shared/guards'
 
 export interface ChildLike {
-  stdin: { write(s: string): boolean; end(): void } | null
+  /** on: 끝난 프로세스에 쓰면 EPIPE 가 stdin 의 'error' 로 늦게 온다 — 받지 않으면 main 이 죽는다 */
+  stdin: { write(s: string): boolean; end(): void; on?(ev: 'error', fn: (err: Error) => void): unknown } | null
   stdout: EventEmitter | null
   stderr: EventEmitter | null
   on(ev: 'exit', fn: (code: number | null, signal: string | null) => void): unknown
@@ -30,6 +32,8 @@ interface Pending {
   tool: string
   input: unknown
   key: string
+  /** 위험(지우기 · 강제 push · 폴더 밖) — '늘 허락' 을 받아도 이번 한 번만 */
+  danger: boolean
 }
 
 export interface ClaudeSessionOptions {
@@ -73,6 +77,7 @@ export class ClaudeSession {
     this.stderr = ''
     const child = this.o.spawn(this.o.bin, claudeArgs(this.o.permission, this.o.sessionId), { cwd: this.o.cwd, env: this.o.env })
     this.child = child
+    child.stdin?.on?.('error', () => {}) // EPIPE — 끝남은 exit 가 알린다
     child.stdout?.on('data', (d: Buffer | string) => gen === this.gen && this.onData(String(d)))
     child.stderr?.on('data', (d: Buffer | string) => {
       if (gen === this.gen) this.stderr = (this.stderr + String(d)).slice(-STDERR_KEEP)
@@ -125,7 +130,8 @@ export class ClaudeSession {
         this.write(claudeAnswerLine(o['request_id'], { behavior: 'allow', updatedInput: r['input'] ?? {} }))
         return
       }
-      this.pending.set(o['request_id'], { tool, input: r['input'] ?? {}, key })
+      const blocked = typeof r['blocked_path'] === 'string' ? r['blocked_path'] : undefined
+      this.pending.set(o['request_id'], { tool, input: r['input'] ?? {}, key, danger: isDangerousTool(tool, r['input'], this.o.cwd, blocked) })
     }
     const events = claudeLineToEvents(o, this.o.cwd)
     for (const ev of events) {
@@ -168,11 +174,11 @@ export class ClaudeSession {
     this.pending.delete(requestId)
     let response: Record<string, unknown>
     if (d.how === 'answer') {
-      response = { behavior: 'allow', updatedInput: { ...(isObj(p.input) ? p.input : {}), answers: d.answers } }
+      response = { behavior: 'allow', updatedInput: { ...(isObj(p.input) ? p.input : {}), answers: originalKeys(p.input, d.answers) } }
     } else if (d.how === 'deny') {
       response = { behavior: 'deny', message: d.message?.trim() || '사용자가 거절했어요. 다른 방법을 써 주세요.' }
     } else {
-      if (d.how === 'always') this.always.add(p.key)
+      if (d.how === 'always' && !p.danger) this.always.add(p.key) // 위험한 것은 창이 무엇을 보내도 늘 허락하지 않는다
       response = { behavior: 'allow', updatedInput: p.input }
     }
     this.write(claudeAnswerLine(requestId, response))
@@ -207,6 +213,23 @@ export class ClaudeSession {
     }
     c.kill('SIGTERM')
   }
+}
+
+/**
+ * 질문 답의 키를 claude 가 보낸 원래 질문 글로 — 창은 가린 사본의 질문 글을 키로 보낸다(비밀값이 섞이면 달라진다).
+ * 창은 질문 순서대로 답을 넣으므로, 원래 글로 못 찾으면 같은 자리의 답을 쓴다.
+ */
+function originalKeys(input: unknown, answers: Record<string, string>): Record<string, string> {
+  const qs = isObj(input) && Array.isArray(input['questions']) ? input['questions'] : []
+  if (qs.length === 0) return answers
+  const vals = Object.values(answers)
+  const out: Record<string, string> = {}
+  qs.forEach((q, i) => {
+    const k = isObj(q) && typeof q['question'] === 'string' ? q['question'] : null
+    const v = k === null ? undefined : (answers[k] ?? vals[i])
+    if (k !== null && v !== undefined) out[k] = v
+  })
+  return out
 }
 
 function alwaysKey(tool: string, input: unknown): string {

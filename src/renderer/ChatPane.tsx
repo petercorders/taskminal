@@ -76,8 +76,10 @@ export function ChatPane(p: Props) {
         for (const e of early) if (e.n > h.upTo) take(e.ev)
       },
       () => {
-        upTo = 0
+        if (!alive) return
+        upTo = 0 // 기록을 못 읽었다 — 그 사이 온 실시간 이벤트는 모두 붙인다
         setLoaded(true)
+        for (const e of early) take(e.ev)
       },
     )
     return () => {

@@ -1011,7 +1011,7 @@ export function App() {
     const s = stateRef.current
     return s.tasks.find((t) => t.id === findPaneTask(s, paneId))?.panes[paneId]?.kind === 'chat'
   }
-  /** ⇧⌘J — 같은 자리에 터미널 pane 을 두고 claude --resume. 대화 프로세스는 아래 효과가 끝낸다(화면 기록은 남겨 둠 — 지울 때 같이) */
+  /** ⇧⌘J — 같은 자리에 새 id 의 터미널 pane 을 두고 claude --resume. 대화 프로세스를 끝내고 화면 기록도 지운다(대화는 터미널이 같은 세션으로 잇는다 · 되돌리기 없음) */
   const chatToTerminalPane = (paneId: string) => {
     window.taskminal.chat.close(paneId, true)
     dispatch({ type: 'chat/to-terminal', paneId, newPaneId: newId(), bin: runtime.claudeTui })
