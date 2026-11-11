@@ -17,6 +17,8 @@ interface Props {
   /** 고른 항목을 실행 — newTab 은 ⌘↩, shift 는 ⇧↩ (빠른 명령: 입력줄에 넣기) */
   onRun(item: PaletteItem, query: string, newTab: boolean, shift?: boolean): void
   onClose(): void
+  /** 보관 일감 (25단계) — 기본 목록엔 없고, 이름을 치면 '🗄 보관함 · ↩ 되살리기' 로 나온다. id 는 `archived:<일감 id>` */
+  archived?: AppState['tasks']
 }
 
 // 팔레트에 보일 명령 — 탭 번호(⌘1~9)와 팔레트 자신은 뺀다
@@ -26,11 +28,12 @@ const commandsOf = (shortcuts: readonly Shortcut[]) =>
     .map((s) => ({ id: s.command, label: s.label, hint: s.accel ? accelLabel(s.accel) : '' }))
 
 const OUTPUT_BUDGET = 20
+export const ARCHIVED_PREFIX = 'archived:'
 
 const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
-export function Palette({ state, shortcuts, history = [], ports = [], onRun, onClose }: Props) {
+export function Palette({ state, shortcuts, history = [], ports = [], onRun, onClose, archived = [] }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<PaletteScope>('all')
   const [selected, setSelected] = useState(0)
@@ -59,7 +62,10 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
         }
     }
     return paletteItems({
-      tasks: ordered.map((t) => ({ id: t.id, name: t.name, detail: shortPath(t.cwd) })),
+      tasks: [
+        ...ordered.map((t) => ({ id: t.id, name: t.name, detail: shortPath(t.cwd) })),
+        ...(query.trim() ? archived.map((t) => ({ id: `${ARCHIVED_PREFIX}${t.id}`, name: t.name, detail: '🗄 보관함 · ↩ 되살리기' })) : []),
+      ],
       commands: commandsOf(shortcuts),
       templates: state.settings.templates.map((t) => ({ id: t.id, name: t.name })),
       outputs,
@@ -69,7 +75,7 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
       query,
       scope,
     })
-  }, [state, shortcuts, query, scope, outputQuery, history, ports])
+  }, [state, shortcuts, query, scope, outputQuery, history, ports, archived])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {

@@ -3892,3 +3892,238 @@ input[type='checkbox'] {
   background: var(--bg);
   color: var(--fg);
 }
+
+/* ─── 보관함 · 주간 정리 · 원격 (25단계) ─── */
+.sidebar-foot {
+  padding-bottom: 8px;
+}
+.sidebar-foot-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.sidebar-foot-button {
+  flex: 1;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sidebar-foot-button:hover {
+  color: var(--fg);
+  background: var(--raised);
+}
+.archive-suggest {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.task-host {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.task-host.up {
+  border-color: var(--done);
+}
+.task-host.retry {
+  border-color: var(--waiting);
+}
+.task-host.down {
+  border-color: var(--failed);
+  color: var(--failed);
+}
+.archive-panel,
+.weekly-panel {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.archive-tabs {
+  display: flex;
+  gap: 4px;
+}
+.archive-tabs button[aria-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.archive-search {
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0 10px;
+}
+.archive-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  min-height: 120px;
+}
+.archive-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.archive-row[aria-selected='true'] {
+  background: var(--raised);
+}
+.archive-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-meta {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-when {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.archive-actions {
+  display: flex;
+  gap: 6px;
+}
+.archive-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.archive-empty {
+  color: var(--muted);
+  padding: 24px 10px;
+  text-align: center;
+}
+.weekly-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.weekly-head h2 {
+  margin: 0;
+  font-size: 15px;
+  flex: 1;
+}
+.weekly-insight {
+  color: var(--failed);
+  font-size: 13px;
+}
+.weekly-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.weekly-kpi {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.weekly-kpi b {
+  display: block;
+  font-size: 20px;
+}
+.weekly-kpi span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.weekly-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  height: 90px;
+}
+.weekly-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  font-size: 11px;
+  color: var(--muted);
+}
+.weekly-day i {
+  display: block;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+  min-height: 1px;
+}
+.weekly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.weekly-table th,
+.weekly-table td {
+  text-align: left;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.weekly-table td.num,
+.weekly-table th.num {
+  text-align: right;
+}
+.weekly-table td.fail {
+  color: var(--failed);
+}
+.remote-band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised);
+  font-size: 12px;
+}
+.remote-band.warn {
+  border-left: 3px solid var(--waiting);
+}
+.remote-band.bad {
+  border-left: 3px solid var(--failed);
+}
+.remote-band .remote-band-text {
+  flex: 1;
+  min-width: 0;
+}
+.remote-band code {
+  font-family: 'JetBrains Mono', Menlo, monospace;
+}
+.remote-band button {
+  white-space: nowrap;
+}
+.new-task-where {
+  display: flex;
+  gap: 6px;
+}
+.new-task-where button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}

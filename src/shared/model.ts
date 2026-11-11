@@ -3,6 +3,7 @@ import { isObj } from './guards'
 import { AGENT_NAME, isChatAgent, type ChatAgent } from './chat'
 import { parseQuickList, removeQuick, restoreQuick, upsertQuick, type QuickCommand } from './quick'
 import { defaultExtraSettings, parseExtraSettings } from './settings'
+import { isSshHost } from './remote'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
@@ -794,6 +795,8 @@ function parseTask(v: unknown, settings: Settings, newId: NewId, seen: SeenIds):
     ...(Array.isArray(v.quickCommands) && v.quickCommands.length ? { quickCommands: parseQuickList(v.quickCommands) } : {}),
     ...(parseNotes(v.notes).length ? { notes: parseNotes(v.notes) } : {}),
     ...(typeof v.lastViewedAt === 'number' && Number.isFinite(v.lastViewedAt) && v.lastViewedAt > 0 ? { lastViewedAt: v.lastViewedAt } : {}),
+    ...(typeof v.archivedAt === 'number' && Number.isFinite(v.archivedAt) && v.archivedAt > 0 ? { archivedAt: v.archivedAt } : {}),
+    ...(isStr(v.host) && isSshHost(v.host) ? { host: v.host, ...(v.remoteTmux === false ? { remoteTmux: false } : {}) } : {}),
   }
 }
 

@@ -191,7 +191,7 @@ export interface Restored {
 
 const allPanes = (s: AppState): Id[] => s.tasks.flatMap((t) => Object.keys(t.panes))
 
-function mapLayout(l: Layout, ids: Map<Id, Id>): Layout {
+export function mapLayout(l: Layout, ids: Map<Id, Id>): Layout {
   return l.type === 'pane' ? { type: 'pane', paneId: ids.get(l.paneId) ?? l.paneId } : { ...l, a: mapLayout(l.a, ids), b: mapLayout(l.b, ids) }
 }
 

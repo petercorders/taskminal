@@ -29,6 +29,10 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
+import { ArchivePanel } from './ArchivePanel'
+import { WeeklyPanel } from './WeeklyPanel'
+import { ARCHIVED_PREFIX } from './Palette'
+import { archiveSuggestions, isArchived, unarchiveTask, visibleTasks, type DeletedTask } from '../shared/archive'
 import { maskActivity, textMasker } from './activity-mask'
 import { adjacentTask, stepStatus, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
@@ -227,8 +231,14 @@ export function App() {
   // 실행 중인 것을 닫기 전 확인 (⌘W · 탭 ×)
   // 대상은 id 로만 들고 있다가 확인하는 순간의 상태로 다시 찾는다(그 사이 셸이 끝나 탭 · pane 이 바뀔 수 있다)
   const [confirming, setConfirming] = useState<
-    { kind: 'pane'; paneId: string; command?: string } | { kind: 'tab'; taskId: string; tabId: string; busy: number } | null
+    | { kind: 'pane'; paneId: string; command?: string }
+    | { kind: 'tab'; taskId: string; tabId: string; busy: number }
+    // 보관 (25단계) — 돌고 있는 명령이 있을 때만. 대상은 id 로, 확인하는 순간 다시 찾는다
+    | { kind: 'archive'; ids: string[]; busy: number; total: number; command?: string }
+    | null
   >(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [weeklyOpen, setWeeklyOpen] = useState(false)
   // 빠른 명령 (20단계): 누른 기록(런타임) · 메뉴 · 만들기 창 · 실행 확인. 단추는 id 로만 들고 누르는 순간 다시 찾는다
   const [quickRuns, setQuickRuns] = useState<Readonly<Record<string, QuickRun>>>({})
   const [quickEdit, setQuickEdit] = useState<{ taskId: string; ref: QuickRef | null; draft: QuickDraft; fromTemplate?: string | undefined } | null>(null)
@@ -554,10 +564,21 @@ export function App() {
     putActivity(next)
   }, [state.tasks])
 
+  // 보관 일감(25단계)을 뺀 상태 — 사이드바 · ⌘P · 일감 넘기기 · 화면에 쓴다(보관 일감의 pane 은 그리지 않는다 = 셸 · 스크롤 없음)
+  const viewState = useMemo(() => (state.tasks.some(isArchived) ? { ...state, tasks: visibleTasks(state) } : state), [state])
+  // 완료 칸 '보관할까요? n' — 상태가 바뀔 때 다시 센다(분 단위면 충분)
+  const suggestions = useMemo(() => archiveSuggestions(state, Date.now()), [state])
+  // 앱을 껐다 켰을 때 보관 일감의 셸이 지킴이에 남아 있으면(보관 중 앱이 끝남) 한 번 끈다
+  const archivedSwept = useRef(false)
+  useEffect(() => {
+    if (load.phase !== 'ready' || archivedSwept.current) return
+    archivedSwept.current = true
+    for (const t of stateRef.current.tasks) if (isArchived(t)) for (const p of Object.values(t.panes)) if (p.kind !== 'chat') window.taskminal.pty.kill(p.id)
+  }, [load.phase])
   // main 에 알리는 값: 실행 중 명령 수(끄기 전 확인) · 확인 필요 일감 수(Dock 배지)
   const { settings } = state
   const busyTotal = Object.values(activity).filter((a) => a.busy).length
-  const attentionTasks = state.tasks.filter((t) => taskActivity(Object.keys(t.panes).map((id) => activity[id])).attention).length
+  const attentionTasks = viewState.tasks.filter((t) => taskActivity(Object.keys(t.panes).map((id) => activity[id])).attention).length
   useEffect(() => window.taskminal.setQuitGuard(settings.confirmQuit ? busyTotal : 0), [settings.confirmQuit, busyTotal])
   useEffect(() => window.taskminal.setBadge(settings.dockBadge ? attentionTasks : 0), [settings.dockBadge, attentionTasks])
   // 바꾼 단축키: renderer 가 처리하는 표 · 앱 메뉴의 표시
@@ -1021,6 +1042,63 @@ export function App() {
     setQuickAsk(null)
     setPopup(null)
     setPortKill(null)
+    setArchiveOpen(false)
+    setWeeklyOpen(false)
+    refocus()
+  }
+
+  // ─── 25단계: 보관함 ───
+  /** 보관 — id 로 지금 상태에서 다시 찾는다(확인 창 · 제안 칩을 누른 사이 지워지거나 이미 보관됐으면 뺀다). 돌고 있는 명령이 있으면 한 번 묻는다 */
+  const archive = (ids: string[], confirmed = false) => {
+    const cur = stateRef.current
+    const tasks = ids.map((id) => cur.tasks.find((t) => t.id === id)).filter((t): t is Task => !!t && !isArchived(t))
+    if (tasks.length === 0) return closeDialogs()
+    const panes = tasks.flatMap((t) => Object.values(t.panes))
+    const busy = panes.filter((p) => activityRef.current[p.id]?.busy)
+    if (busy.length > 0 && !confirmed) {
+      const cmd = busy.map((p) => shownActivity[p.id]?.command).find(Boolean)
+      return setConfirming({ kind: 'archive', ids: tasks.map((t) => t.id), busy: busy.length, total: panes.length, ...(cmd ? { command: cmd } : {}) })
+    }
+    // 셸만 끈다 — 대화 pane 은 프로세스만 끝내고 기록은 남긴다(되살리면 이어 하기)
+    for (const p of panes) {
+      if (p.kind === 'chat') window.taskminal.chat.close(p.id, false)
+      else window.taskminal.pty.kill(p.id)
+    }
+    const at = Date.now()
+    for (const t of tasks) dispatch({ type: 'task/archive', id: t.id, at })
+    closeDialogs()
+    const keep = tasks.map((t) => t.id)
+    showToast({
+      text: tasks.length === 1 ? `‘${tasks[0]!.name}’ 을 보관했어요 · 스크롤은 지웠어요` : `${tasks.length}개를 보관했어요 · 스크롤은 지웠어요`,
+      sub: '탭 · 폴더 · 메모 · 명령 기록은 남아요. 보관함 ⇧⌘E 에서 되살려요.',
+      action: { label: '되돌리기', run: () => unarchive(keep) },
+    })
+  }
+  /** 되살리기 — 보관 일감이 아니면(두 번 누름 · 이미 되살림) 건너뛴다. 터미널 pane 은 새 id 로 새 셸 */
+  const unarchive = (ids: string[]) => {
+    let s = stateRef.current
+    let done = 0
+    for (const id of ids) {
+      const r = unarchiveTask(s, id, newId)
+      if (r) {
+        s = r
+        done++
+      }
+    }
+    if (done === 0) return
+    stateRef.current = s
+    dispatch({ type: 'state/replace', state: s })
+    setArchiveOpen(false)
+    refocus()
+  }
+  /** 최근 지운 것 되살리기 — 그 백업을 다시 읽어 17단계 restoreTask 로(지금 모습은 '되돌리기 전' 백업으로 남는다) */
+  const restoreDeleted = async (d: DeletedTask) => {
+    const snap = await window.taskminal.backup.read(d.backup).catch(() => null)
+    if (!snap) return showToast({ text: '백업을 읽지 못해 되살리지 못했어요.' })
+    const err = await applyRestore((cur) => restoreTask(cur, snap, d.task.id, newId), 'restore')
+    if (err) return showToast({ text: err })
+    setArchiveOpen(false)
+    showToast({ text: `‘${d.task.name}’ 일감을 되살렸어요.`, sub: '탭 · 폴더가 돌아오고 셸은 새로 열려요.' })
     refocus()
   }
 
@@ -1134,7 +1212,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
   const [seenAt, setSeenAt] = useState<Record<string, number>>({})
@@ -1343,7 +1421,7 @@ export function App() {
       case 'font-reset':
         return font('reset')
       case 'next-attention': {
-        const target = nextAttention(state, activity, viewedRef.current)
+        const target = nextAttention(viewState, activity, viewedRef.current)
         if (!target) return
         dispatch({ type: 'task/select', id: target.taskId })
         dispatch({ type: 'pane/focus', taskId: target.taskId, paneId: target.paneId })
@@ -1367,9 +1445,16 @@ export function App() {
         say(`‘${t.name}’ → ${state.settings.statuses.find((x) => x.id === to)?.name ?? to}`)
         return refocus()
       }
+      case 'archive-open':
+        return setArchiveOpen(true)
+      case 'weekly':
+        return setWeeklyOpen(true)
+      case 'archive':
+        if (state.activeTaskId) archive([state.activeTaskId])
+        return
       case 'next-task':
       case 'prev-task': {
-        const id = adjacentTask(state, command === 'next-task' ? 1 : -1)
+        const id = adjacentTask(viewState, command === 'next-task' ? 1 : -1)
         if (id) dispatch({ type: 'task/select', id })
         return refocus()
       }
@@ -1454,6 +1539,7 @@ export function App() {
     setPaletteOpen(false)
     switch (item.kind) {
       case 'task':
+        if (item.id.startsWith(ARCHIVED_PREFIX)) return unarchive([item.id.slice(ARCHIVED_PREFIX.length)])
         dispatch({ type: 'task/select', id: item.id })
         if (newTab) addTab(item.id)
         return refocus()
@@ -1604,7 +1690,13 @@ export function App() {
       />
       <div className="app-body">
         <Sidebar
-          state={state}
+          state={viewState}
+          onArchive={(t) => archive([t.id])}
+          archivedCount={state.tasks.length - viewState.tasks.length}
+          onOpenArchive={() => runCommand('archive-open')}
+          onWeekly={() => runCommand('weekly')}
+          suggestArchive={suggestions}
+          onArchiveMany={(ids) => archive(ids)}
           activity={shownActivity}
           loading={load.phase === 'loading'}
           onSelect={(id) => {
@@ -1632,7 +1724,7 @@ export function App() {
         />
         <main className="workspace">
           {/* 전환해도 셸 · 화면이 남도록 본 탭의 pane 은 모두 마운트해 두고, 활성이 아닌 일감 · 탭은 숨긴다. */}
-          {state.tasks.map((task) => {
+          {viewState.tasks.map((task) => {
             const taskActive = task.id === state.activeTaskId
             return (
               <section
@@ -1762,13 +1854,13 @@ export function App() {
               </section>
             )
           })}
-          {load.phase !== 'loading' && state.tasks.length > 0 && !activeTask && (
+          {load.phase !== 'loading' && viewState.tasks.length > 0 && !activeTask && (
             <div className="empty" data-testid="pick-view">
               <h1>Taskminal</h1>
               <p className="hint">왼쪽에서 일감을 고르면 터미널이 시작됩니다</p>
             </div>
           )}
-          {load.phase !== 'loading' && state.tasks.length === 0 && (
+          {load.phase !== 'loading' && viewState.tasks.length === 0 && (
             <div className="empty" data-testid="empty-view">
               <h1>Taskminal</h1>
               <p className="hint">일감이 없습니다</p>
@@ -1860,7 +1952,7 @@ export function App() {
       )}
       {toast && <Toast toast={toast} onDone={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
-      {paletteOpen && <Palette state={state} shortcuts={shortcuts} history={history.entries} ports={paletteports} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {paletteOpen && <Palette state={viewState} archived={state.tasks.filter(isArchived)} shortcuts={shortcuts} history={history.entries} ports={paletteports} onRun={runPaletteItem} onClose={closeDialogs} />}
       {popup?.kind === 'quick' && (
         <PopupMenu label="빠른 명령 메뉴" testId="quick-menu" x={popup.x} y={popup.y} items={quickMenuItems(popup)} onClose={(picked) => (setPopup(null), picked || refocus())} />
       )}
@@ -1924,6 +2016,10 @@ export function App() {
           onClose={closeDialogs}
         />
       )}
+      {archiveOpen && (
+        <ArchivePanel state={state} onRestore={unarchive} onRemove={(t) => (setArchiveOpen(false), setRemoving(t))} onRestoreDeleted={(d) => void restoreDeleted(d)} onClose={closeDialogs} />
+      )}
+      {weeklyOpen && <WeeklyPanel entries={history.entries} tasks={state.tasks} onCopied={() => showToast({ text: '주간 정리를 마크다운으로 복사했어요.' })} onClose={closeDialogs} />}
       {clearingHistory && (
         <ConfirmDialog
           title="명령 기록 모두 지우기"
@@ -1975,16 +2071,19 @@ export function App() {
       )}
       {confirming && (
         <ConfirmDialog
-          title={confirming.kind === 'pane' ? 'pane 닫기' : '탭 닫기'}
+          title={confirming.kind === 'pane' ? 'pane 닫기' : confirming.kind === 'archive' ? `${confirming.command ? `‘${confirming.command}’ 가` : '명령이'} 아직 돌고 있어요` : '탭 닫기'}
           message={
             confirming.kind === 'pane'
               ? `실행 중인 명령${confirming.command ? ` ‘${confirming.command}’` : ''}이 함께 끝납니다.`
-              : `이 탭에서 명령 ${confirming.busy}개가 실행 중입니다. 닫으면 함께 끝납니다.`
+              : confirming.kind === 'archive'
+                ? `터미널 ${confirming.total}개 중 ${confirming.busy}개에서 돌고 있어요. 끄고 보관할까요? 탭 · 폴더 · 메모 · 명령 기록은 남아요.`
+                : `이 탭에서 명령 ${confirming.busy}개가 실행 중입니다. 닫으면 함께 끝납니다.`
           }
-          confirmLabel="닫기"
+          confirmLabel={confirming.kind === 'archive' ? '끄고 보관' : '닫기'}
           onConfirm={() => {
             // 지금 상태에서 다시 찾는다 — 없어졌으면(셸이 스스로 끝남) 대화상자만 닫는다
             const c = confirming
+            if (c.kind === 'archive') return archive(c.ids, true)
             if (c.kind === 'pane') {
               if (findPaneTask(state, c.paneId)) closePane(c.paneId, true)
               else closeDialogs()

@@ -41,13 +41,24 @@ interface Props {
   onToggleSection?(key: string): void
   /** 몇 분 전 — 시험에서 시각을 고정할 수 있게 */
   now?: number
+  // 25단계 보관함 · 원격
+  onArchive?(task: Task): void
+  /** 보관한 일감 수 — 맨 아래 '🗄 보관함 n' */
+  archivedCount?: number
+  onOpenArchive?(): void
+  onWeekly?(): void
+  /** 완료 칸 머리 '보관할까요? n' — 누르면 그 일감들(누른 순간의 id) 을 보관 */
+  suggestArchive?: readonly Task[]
+  onArchiveMany?(ids: Id[]): void
+  /** 원격 일감의 연결 상태 — 사이드바 '⇄ host' 칩의 점 */
+  remoteStateOf?(task: Task): 'up' | 'retry' | 'down' | null
 }
 
 const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now() }: Props) {
+export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -57,6 +68,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
     if (filterSignal > 0) filterRef.current?.focus()
   }, [filterSignal])
   const flowSecs = flow ? flowSections(state, activity, unread, query, branches) : []
+  const lastStatus = state.settings.statuses[state.settings.statuses.length - 1]?.id
   const bar = countBar(state, activity, unread)
   const groupName = (task: Task) => state.settings.groups.find((g) => g.id === task.groupId)?.name
   const [menu, setMenu] = useState<{ taskId: Id; x: number; y: number } | null>(null)
@@ -176,7 +188,12 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
               {!compact && (
                 // 디자인 '사이드바 일감 줄': 브랜치(저장소가 아니면 폴더) 고정폭 · 6px 틈 · 상태 색
                 <span className="task-sub" title={task.cwd}>
-                  <span className="task-where">{branches[task.cwd] ?? shortPath(task.cwd)}</span>
+                  {task.host && (
+                    <span className={`task-host ${remoteStateOf(task) ?? ''}`} data-testid="task-host" title={`원격 ${task.host}`}>
+                      ⇄ {task.host}
+                    </span>
+                  )}
+                  <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>
                   ) : (
@@ -330,6 +347,11 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
                   <span className="group-count">{sec.tasks.length}</span>
                   {sec.key === 'need' && <kbd>⇧⌘A</kbd>}
                 </button>
+                {sec.key === lastStatus && suggestArchive.length > 0 && (
+                  <button type="button" className="archive-suggest" data-testid="archive-suggest" title="완료한 지 7일 넘은 일감을 보관해요" onClick={() => onArchiveMany(suggestArchive.map((t) => t.id))}>
+                    보관할까요? {suggestArchive.length}
+                  </button>
+                )}
               </h2>
               {!closed && (sec.tasks.length > 0 ? <ul>{sec.tasks.map((t) => row(t, sec.key === 'need' ? 'need' : 'list'))}</ul> : <p className="flow-empty">{query.trim() ? '맞는 일감 없음' : '여기로 끌어 놓기'}</p>)}
             </section>
@@ -385,19 +407,31 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
             setMenu(null)
             onSaveTemplate(menuTask)
           }}
+          onArchive={() => {
+            setMenu(null)
+            onArchive(menuTask)
+          }}
           onClose={() => {
             setMenu(null)
             onMenuClosed()
           }}
         />
       )}
-      {updateChip && (
-        <footer className="sidebar-foot">
+      <footer className="sidebar-foot">
+        {updateChip && (
           <button type="button" className="sidebar-update" onClick={onUpdateChip} data-testid="update-chip">
             ● {updateChip} 설치 가능
           </button>
-        </footer>
-      )}
+        )}
+        <div className="sidebar-foot-row">
+          <button type="button" className="sidebar-foot-button" onClick={onWeekly} data-testid="weekly-open" title="이번 주 정리">
+            📊 이번 주
+          </button>
+          <button type="button" className="sidebar-foot-button" onClick={onOpenArchive} data-testid="archive-open" title="보관함 (⇧⌘E)">
+            🗄 보관함 {archivedCount > 0 ? archivedCount : ''}
+          </button>
+        </div>
+      </footer>
     </nav>
   )
 }

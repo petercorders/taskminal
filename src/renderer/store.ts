@@ -51,6 +51,7 @@ import {
 } from '../shared/model'
 import type { QuickCommand } from '../shared/quick'
 import type { ChatAgent } from '../shared/chat'
+import { archiveTask } from '../shared/archive'
 import type { AppState, Id, Note, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
@@ -63,6 +64,8 @@ export type Action =
   | { type: 'task/create'; task: Task }
   | { type: 'task/select'; id: Id }
   | { type: 'task/remove'; id: Id }
+  /** 보관 (25단계) — 셸 끄기는 부르는 쪽이 먼저 */
+  | { type: 'task/archive'; id: Id; at: number }
   | { type: 'tab/add'; taskId: Id; tabId: Id; paneId: Id; spec?: SplitSpec }
   | { type: 'quick/save'; scope: QuickScope; qc: QuickCommand }
   | { type: 'quick/remove'; scope: QuickScope; id: Id }
@@ -133,6 +136,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, tasks: [...state.tasks, action.task], activeTaskId: action.task.id }
     case 'task/select':
       return state.tasks.some((t) => t.id === action.id) ? { ...state, activeTaskId: action.id } : state
+    case 'task/archive':
+      return archiveTask(state, action.id, action.at)
     case 'task/remove': {
       const i = state.tasks.findIndex((t) => t.id === action.id)
       if (i < 0) return state

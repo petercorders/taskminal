@@ -91,6 +91,12 @@ export interface Task {
   notes?: Note[]
   /** 이 일감을 마지막으로 본 때 (24단계 이어받기 요약) */
   lastViewedAt?: number
+  /** 보관한 때 (25단계) — 셸은 끄고 탭 · 폴더 · 메모 · 명령 기록은 남김. 사이드바 · ⌘P 기본 목록에서 빠진다 */
+  archivedAt?: number
+  /** 원격 일감의 ssh 호스트 (25단계) — ~/.ssh/config 의 Host 이름이나 user@host. 있으면 cwd · pane cwd 는 그 호스트의 경로 */
+  host?: string
+  /** 원격 일감에서 서버의 tmux 로 '끊겨도 계속 돌게' (25단계, 기본 켬) */
+  remoteTmux?: boolean
 }
 
 export interface Note {
