@@ -40,6 +40,12 @@ function tabOfPane(task: Task, paneId: Id) {
   return task.tabs.find((t) => hasPane(t.layout, paneId))
 }
 
+/** 명령이 만든 탭 · pane 이 사용자가 치던 곳을 빼앗지 않게 — 그 일감의 보던 탭 · pane 으로 되돌리는 동작 (24 리뷰) */
+function keepFocus(task: Task): Action[] {
+  const tab = task.tabs.find((x) => x.id === task.activeTabId)
+  return tab ? [{ type: 'pane/focus', taskId: task.id, paneId: tab.activePaneId }] : []
+}
+
 export function paneTarget(task: Task, paneId: Id): PaneTarget | null {
   const pane = task.panes[paneId]
   const tab = tabOfPane(task, paneId)
@@ -137,6 +143,7 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const first = newTabs[0]
       if (!first) return failed('탭을 만들지 못했어요')
       if (req.title !== undefined) actions.push({ type: 'tab/rename', taskId: t.id, tabId: first.id, title: req.title })
+      actions.push(...keepFocus(t))
       const label = req.title?.trim() || tabLabel(after, first)
       return done({ ok: true, text: `탭 '${label}' 을 만들었어요 · pane ${first.activePaneId}`, data: { tab: first.id, pane: first.activePaneId } }, actions, newTabs.map((x) => x.id))
     }
@@ -150,6 +157,7 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const actions: Action[] = [
         { type: 'pane/focus', taskId, paneId },
         { type: 'pane/split', taskId, dir: req.dir, paneId: id, ...(req.cmd ? { spec: { cwd, command: req.cmd } } : {}) },
+        ...keepFocus(task),
       ]
       const after = run(state, actions).tasks.find((x) => x.id === taskId)!
       if (!after.panes[id]) return failed('나누지 못했어요')
@@ -197,12 +205,13 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const t = r.value
       const paneId = ctx.newId()
       const tab = t.tabs.find((x) => x.id === t.activeTabId)
-      // 부른 터미널 옆에 — 그 일감 안이면 그 pane 을 활성으로 한 뒤 나눈다(사람이 나눌 때와 같다)
+      // 부른 터미널 옆에 — 그 일감 안이면 그 pane 을 활성으로 한 뒤 나눈다. 끝나면 사용자가 보던 pane 으로 되돌린다
       const focus: Action[] = self && Object.hasOwn(t.panes, self) ? [{ type: 'pane/focus', taskId: t.id, paneId: self }] : []
       const actions: Action[] =
         req.where === 'tab' || !tab
           ? [{ type: 'chat/add-tab', taskId: t.id, tabId: ctx.newId(), paneId, agent: req.agent }]
           : [...focus, { type: 'chat/split', taskId: t.id, paneId, agent: req.agent, dir: req.where }]
+      actions.push(...keepFocus(t))
       const after = run(state, actions).tasks.find((x) => x.id === t.id)!
       const target = paneTarget(after, paneId)
       if (!target) return failed('대화 pane 을 만들지 못했어요')

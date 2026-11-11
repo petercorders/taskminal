@@ -72,6 +72,23 @@ describe('handleCliUi', () => {
     expect(e.seeTabs).toEqual([s.tasks[0]!.activeTabId])
   })
 
+  it('명령이 만든 탭 · pane · 대화는 사용자가 보던 탭 · pane 을 바꾸지 않는다 (24 리뷰)', () => {
+    let s = base()
+    const was = (st: typeof s) => ({ tab: st.tasks[0]!.activeTabId, pane: st.tasks[0]!.tabs.find((t) => t.id === st.tasks[0]!.activeTabId)!.activePaneId })
+    const before = was(s)
+    for (const req of [
+      { op: 'pane.split', pane: before.pane, dir: 'right' },
+      { op: 'tab.new', task: '배포' },
+      { op: 'chat.new', agent: 'claude', where: 'down', text: 'x', task: '배포' },
+      { op: 'chat.new', agent: 'claude', where: 'tab', text: 'x', task: '배포' },
+    ] as const) {
+      const r = apply(s, req)
+      expect(r.e.reply.ok, req.op).toBe(true)
+      s = r.next
+      expect(was(s), `${req.op} ${'where' in req ? req.where : ''}`).toEqual(before)
+    }
+  })
+
   it('tab new --title --cmd', () => {
     const s = base()
     const { e, next } = apply(s, { op: 'tab.new', task: 'UX', cmd: 'ls', title: '서버' })

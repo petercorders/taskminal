@@ -1,7 +1,8 @@
 #!/bin/sh
 # Taskminal 명령줄 도구 (24단계) — 앱의 Electron 을 node 로 써서 cli.js 를 돌린다.
 # 앱 안 터미널은 TASKMINAL_CLI_NODE · TASKMINAL_CLI_JS(정확한 경로)를 받는다. 그 밖(설치한 링크)은 자기 위치에서 찾는다.
-if [ -n "$TASKMINAL_CLI_NODE" ] && [ -n "$TASKMINAL_CLI_JS" ]; then
+# 셸은 앱을 다시 켜도 살아 있다 — 앱을 옮겼으면 받은 경로가 없으니 자기 위치에서 찾는다(24 리뷰)
+if [ -n "$TASKMINAL_CLI_NODE" ] && [ -n "$TASKMINAL_CLI_JS" ] && [ -x "$TASKMINAL_CLI_NODE" ]; then
   ELECTRON_RUN_AS_NODE=1 exec "$TASKMINAL_CLI_NODE" "$TASKMINAL_CLI_JS" "$@"
 fi
 self=$0

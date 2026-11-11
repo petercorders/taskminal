@@ -148,7 +148,7 @@ export function parseArgs(argv: readonly string[]): Parsed {
       values[key] = v
       continue
     }
-    return usage(`'${name}' 에 없는 옵션: --${key}`)
+    return usage(`'${name}' 에 없는 옵션: --${key} — 글이 - 로 시작하면 옵션 뒤에 -- 를 두고 적어 주세요 (예: taskminal ${name} … -- "--- 요약")`)
   }
   const [min, max] = spec.pos
   if (pos.length < min) return usage(`'${name}' 에 인자가 모자라요 (taskminal help)`)

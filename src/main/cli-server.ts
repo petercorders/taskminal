@@ -53,18 +53,21 @@ export class CliServer {
     }
     const server = createServer((sock) => this.accept(sock))
     // 만들어지는 순간부터 같은 사용자만 — chmod 전의 틈을 없앤다
+    // umask 는 프로세스 전체 값이다 — 유닉스 소켓은 listen() 호출 안에서 바로 bind 되므로 그 호출 동안만 바꾼다(await 를 넘기지 않는다, 24 리뷰)
+    const listening = new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.once('listening', () => {
+        server.off('error', reject)
+        resolve()
+      })
+    })
     const old = process.umask(0o077)
     try {
-      await new Promise<void>((resolve, reject) => {
-        server.once('error', reject)
-        server.listen(path, () => {
-          server.off('error', reject)
-          resolve()
-        })
-      })
+      server.listen(path)
     } finally {
       process.umask(old)
     }
+    await listening
     chmodSync(path, 0o600)
     this.server = server
   }
@@ -87,10 +90,14 @@ export class CliServer {
     let buf = ''
     let started = false
     const aborts: Array<() => void> = []
+    let gone = false
     const closed = () => {
+      gone = true
       this.conns.delete(sock)
       for (const a of aborts.splice(0)) a()
     }
+    // 창에 묻기 · 셸 기다리기 사이에 끊겼으면 나중에 단 기다림도 바로 버린다(24 리뷰)
+    const onAbort = (fn: () => void) => (gone ? fn() : void aborts.push(fn))
     sock.on('close', closed)
     sock.on('error', () => sock.destroy())
     sock.on('data', (chunk: string) => {
@@ -112,7 +119,7 @@ export class CliServer {
       const v = (raw as { v?: unknown } | null)?.v
       if (v !== CLI_PROTOCOL) return this.reply(sock, err(`앱과 명령의 버전이 달라요 (앱 ${CLI_PROTOCOL} · 명령 ${String(v)}) — 앱 메뉴의 '명령줄 도구 설치…' 로 다시 설치해 주세요`, EXIT.usage))
       if (!isCliRequest(raw)) return this.reply(sock, err('요청의 모양이 맞지 않아요', EXIT.usage))
-      void this.handle(raw, (fn) => aborts.push(fn)).then(
+      void this.handle(raw, onAbort).then(
         (r) => this.reply(sock, r),
         (e: unknown) => this.reply(sock, err(`앱에서 처리하지 못했어요: ${e instanceof Error ? e.message : String(e)}`)),
       )
@@ -155,7 +162,8 @@ export class CliServer {
         if (!r.ok) return r
         if (!r.target || r.target.kind !== 'chat') return err('대화 pane 을 만들지 못했어요')
         const sent = await this.d.chat.send(r.target, req.text)
-        if (sent !== 'ok') return err(sendError(sent))
+        // pane 은 이미 생겼다 — 다시 시도할 곳을 알려 준다(chat send <pane>)
+        if (sent !== 'ok') return err(`${sendError(sent)} · 대화 pane ${r.target.paneId} 은 만들었어요 (chat send ${r.target.paneId} "…" 로 다시)`)
         return { ok: true, text: `대화 pane ${r.target.paneId} 를 만들고 보냈어요 (${r.target.label})`, data: { pane: r.target.paneId, label: r.target.label } }
       }
       case 'chat.send': {
@@ -231,7 +239,8 @@ export class CliServer {
         paneIds.map(async (id, i) => {
           const st = chatStatus(await this.d.chat.history(id)).state
           if (settled[i]) return
-          if (st !== 'run') {
+          // 'new' = 보낸 글이 아직 기록에 안 닿음(chat new 바로 뒤) — 끝으로 세지 않고 기다린다(24 리뷰)
+          if (st !== 'run' && st !== 'new') {
             states[i] = st
             settled[i] = true
           }

@@ -128,6 +128,29 @@ describe('CliServer 소켓', () => {
     s.destroy()
     await expect.poll(() => watch.snapshot('p1').waiters).toBe(0)
   })
+
+  it('창에 묻는 사이 끊겨도, 그 뒤에 단 기다림을 바로 버린다 (24 리뷰)', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const base = setup()
+    const { server, deps, listeners } = setup({
+      askUi: async (req) => {
+        await gate
+        return base.deps.askUi(req)
+      },
+    })
+    await server.listen()
+    const s = connect(deps.sockPath)
+    await new Promise<void>((r) => s.on('connect', r))
+    s.write(JSON.stringify({ v: CLI_PROTOCOL, op: 'chat.wait', panes: ['c1'], all: false, timeoutMs: 60_000 }) + '\n')
+    await new Promise((r) => setTimeout(r, 20))
+    s.destroy()
+    await new Promise((r) => setTimeout(r, 20))
+    release()
+    // 끊긴 뒤에 단 듣기 · 타이머가 남지 않는다
+    await new Promise((r) => setTimeout(r, 30))
+    expect(listeners.size).toBe(0)
+  })
 })
 
 describe('CliServer 처리', () => {
@@ -169,6 +192,9 @@ describe('CliServer 처리', () => {
     const { server } = setup({ chat: { send: async (t, x) => (sent.push([t.paneId, x]), 'ok'), history: async () => [], subscribe: () => () => {} } })
     expect(await server.handle({ op: 'chat.new', agent: 'claude', where: 'right', text: '시험 고쳐 줘' })).toMatchObject({ ok: true, data: { pane: 'c9' } })
     expect(sent).toEqual([['c9', '시험 고쳐 줘']])
+    // 보내기에 실패해도 만든 pane 을 알려 준다 — 다시 만들지 않고 chat send 로
+    const missing = setup({ chat: { send: async () => 'missing', history: async () => [], subscribe: () => () => {} } })
+    expect(await missing.server.handle({ op: 'chat.new', agent: 'codex', where: 'right', text: 'x' })).toMatchObject({ ok: false, error: expect.stringContaining('chat send c9') })
     const busy = setup({ chat: { send: async () => 'busy', history: async () => [], subscribe: () => () => {} } })
     expect(await busy.server.handle({ op: 'chat.send', pane: 'c1', text: 'x' })).toMatchObject({ ok: false, error: expect.stringContaining('실행 중') })
   })
@@ -196,6 +222,18 @@ describe('CliServer 처리', () => {
     const r = await server.handle({ op: 'chat.wait', panes: ['c1', 'c2'], all: false, timeoutMs: 30 })
     expect(r).toMatchObject({ ok: true, exit: 124 })
     expect((r as { data: Array<{ state: string }> }).data.map((x) => x.state)).toEqual(['done', 'run'])
+  })
+
+  it('chat wait: 보낸 글이 아직 기록에 없는 대화(new)도 끝날 때까지 기다린다 — 바로 124 가 아니다 (24 리뷰)', async () => {
+    const { server, emit, listeners } = setup()
+    const p = server.handle({ op: 'chat.wait', panes: ['c1'], all: false, timeoutMs: 5000 })
+    await expect.poll(() => listeners.size).toBe(1)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(listeners.size).toBe(1) // 아직 기다린다(바로 124 로 끝나지 않았다)
+    // 가짜 창은 c1 · c2 를 돌려준다 — 둘 다 끝나면
+    emit('c1', { t: 'turn_end', ok: true, ms: 5, reason: 'success' })
+    emit('c2', { t: 'turn_end', ok: true, ms: 5, reason: 'success' })
+    expect(await p).toMatchObject({ ok: true, exit: 0 })
   })
 
   it('chat read: 마지막 턴의 에이전트 글', async () => {

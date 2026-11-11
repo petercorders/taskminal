@@ -1044,7 +1044,12 @@ if (!app.requestSingleInstanceLock()) {
     markRunning(true)
     installAppMenu()
     cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
-    hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error), cliEnv, {
+    // 새 셸을 띄울 때만 불린다 — 같은 pane id 로 새 셸이면 앞 셸의 끝 · 실행 중 표시를 지운다(24 리뷰)
+    const newShellEnv = (paneId: string) => {
+      paneWatch.forget(paneId)
+      return cliEnv(paneId)
+    }
+    hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error), newShellEnv, {
       data: (paneId, data) => paneWatch.feed(paneId, data),
       exit: (paneId, code) => paneWatch.exit(paneId, code),
     })

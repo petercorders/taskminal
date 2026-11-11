@@ -39,6 +39,12 @@ describe('parseArgs', () => {
     expect(parseArgs(['--version']).kind).toBe('version')
   })
 
+  it('- 로 시작하는 글은 -- 뒤에 — 모르는 옵션이면 그렇게 하라고 알려 준다 (24 리뷰)', () => {
+    const bad = parseArgs(['chat', 'send', 'p', '--- 요약'])
+    expect(bad).toMatchObject({ kind: 'usage', error: expect.stringContaining('-- 를 두고') })
+    expect(parseArgs(['chat', 'send', 'p', '--', '--- 요약'])).toMatchObject({ kind: 'request', req: { op: 'chat.send', pane: 'p', text: '--- 요약' } })
+  })
+
   it('list · --json 은 어디에 있어도', () => {
     expect(parseArgs(['list', '--json'])).toEqual({ kind: 'request', req: { op: 'list' }, json: true })
     expect(parseArgs(['--json', 'list'])).toEqual({ kind: 'request', req: { op: 'list' }, json: true })
