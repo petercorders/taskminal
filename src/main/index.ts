@@ -18,6 +18,8 @@ import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onQuitAll } from './menu'
 import { lsofCwds } from './cwd-probe'
+import { killPort, probePorts } from './port-probe'
+import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import type { WorktreeResult } from '../shared/worktree'
@@ -133,6 +135,11 @@ const MAX_BRANCH_DIRS = 200 // 사이드바 일감 폴더 (15c)
 const cwdPollMs = ((): number => {
   const v = Number(process.env['TASKMINAL_CWD_POLL_MS'])
   return Number.isInteger(v) && v >= 100 ? v : 15_000
+})()
+// 20단계 포트 조사 주기 (창에 포커스가 있을 때, 없으면 5배) — 시험은 줄인다
+const portPollMs = ((): number => {
+  const v = Number(process.env['TASKMINAL_PORT_POLL_MS'])
+  return Number.isInteger(v) && v >= 100 ? v : 3000
 })()
 // 15e: 터미널 그리기 — 시험(e2e)은 DOM 의 글을 읽으므로 playwright 설정이 dom 을 넣는다
 const renderer: RendererMode = process.env['TASKMINAL_RENDERER'] === 'dom' ? 'dom' : 'webgl'
@@ -381,7 +388,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, renderer, crashedLast }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast }
   })
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -593,6 +600,19 @@ if (!app.requestSingleInstanceLock()) {
     const out: Record<string, string> = {}
     for (const [paneId, pid] of Object.entries(pids)) if (cwds[pid]) out[paneId] = cwds[pid]
     return out
+  })
+
+  // 20단계 포트 — 그 창의 pane 셸만 조사 · 끄기
+  ipcMain.handle(IPC.portsProbe, async (event, paneIds: unknown): Promise<ProbeResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return { ok: false }
+    return probePorts(control().ptys.pids(event.sender, paneIds.filter(isPaneId)))
+  })
+  ipcMain.handle(IPC.portsKill, async (event, paneId: unknown, port: unknown, pid: unknown): Promise<'killed' | 'gone' | 'failed'> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isPaneId(paneId) || !Number.isInteger(port) || !Number.isInteger(pid) || (pid as number) <= 1) return 'failed'
+    const shellPid = control().ptys.pids(event.sender, [paneId])[paneId]
+    return shellPid ? killPort(shellPid, port as number, pid as number) : 'gone'
   })
 
   // 셸 지킴이 — 설정 칸 · 위 줄

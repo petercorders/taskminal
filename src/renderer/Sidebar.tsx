@@ -6,6 +6,8 @@ import { ActivityIcon, ACTIVITY_LABEL } from './activity-ui'
 import { shortPath, sidebarSections } from './sidebar-model'
 import type { Branches } from '../shared/git'
 import { TaskMenu } from './TaskMenu'
+import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
+import { SidebarPorts } from './ports-ui'
 
 interface Props {
   state: AppState
@@ -23,6 +25,8 @@ interface Props {
   /** '다음에' 로 닫은 받아 둔 업데이트 버전 — 아래에 칩으로 (18단계) */
   updateChip?: string | null
   onUpdateChip?(): void
+  /** 일감의 포트 칩 (20단계) — 보이기만, 2개 + 나머지 수 */
+  portsOf?(task: Task): PortChip[]
   onSaveTemplate(task: Task): void
   /** 메뉴 · 이름 바꾸기를 끝냈다 — 터미널이 포커스를 다시 가져가게 */
   onMenuClosed(): void
@@ -31,7 +35,7 @@ interface Props {
 }
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {} }: Props) {
+export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf }: Props) {
   const sections = sidebarSections(state)
   const [menu, setMenu] = useState<{ taskId: Id; x: number; y: number } | null>(null)
   // 이름 바꾸기 중인 일감. ↩ · Esc 로 끝내면 입력칸이 사라지는데, Chromium 은 사라지는 입력칸에 blur 를 보내지 않는다
@@ -118,6 +122,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
                   )}
                 </span>
               )}
+              {portsOf && <SidebarPorts {...chipSummary(portsOf(task), SIDEBAR_CHIPS)} />}
             </span>
             <span className="task-activity" title={act.state === 'idle' ? undefined : ACTIVITY_LABEL[act.state]}>
               <ActivityIcon state={act.state} />

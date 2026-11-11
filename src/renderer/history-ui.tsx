@@ -26,6 +26,8 @@ interface Props {
   /** 그 출력으로 — 마커가 없으면 false */
   onGoto(entry: HistoryEntry): void
   onNewTab(entry: HistoryEntry): void
+  /** ⚡ 빠른 명령으로 저장 (20단계) — 가린 자리가 든 명령은 고를 수 없다 */
+  onSaveQuick(entry: HistoryEntry): void
   onRemove(entry: HistoryEntry): void
   onClose(): void
 }
@@ -48,7 +50,7 @@ function paneLabel(task: Task | undefined, paneId: string): string {
 /** 다음 범위 (⌥R) */
 const nextScope = (s: HistoryScope): HistoryScope => HISTORY_SCOPES[(HISTORY_SCOPES.indexOf(s) + 1) % HISTORY_SCOPES.length]!
 
-export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity, signal, onInsert, onRunSplit, onGoto, onNewTab, onRemove, onClose }: Props) {
+export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity, signal, onInsert, onRunSplit, onGoto, onNewTab, onSaveQuick, onRemove, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<HistoryScope>('task')
   const [chip, setChip] = useState<Chip>('all')
@@ -294,6 +296,19 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
                             }}
                           >
                             이 폴더에서 새 탭
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="history-save-quick"
+                            disabled={masked}
+                            title={masked ? '가린 값이 들어 있어 단추로 만들 수 없어요' : undefined}
+                            onClick={() => {
+                              setMenuId(null)
+                              onSaveQuick(e)
+                            }}
+                          >
+                            ⚡ 빠른 명령으로 저장…
                           </button>
                           <button
                             type="button"

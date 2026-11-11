@@ -100,6 +100,14 @@ export interface HistoryApi {
   clear(): Promise<void>
 }
 
+/** 포트 감지 (20단계) */
+export interface PortsApi {
+  /** 이 창의 pane 셸 자손이 듣는 포트 — 실패면 { ok: false } */
+  probe(paneIds: string[]): Promise<import('../shared/ports').ProbeResult>
+  /** 그 pane 의 그 포트를 듣는 pid 에 SIGTERM — main 이 끄기 직전에 다시 조사해 같을 때만 */
+  kill(paneId: string, port: number, pid: number): Promise<'killed' | 'gone' | 'failed'>
+}
+
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
@@ -131,6 +139,7 @@ export interface TaskminalApi {
   /** 첫 실행 안내를 끝냈다 — 다시 띄우지 않는다 */
   firstRunDone(): void
   history: HistoryApi
+  ports: PortsApi
 }
 
 declare global {

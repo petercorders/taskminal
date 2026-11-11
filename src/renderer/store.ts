@@ -32,8 +32,13 @@ import {
   toggleGroup,
   updateStatus,
   type SplitSpec,
+  type QuickScope,
+  dropQuick,
+  putBackQuick,
+  saveQuick,
   type TaskEdit,
 } from '../shared/model'
+import type { QuickCommand } from '../shared/quick'
 import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
@@ -46,7 +51,10 @@ export type Action =
   | { type: 'task/create'; task: Task }
   | { type: 'task/select'; id: Id }
   | { type: 'task/remove'; id: Id }
-  | { type: 'tab/add'; taskId: Id; tabId: Id; paneId: Id }
+  | { type: 'tab/add'; taskId: Id; tabId: Id; paneId: Id; spec?: SplitSpec }
+  | { type: 'quick/save'; scope: QuickScope; qc: QuickCommand }
+  | { type: 'quick/remove'; scope: QuickScope; id: Id }
+  | { type: 'quick/restore'; scope: QuickScope; qc: QuickCommand; index: number }
   | { type: 'tab/select'; taskId: Id; tabId: Id }
   | { type: 'tab/close'; taskId: Id; tabId: Id }
   | { type: 'tab/rename'; taskId: Id; tabId: Id; title: string }
@@ -118,7 +126,7 @@ export function reducer(state: AppState, action: Action): AppState {
         return id
       }
       return updateTask(state, action.taskId, (t) => {
-        const out = addTab(t, next)
+        const out = addTab(t, next, action.spec)
         if (ids.length > 0 || out.activeTabId !== action.tabId) throw new Error('tab/add: id 순서가 바뀌었습니다')
         return out
       })
@@ -139,6 +147,12 @@ export function reducer(state: AppState, action: Action): AppState {
       const fontSize = clampFontSize(action.size)
       return fontSize === state.settings.fontSize ? state : { ...state, settings: { ...state.settings, fontSize } }
     }
+    case 'quick/save':
+      return saveQuick(state, action.scope, action.qc)
+    case 'quick/remove':
+      return dropQuick(state, action.scope, action.id).state
+    case 'quick/restore':
+      return putBackQuick(state, action.scope, action.qc, action.index)
     case 'pane/split':
       return updateTask(state, action.taskId, (t) => splitActivePane(t, action.dir, () => action.paneId, action.spec))
     case 'pane/focus':

@@ -405,6 +405,20 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
         />
         <Row title="Option 키를 Meta 로" desc="켜면 ⌥ 로 특수문자를 입력할 수 없어요 (emacs · vim 용)" control={<Switch label="Option 키를 Meta 로" checked={s.optionAsMeta} onChange={(v) => patch({ optionAsMeta: v })} />} />
         <Row title="선택하면 바로 복사" desc="끄면 ⌘C 로 복사" control={<Switch label="선택하면 바로 복사" checked={s.copyOnSelect} onChange={(v) => patch({ copyOnSelect: v })} />} />
+        <Row title="숨긴 포트" desc={s.hiddenPorts.length ? '탭 · 사이드바 · ⌘P 에 보이지 않는 포트예요' : '숨긴 포트가 없어요 · 포트 칩 메뉴 › 이 포트 숨기기'} keywords="포트 서버 칩 다시 보이기">
+          {s.hiddenPorts.length > 0 && (
+            <ul className="manage-list" data-testid="hidden-ports">
+              {s.hiddenPorts.map((port) => (
+                <li key={port} className="manage-item">
+                  <span className="mono">:{port}</span>
+                  <button type="button" className="button small" onClick={() => patch({ hiddenPorts: s.hiddenPorts.filter((p) => p !== port) })}>
+                    다시 보이기
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Row>
       </>
     ),
     notify: (

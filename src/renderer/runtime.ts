@@ -8,6 +8,8 @@ export const runtime = {
   home: '',
   /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 */
   cwdPollMs: 15_000,
+  /** 포트 조사 주기 — 창에 포커스가 없으면 5배 (20단계) */
+  portPollMs: 3000,
   /** 터미널 그리기 (15e) — appInfo 를 못 읽으면 DOM */
   renderer: 'dom' as RendererMode,
   /** 지난번 실행이 정상으로 끝나지 않았다 (18단계) */

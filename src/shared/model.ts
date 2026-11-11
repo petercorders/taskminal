@@ -1,5 +1,6 @@
 import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
 import { isObj } from './guards'
+import { parseQuickList, removeQuick, restoreQuick, upsertQuick, type QuickCommand } from './quick'
 import { defaultExtraSettings, parseExtraSettings } from './settings'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
@@ -141,6 +142,8 @@ export function createTask(input: NewTaskInput, settings: Settings, newId: NewId
     activeTabId: tabs[0].id,
     panes,
     createdAt: now,
+    // 템플릿의 빠른 명령은 일감에 복사한다(▤) — 템플릿을 나중에 고쳐도 이미 만든 일감은 그대로
+    ...(template?.quickCommands?.length ? { quickCommands: template.quickCommands.map((q) => ({ ...q, fromTemplate: template.name })) } : {}),
   }
 }
 
@@ -174,7 +177,10 @@ const safeTemplateName = (name: string) => (templateNameError(name) ? '새 템�
 
 export function taskToTemplate(task: Task, name: string, newId: NewId): Template {
   // 저장 파일 검증이 버리는 이름이면 '새 템플릿'
-  return { id: newId(), name: safeTemplateName(name), tabs: task.tabs.map((tab) => tabToSpec(tab, task)) }
+  const template: Template = { id: newId(), name: safeTemplateName(name), tabs: task.tabs.map((tab) => tabToSpec(tab, task)) }
+  // 빠른 명령도 같이 — 출처 표시는 새 템플릿으로 만든 일감에서 다시 붙는다
+  if (task.quickCommands?.length) template.quickCommands = task.quickCommands.map(({ fromTemplate: _f, ...q }) => q)
+  return template
 }
 
 /** 탭 하나를 템플릿으로 ("+ ▾" › 이 탭을 템플릿으로 저장). 없는 탭이면 null. */
@@ -208,15 +214,19 @@ function activePaneCwd(task: Task): string {
   return (tab && task.panes[tab.activePaneId]?.cwd) || task.cwd
 }
 
-export function addTab(task: Task, newId: NewId): Task {
+/** 새 탭 — spec 이 있으면 그 폴더 · 명령으로(빠른 명령 '새 탭', 20단계). 템플릿 시작 명령이 아니므로 command 는 남기지 않는다 */
+export function addTab(task: Task, newId: NewId, spec?: SplitSpec): Task {
   const tabId = newId()
   const paneId = newId()
   const tab: Tab = { id: tabId, layout: { type: 'pane', paneId }, activePaneId: paneId }
+  const pane: Pane = spec
+    ? { id: paneId, cwd: spec.cwd, pendingCommand: spec.command, ...(spec.insert ? { pendingInsert: true as const } : {}) }
+    : makePane(paneId, activePaneCwd(task))
   return {
     ...task,
     tabs: [...task.tabs, tab],
     activeTabId: tabId,
-    panes: { ...task.panes, [paneId]: makePane(paneId, activePaneCwd(task)) },
+    panes: { ...task.panes, [paneId]: pane },
   }
 }
 
@@ -454,9 +464,10 @@ export function addTemplate(state: AppState, template: Template): AppState {
 }
 
 /** JSON 편집기에서 고친 이름 · 탭으로 바꾼다. id · 목록 안 자리는 그대로. */
+/** JSON 편집기는 이름 · 탭만 고친다 — 빠른 명령(20단계) 같은 다른 칸은 남긴다 */
 export function replaceTemplate(state: AppState, id: Id, next: Pick<Template, 'name' | 'tabs'>): AppState {
   if (!state.settings.templates.some((t) => t.id === id)) return state
-  return withSettings(state, { templates: state.settings.templates.map((t) => (t.id === id ? { id, name: next.name, tabs: next.tabs } : t)) })
+  return withSettings(state, { templates: state.settings.templates.map((t) => (t.id === id ? { ...t, name: next.name, tabs: next.tabs } : t)) })
 }
 
 /** 템플릿을 지운다. 기본 템플릿이었으면 기본은 없음(셸 하나). 이미 만든 일감은 그대로. */
@@ -564,7 +575,8 @@ function parseTemplate(v: unknown): Template | null {
     if (isStr(t.title)) tab.title = t.title
     tabs.push(tab)
   }
-  return { id: v.id, name: v.name, tabs }
+  const quick = parseQuickList(v.quickCommands)
+  return quick.length ? { id: v.id, name: v.name, tabs, quickCommands: quick } : { id: v.id, name: v.name, tabs }
 }
 
 /** 빈 배열은 사용자가 모두 지운 것 → 그대로. 항목이 있었는데 하나도 못 쓰면 손상 → 기본 템플릿. */
@@ -651,6 +663,7 @@ function parseTask(v: unknown, settings: Settings, newId: NewId, seen: SeenIds):
     activeTabId: tabs.some((t) => t.id === v.activeTabId) ? (v.activeTabId as Id) : (tabs[0]?.id ?? null),
     panes,
     createdAt: typeof v.createdAt === 'number' && Number.isFinite(v.createdAt) ? v.createdAt : 0,
+    ...(Array.isArray(v.quickCommands) && v.quickCommands.length ? { quickCommands: parseQuickList(v.quickCommands) } : {}),
   }
 }
 
@@ -671,4 +684,54 @@ export function normalizeState(raw: unknown, newId: NewId): AppState {
   }
   const activeTaskId = tasks.some((t) => t.id === raw.activeTaskId) ? (raw.activeTaskId as Id) : (tasks[0]?.id ?? null)
   return { version: 1, tasks, activeTaskId, settings }
+}
+
+// ─── 빠른 명령 (20단계) ─────────────────────────────────────
+
+/** 단추가 사는 곳 — 그 일감 · 모든 일감(◎) */
+export type QuickScope = { taskId: Id } | 'all'
+
+function quickListOf(state: AppState, scope: QuickScope): QuickCommand[] | null {
+  if (scope === 'all') return state.settings.quickCommands
+  const task = state.tasks.find((t) => t.id === scope.taskId)
+  return task ? (task.quickCommands ?? []) : null
+}
+
+function withQuickList(state: AppState, scope: QuickScope, list: QuickCommand[]): AppState {
+  if (scope === 'all') return { ...state, settings: { ...state.settings, quickCommands: list } }
+  return {
+    ...state,
+    tasks: state.tasks.map((t) => {
+      if (t.id !== scope.taskId) return t
+      if (list.length > 0) return { ...t, quickCommands: list }
+      const { quickCommands: _q, ...rest } = t
+      return rest
+    }),
+  }
+}
+
+/** 만들기 · 고치기 — 일감이 그 사이 지워졌으면 그대로(같은 객체) */
+export function saveQuick(state: AppState, scope: QuickScope, qc: QuickCommand): AppState {
+  const list = quickListOf(state, scope)
+  return list ? withQuickList(state, scope, upsertQuick(list, qc)) : state
+}
+
+/** 지우기 — 되돌리기용으로 지운 것과 자리를 돌려준다 */
+export function dropQuick(state: AppState, scope: QuickScope, id: Id): { state: AppState; removed: QuickCommand | null; index: number } {
+  const list = quickListOf(state, scope)
+  if (!list) return { state, removed: null, index: -1 }
+  const r = removeQuick(list, id)
+  return r.removed ? { state: withQuickList(state, scope, r.list), removed: r.removed, index: r.index } : { state, removed: null, index: -1 }
+}
+
+export function putBackQuick(state: AppState, scope: QuickScope, qc: QuickCommand, index: number): AppState {
+  const list = quickListOf(state, scope)
+  if (!list) return state
+  const next = restoreQuick(list, qc, index)
+  return next === list ? state : withQuickList(state, scope, next)
+}
+
+/** 단추 하나를 id 로 다시 찾기 — 확인 창 · 메뉴가 연 뒤 누르는 순간에 */
+export function findQuick(state: AppState, scope: QuickScope, id: Id): QuickCommand | null {
+  return quickListOf(state, scope)?.find((q) => q.id === id) ?? null
 }

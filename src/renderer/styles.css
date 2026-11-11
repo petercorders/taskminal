@@ -2363,3 +2363,200 @@ input[type='checkbox'] {
   border-top: 1px solid var(--line);
   margin-top: 6px;
 }
+
+/* ─── 빠른 명령 (20단계, 보드 QuickCmd) ─── */
+.quick-bar,
+.quick-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.quick-empty {
+  margin: 8px 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.quick-empty b {
+  color: var(--fg);
+}
+.quick-bolt {
+  color: #c4a5ff;
+}
+.quick-empty-text {
+  flex: 1;
+  min-width: 0;
+}
+.quick-button {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+.quick-button.running {
+  background: #18304d;
+  border-color: #2b4a73;
+}
+.quick-button.failed {
+  background: #241416;
+  border-color: #5a2a2e;
+}
+:root[data-theme='light'] .quick-button.running {
+  background: #e3eefc;
+  border-color: #9cbde8;
+}
+:root[data-theme='light'] .quick-button.failed {
+  background: #fbe9e8;
+  border-color: #e3a6a2;
+}
+.quick-button:focus-visible,
+.port-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.quick-src,
+.quick-key {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.quick-state {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.quick-state.running {
+  color: var(--running);
+}
+.quick-state.done {
+  color: var(--done);
+}
+.quick-state.failed {
+  color: var(--failed);
+}
+.quick-more,
+.quick-add {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.quick-add {
+  border-style: dashed;
+}
+.button.small {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.button.warn {
+  background: #f0b866;
+  border-color: #f0b866;
+  color: #1b1608;
+  font-weight: 600;
+}
+.button.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.dialog-code {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.menu-label {
+  flex: 1;
+}
+.menu-key {
+  margin-left: 16px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+/* ─── 포트 칩 (20단계, 보드 Ports) — 중립색, 닫힘은 회색 취소선. 파랑 · 초록 · 빨강은 실행 상태 전용 ─── */
+.port-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+}
+.port-chip {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 9px;
+  background: #1f2227;
+  color: #c4c8ce;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+:root[data-theme='light'] .port-chip {
+  background: #e3e5e9;
+  color: #3b4048;
+}
+.port-chip.closed {
+  background: transparent;
+  color: var(--muted);
+  text-decoration: line-through;
+  cursor: default;
+}
+.port-chip.failed {
+  background: transparent;
+  color: var(--waiting);
+  cursor: default;
+}
+.port-chip.small {
+  height: 16px;
+  font-size: 10px;
+  cursor: default;
+}
+.task-ports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+.port-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid #5c4a24;
+  border-radius: 10px;
+  background: #2a2214;
+  flex-shrink: 0;
+}
+.port-conflict-text {
+  flex-basis: 100%;
+  color: #f0b866;
+  font-weight: 600;
+}

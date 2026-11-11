@@ -125,3 +125,29 @@ describe('nextScope', () => {
     expect(nextScope('all', -1)).toBe('output')
   })
 })
+
+describe('paletteItems — 빠른 명령 · 포트 (20단계)', () => {
+  const quick = [
+    { id: 't1|t:q1', label: '배포 (NAS)', command: './deploy.sh', taskName: 'api', hint: '⌥3 · 실행 전 물어봐요' },
+    { id: 't2|t:q9', label: 'NAS 새 jar 배포', command: 'scp app.jar nas:', taskName: '배포', hint: '' },
+  ]
+  const ports = [
+    { id: 'p1:5173', port: 5173, taskName: '문서 사이트', proc: 'node' },
+    { id: 'p2:8080', port: 8080, taskName: 'api', proc: 'java' },
+  ]
+  it('빠른 명령은 이름 · 명령 글자로 찾고, 일감 이름을 옆에 · 전체와 명령 범위에서', () => {
+    const items = paletteItems(input({ quick, query: '배포' }))
+    expect(items.filter((i) => i.kind === 'quick').map((i) => [i.id, i.detail])).toEqual([
+      ['t1|t:q1', 'api'],
+      ['t2|t:q9', '배포'],
+    ])
+    expect(paletteItems(input({ quick, query: 'scp' })).some((i) => i.kind === 'quick' && i.id === 't2|t:q9')).toBe(true)
+    expect(paletteItems(input({ quick, query: '배포', scope: 'command' })).some((i) => i.kind === 'quick')).toBe(true)
+    expect(paletteItems(input({ quick, query: '배포', scope: 'task' })).some((i) => i.kind === 'quick')).toBe(false)
+  })
+  it('"포트" 를 치면 모든 포트 · 번호로도 찾는다 · 전체 범위에서만', () => {
+    expect(paletteItems(input({ ports, query: '포트' })).filter((i) => i.kind === 'port').map((i) => i.label)).toEqual([':5173', ':8080'])
+    expect(paletteItems(input({ ports, query: '8080' })).filter((i) => i.kind === 'port').map((i) => i.id)).toEqual(['p2:8080'])
+    expect(paletteItems(input({ ports, query: '포트', scope: 'command' })).some((i) => i.kind === 'port')).toBe(false)
+  })
+})

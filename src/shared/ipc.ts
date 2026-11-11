@@ -53,6 +53,9 @@ export const IPC = {
   historyRemove: 'history:remove', // send(taskId, id[]) — 지우기 토스트가 끝난 뒤
   historyRemoveTask: 'history:remove-task', // send(taskId) — 일감을 지울 때
   historyClear: 'history:clear', // invoke — 설정 › 개인정보 › 명령 기록 모두 지우기
+  // 20단계 포트
+  portsProbe: 'ports:probe', // invoke(paneId[]) → ProbeResult — 그 창의 pane 셸 자손이 듣는 포트
+  portsKill: 'ports:kill', // invoke(paneId, port, pid) → 'killed' | 'gone' | 'failed' — main 이 다시 조사한 뒤 SIGTERM
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const
@@ -120,6 +123,8 @@ export interface AppInfo {
   home: string
   /** 셸 통합 없는 셸의 폴더를 lsof 로 묻는 주기 (시험은 TASKMINAL_CWD_POLL_MS 로 줄인다) */
   cwdPollMs: number
+  /** 포트 조사 주기 (20단계, 시험은 TASKMINAL_PORT_POLL_MS 로 줄인다) */
+  portPollMs: number
   /** 터미널 그리기 — 보이는 pane 은 WebGL(기본), 시험은 TASKMINAL_RENDERER=dom 으로 DOM (15e) */
   renderer: RendererMode
   /** 지난번 실행이 정상으로 끝나지 않았다(18단계 — running 표시 파일) */

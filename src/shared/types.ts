@@ -1,3 +1,5 @@
+import type { QuickCommand } from './quick'
+
 export type Id = string
 
 /** 사용자가 정의하는 일감 상태 (예: 진행 중 · 대기 · 완료) */
@@ -36,6 +38,8 @@ export interface Template {
   id: Id
   name: string
   tabs: TemplateTab[]
+  /** 빠른 명령 (20단계) — 이 템플릿으로 만든 일감에 복사된다(▤) */
+  quickCommands?: QuickCommand[]
 }
 
 /** right = 좌우로 나눔, down = 위아래로 나눔 */
@@ -76,6 +80,8 @@ export interface Task {
   activeTabId: Id | null
   panes: Record<Id, Pane>
   createdAt: number
+  /** 빠른 명령 (20단계) — 단추 줄 · ⌥1~9 */
+  quickCommands?: QuickCommand[]
 }
 
 export type StartupMode = 'restore' | 'list' | 'blank'
@@ -145,6 +151,13 @@ export interface Settings {
   updateDownload: boolean
   /** '이 버전 건너뛰기' 로 고른 버전 ('' = 없음) */
   updateSkip: string
+  // 매일 쓰는 작은 것 (20단계)
+  /** 모든 일감에 있는 빠른 명령 (◎) */
+  quickCommands: QuickCommand[]
+  /** 숨긴 포트 — 칩 · ⌘P 에 보이지 않는다 */
+  hiddenPorts: number[]
+  /** '서버가 떴어요 · 눌러서 열어요' 를 이미 보였다 (처음 한 번만) */
+  portTipSeen: boolean
 }
 
 export interface SecretAllow {

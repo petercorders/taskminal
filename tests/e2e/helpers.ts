@@ -11,6 +11,8 @@ export interface SeedTask {
   cwd?: string
   groupId?: string | null
   color?: string | null
+  /** 빠른 명령 (20단계) */
+  quickCommands?: Array<Record<string, unknown>>
 }
 
 export function taskJson(t: SeedTask) {
@@ -26,6 +28,7 @@ export function taskJson(t: SeedTask) {
     activeTabId: `${t.id}-tab`,
     panes: { [t.paneId]: { id: t.paneId, cwd } },
     createdAt: 1,
+    ...(t.quickCommands ? { quickCommands: t.quickCommands } : {}),
   }
 }
 

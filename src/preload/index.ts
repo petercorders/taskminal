@@ -3,6 +3,7 @@ import type { BackupInfo } from '../shared/backup'
 import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type RedactStatus, type ScrollbackEntry } from '../shared/ipc'
 import type { LogRow } from '../shared/errlog'
 import type { HistoryEntry } from '../shared/history'
+import type { ProbeResult } from '../shared/ports'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
@@ -87,6 +88,10 @@ const api: TaskminalApi = {
     remove: (taskId, ids) => ipcRenderer.send(IPC.historyRemove, taskId, ids),
     removeTask: (taskId) => ipcRenderer.send(IPC.historyRemoveTask, taskId),
     clear: () => ipcRenderer.invoke(IPC.historyClear) as Promise<void>,
+  },
+  ports: {
+    probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,
+    kill: (paneId, port, pid) => ipcRenderer.invoke(IPC.portsKill, paneId, port, pid) as Promise<'killed' | 'gone' | 'failed'>,
   },
 }
 

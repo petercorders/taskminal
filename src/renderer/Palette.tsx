@@ -12,8 +12,10 @@ interface Props {
   shortcuts: readonly Shortcut[]
   /** 명령 기록 (19단계 — 오래된 → 최근) */
   history?: readonly HistoryEntry[]
-  /** 고른 항목을 실행 — newTab 은 ⌘↩ */
-  onRun(item: PaletteItem, query: string, newTab: boolean): void
+  /** 듣는 포트 (20단계) — 숨긴 포트 · 닫힌 칩은 부르는 쪽이 뺀다 */
+  ports?: PaletteInput['ports']
+  /** 고른 항목을 실행 — newTab 은 ⌘↩, shift 는 ⇧↩ (빠른 명령: 입력줄에 넣기) */
+  onRun(item: PaletteItem, query: string, newTab: boolean, shift?: boolean): void
   onClose(): void
 }
 
@@ -25,10 +27,10 @@ const commandsOf = (shortcuts: readonly Shortcut[]) =>
 
 const OUTPUT_BUDGET = 20
 
-const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', template: '템플릿', history: '기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
+const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
-export function Palette({ state, shortcuts, history = [], onRun, onClose }: Props) {
+export function Palette({ state, shortcuts, history = [], ports = [], onRun, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<PaletteScope>('all')
   const [selected, setSelected] = useState(0)
@@ -62,10 +64,12 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
       templates: state.settings.templates.map((t) => ({ id: t.id, name: t.name })),
       outputs,
       history: historyMatches(history, state, query),
+      quick: quickOf(state, ordered),
+      ports,
       query,
       scope,
     })
-  }, [state, shortcuts, query, scope, outputQuery, history])
+  }, [state, shortcuts, query, scope, outputQuery, history, ports])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {
@@ -73,8 +77,8 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
   }, [selected])
 
   // ↩ 를 빨리 두 번 눌러도 한 번만 돈다 — 첫 ↩ 에 팔레트가 닫히고(키 이벤트의 상태 변경은 바로 그려진다) 두 번째는 터미널로 간다
-  const run = (item: PaletteItem | undefined, newTab: boolean) => {
-    if (item) onRun(item, query.trim(), newTab)
+  const run = (item: PaletteItem | undefined, newTab: boolean, shift = false) => {
+    if (item) onRun(item, query.trim(), newTab, shift)
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -84,7 +88,7 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
     } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       // 한글 조합 중의 ↩ 는 글자 확정 — 실행하지 않는다
       e.preventDefault()
-      run(items[selected], e.metaKey)
+      run(items[selected], e.metaKey, e.shiftKey)
     } else if (e.key === 'Tab') {
       e.preventDefault()
       setScope((s) => nextScope(s, e.shiftKey ? -1 : 1))
@@ -130,7 +134,7 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
               data-kind={item.kind}
               onMouseMove={() => setSelected(i)}
               onMouseDown={(e) => e.preventDefault()} // 입력칸 포커스 유지
-              onClick={(e) => run(item, e.metaKey)}
+              onClick={(e) => run(item, e.metaKey, e.shiftKey)}
             >
               <span className={`palette-kind ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
               <span className="palette-label">
@@ -139,6 +143,8 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
               {item.detail && <span className="palette-detail">{item.detail}</span>}
               {item.hint && <kbd className="palette-hint">{item.hint}</kbd>}
               {item.kind === 'task' && i === selected && <kbd className="palette-hint">⌘↩ 새 탭</kbd>}
+              {item.kind === 'quick' && i === selected && <kbd className="palette-hint">⇧↩ 입력줄에 넣기</kbd>}
+              {item.kind === 'port' && i === selected && <kbd className="palette-hint">⌘↩ 그 터미널로</kbd>}
             </li>
           ))}
           {items.length === 0 && <li className="palette-empty">맞는 것이 없습니다</li>}
@@ -165,6 +171,18 @@ function historyMatches(history: readonly HistoryEntry[], state: AppState, query
   return out
 }
 const HISTORY_PICK = 8
+
+/** ⌘P 의 빠른 명령 — 모든 일감의 단추(사이드바 순서) + 모든 일감 것(지금 일감에서 실행). id 는 `일감 id|runKey` */
+function quickOf(state: AppState, ordered: readonly AppState['tasks'][number][]): NonNullable<PaletteInput['quick']> {
+  const out: NonNullable<PaletteInput['quick']> = []
+  for (const t of ordered)
+    for (const q of t.quickCommands ?? [])
+      out.push({ id: `${t.id}|t:${q.id}`, label: q.label + (q.confirm ? '…' : ''), command: q.command, taskName: t.id === state.activeTaskId ? `${t.name} (지금 일감)` : t.name, hint: q.confirm ? '실행 전 물어봐요' : '' })
+  if (state.activeTaskId)
+    for (const q of state.settings.quickCommands)
+      out.push({ id: `${state.activeTaskId}|a:${q.id}`, label: q.label + (q.confirm ? '…' : ''), command: q.command, taskName: '모든 일감', hint: q.confirm ? '실행 전 물어봐요' : '' })
+  return out
+}
 
 /** 맞은 글자를 굵게 */
 function Marked({ text, marks }: { text: string; marks: number[] }) {

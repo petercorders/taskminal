@@ -1,6 +1,7 @@
 // 설정 창의 값 — 고를 수 있는 것 · 기본값 · 저장 파일 검증. 순수 함수(renderer · main 모두 쓴다).
 import { isObj } from './guards'
 import { isAccel, isAppCommand } from './keymap'
+import { parseQuickList } from './quick'
 import { customPatternError, SECRET_TOGGLES } from './redact'
 import type { CursorStyle, NotifyKind, NotifyWay, SecretAllow, Settings, SidebarDensity, StartupMode, Theme } from './types'
 
@@ -59,6 +60,9 @@ export function defaultExtraSettings(): ExtraSettings {
     secretAllow: [],
     updateDownload: true,
     updateSkip: '',
+    quickCommands: [],
+    hiddenPorts: [],
+    portTipSeen: false,
   }
 }
 
@@ -114,6 +118,11 @@ function parseKeys(v: unknown): Record<string, string> {
   return out
 }
 
+function parsePorts(v: unknown): number[] {
+  if (!Array.isArray(v)) return []
+  return [...new Set(v.filter((p): p is number => Number.isInteger(p) && p >= 1 && p <= 65535))].slice(0, 200)
+}
+
 /** 저장 파일의 설정 칸 검증. 틀린 칸만 기본값으로 — 하나가 틀렸다고 나머지를 버리지 않는다. */
 export function parseExtraSettings(v: unknown, templateIds: readonly string[]): ExtraSettings {
   const d = defaultExtraSettings()
@@ -147,6 +156,9 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     secretAllow: parseAllow(v['secretAllow']),
     updateDownload: bool(v['updateDownload'], d.updateDownload),
     updateSkip: typeof v['updateSkip'] === 'string' && /^\d+\.\d+\.\d+[\w.-]{0,40}$/.test(v['updateSkip']) ? v['updateSkip'] : d.updateSkip,
+    quickCommands: parseQuickList(v['quickCommands']),
+    hiddenPorts: parsePorts(v['hiddenPorts']),
+    portTipSeen: bool(v['portTipSeen'], d.portTipSeen),
   }
 }
 

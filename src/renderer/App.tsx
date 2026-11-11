@@ -7,7 +7,9 @@ import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
 import { keepIfSame, taskDirs, type Branches } from '../shared/git'
-import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
+import { createTask, dropQuick, emptyState, findPaneTask, findQuick, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
+import { advanceRun, decideRun, quickButtons, quickStatus, WHERE_LABEL, type QuickButton, type QuickCommand, type QuickRun, type QuickSource } from '../shared/quick'
+import { portConflict, type PortChip } from '../shared/ports'
 import type { BackupMark, LoadedState } from '../shared/ipc'
 import type { AppState, NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
 import { restoreTask, type Restored } from '../shared/backup'
@@ -32,7 +34,11 @@ import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView, type SettingsJump } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
-import { dirtyPanes, osc7Panes, restoredWithText, runtime } from './runtime'
+import { dirtyPanes, integratedPanes, osc7Panes, restoredWithText, runtime } from './runtime'
+import { PopupMenu, type PopupItem } from './PopupMenu'
+import { draftOf, QuickBar, QuickConfirm, QuickEditor, type QuickDraft } from './quick-ui'
+import { usePorts } from './ports-state'
+import { PortConflictBar, PortKillConfirm, portUrl } from './ports-ui'
 import { HostBanners, useHostView, type StartupNotes } from './host-ui'
 import { UpdateBanners, useUpdateView } from './update-ui'
 import { FirstRun } from './FirstRun'
@@ -57,6 +63,7 @@ const loadState = () =>
       runtime.host = info.host
       runtime.home = info.home
       runtime.cwdPollMs = info.cwdPollMs
+      runtime.portPollMs = info.portPollMs
       runtime.renderer = info.renderer
       runtime.crashedLast = info.crashedLast
       return window.taskminal.state.load()
@@ -92,6 +99,13 @@ const SCROLLBACK_SAVE_MS = 30_000
 const BRANCH_POLL_MS = 5_000 // 셸에서 git switch 한 것을 따라가는 주기 (파일 몇 개 읽기)
 
 const newId = () => crypto.randomUUID()
+
+/** 빠른 명령 단추를 가리키는 열쇠 — 일감 · 출처(모든 일감이면 settings) · id */
+interface QuickRef {
+  taskId: string
+  source: QuickSource
+  id: string
+}
 
 const NOTIFY_TITLE: Record<NotifyKind, string> = {
   wait: '입력을 기다립니다',
@@ -204,6 +218,19 @@ export function App() {
   const [confirming, setConfirming] = useState<
     { kind: 'pane'; paneId: string; command?: string } | { kind: 'tab'; taskId: string; tabId: string; busy: number } | null
   >(null)
+  // 빠른 명령 (20단계): 누른 기록(런타임) · 메뉴 · 만들기 창 · 실행 확인. 단추는 id 로만 들고 누르는 순간 다시 찾는다
+  const [quickRuns, setQuickRuns] = useState<Readonly<Record<string, QuickRun>>>({})
+  const [quickEdit, setQuickEdit] = useState<{ taskId: string; ref: QuickRef | null; draft: QuickDraft; fromTemplate?: string | undefined } | null>(null)
+  const [quickAsk, setQuickAsk] = useState<(QuickRef & { qc: QuickCommand }) | null>(null)
+  const [popup, setPopup] = useState<
+    | ({ kind: 'quick'; x: number; y: number } & QuickRef)
+    | { kind: 'more'; taskId: string; x: number; y: number }
+    | { kind: 'port'; chip: PortChip; x: number; y: number }
+    | null
+  >(null)
+  // 포트 (20단계): 끄기 확인(연 순간의 pid · 포트 — main 이 끄기 직전에 다시 확인) · 겹침 알림
+  const [portKill, setPortKill] = useState<PortChip | null>(null)
+  const [portClash, setPortClash] = useState<{ port: number; wanted: number; ownerPaneId: string; taskId: string; ownerTaskId: string } | null>(null)
   // pane 의 활동 — 저장하지 않는 런타임 값 (shared/activity.ts)
   const [activity, setActivity] = useState<Readonly<Record<string, PaneActivity>>>({})
   const [windowFocused, setWindowFocused] = useState(() => document.hasFocus())
@@ -585,6 +612,235 @@ export function App() {
       },
     })
   }
+  // ─── 빠른 명령 (20단계) ───────────────────────────────────
+  // 단추는 id 로만 들고 있다가 누르는 순간 다시 찾는다(확인 창 · 메뉴가 열린 사이 지워질 수 있다)
+  const scopeOf = (r: QuickRef): QuickScope => (r.source === 'all' ? 'all' : { taskId: r.taskId })
+  const refOf = (taskId: string, b: QuickButton): QuickRef => ({ taskId, source: b.source, id: b.qc.id })
+  const runKeyOf = (r: QuickRef) => `${r.taskId}|${r.source === 'all' ? 'a' : 't'}:${r.id}`
+  const quickGone = () => showToast({ text: '그 단추는 지워졌어요.' })
+
+  const runQuick = (r: QuickRef, opts: { confirmed?: boolean; insertOnly?: boolean } = {}) => {
+    const s = stateRef.current
+    const task = s.tasks.find((t) => t.id === r.taskId)
+    const qc = task ? findQuick(s, scopeOf(r), r.id) : null
+    if (!task || !qc) return quickGone()
+    if (qc.confirm && !opts.confirmed && !opts.insertOnly) return setQuickAsk({ ...r, qc })
+    if (s.activeTaskId !== task.id) dispatch({ type: 'task/select', id: task.id })
+    const activePane = task.tabs.find((t) => t.id === task.activeTabId)?.activePaneId ?? null
+    const where = opts.insertOnly ? 'insert' : qc.where
+    if (where === 'insert') {
+      if (!activePane || terminals.get(activePane)?.insert(qc.command) !== true)
+        showToast({ text: '입력줄에 넣지 못했어요.', sub: '터미널이 아직 뜨지 않았거나, 셸이 붙여넣기 보호를 켜지 않았어요.' })
+      return refocus()
+    }
+    const target = activePane && terminals.has(activePane) ? { busy: activityRef.current[activePane]?.busy === true, integrated: integratedPanes.has(activePane) } : null
+    const decided = decideRun(where, target)
+    const spec = { cwd: resolveCwd(task.cwd, qc.cwd), command: qc.command }
+    let paneId: string
+    if (decided.where === 'current' && activePane) {
+      paneId = activePane
+      window.taskminal.pty.write(paneId, qc.command + '\r')
+    } else if (decided.where === 'splitRight' || decided.where === 'splitDown') {
+      paneId = newId()
+      dispatch({ type: 'pane/split', taskId: task.id, dir: decided.where === 'splitRight' ? 'right' : 'down', paneId, spec })
+    } else {
+      paneId = newId()
+      dispatch({ type: 'tab/add', taskId: task.id, tabId: newId(), paneId, spec })
+    }
+    const run: QuickRun = { paneId, sentAt: Date.now() }
+    setQuickRuns((prev) => ({ ...prev, [runKeyOf(r)]: run }))
+    if (decided.fallback)
+      showToast({
+        text: target?.busy ? `지금 pane 이 바빠서 새 탭에서 ‘${qc.label}’ 을 실행했어요.` : `지금 pane 은 셸 통합이 없어 새 탭에서 ‘${qc.label}’ 을 실행했어요.`,
+        sub: '프롬프트가 아닌 셸에는 끼워 넣지 않아요.',
+      })
+    refocus()
+  }
+  const quickStatusOf = (taskId: string) => (b: QuickButton) => {
+    const run = quickRuns[`${taskId}|${b.runKey}`]
+    return quickStatus(run, run ? integratedPanes.has(run.paneId) : false)
+  }
+  /** 실패 단추 말풍선 — 그 실행의 명령 기록 꼬리의 마지막 줄(가린 글) */
+  const quickLastLine = (taskId: string) => (b: QuickButton) => {
+    const run = quickRuns[`${taskId}|${b.runKey}`]
+    if (!run) return null
+    // 그 실행 = 보낸 뒤 그 pane 의 첫 기록 (같은 pane 의 다음 명령 기록이 아니라)
+    const e = history.entries.find((h) => h.paneId === run.paneId && h.startedAt >= run.sentAt)
+    return e?.tail.findLast((l) => l.trim() !== '') ?? null
+  }
+  const openQuickEditor = (taskId: string, r: QuickRef | null, command = '') => {
+    const s = stateRef.current
+    const qc = r ? findQuick(s, scopeOf(r), r.id) : null
+    if (r && !qc) return quickGone()
+    setQuickEdit({ taskId, ref: r, draft: draftOf(qc, r?.source === 'all' ? 'all' : 'task', command), fromTemplate: qc?.fromTemplate })
+  }
+  const saveQuickDraft = (d: QuickDraft) => {
+    const ed = quickEdit
+    if (!ed) return
+    setQuickEdit(null)
+    const s = stateRef.current
+    const base = ed.ref ? findQuick(s, scopeOf(ed.ref), ed.ref.id) : null
+    if (ed.ref && !base) return quickGone()
+    if (d.scope === 'task' && !s.tasks.some((t) => t.id === ed.taskId)) return showToast({ text: '그 일감이 지워져 저장하지 않았어요.' })
+    const keepCwd = d.where === 'newTab' || d.where === 'splitRight' || d.where === 'splitDown'
+    const qc: QuickCommand = {
+      id: ed.ref?.id ?? newId(),
+      label: d.label.trim(),
+      command: d.command.trim(),
+      where: d.where,
+      ...(keepCwd && d.cwd.trim() ? { cwd: d.cwd.trim() } : {}),
+      ...(d.confirm ? { confirm: true as const } : {}),
+      ...(base?.fromTemplate ? { fromTemplate: base.fromTemplate } : {}),
+    }
+    const scope: QuickScope = d.scope === 'all' ? 'all' : { taskId: ed.taskId }
+    // 어디에 두나를 바꿨으면 옛 자리에서 빼고 새 자리에
+    if (ed.ref && (ed.ref.source === 'all') !== (d.scope === 'all')) dispatch({ type: 'quick/remove', scope: scopeOf(ed.ref), id: ed.ref.id })
+    dispatch({ type: 'quick/save', scope, qc })
+    refocus()
+  }
+  const removeQuickButton = (r: QuickRef) => {
+    const scope = scopeOf(r)
+    const { removed, index } = dropQuick(stateRef.current, scope, r.id)
+    if (!removed) return quickGone()
+    dispatch({ type: 'quick/remove', scope, id: r.id })
+    showToast({
+      text: `‘${removed.label}’ 를 지웠어요.`,
+      ms: 5000,
+      action: { label: '되돌리기', run: () => dispatch({ type: 'quick/restore', scope, qc: removed, index }) },
+    })
+    refocus()
+  }
+  const quickMenuItems = (r: QuickRef): PopupItem[] => {
+    const run = quickRuns[runKeyOf(r)]
+    const failed = run !== undefined && quickStatus(run, integratedPanes.has(run.paneId)).kind === 'failed'
+    const qc = findQuick(stateRef.current, scopeOf(r), r.id)
+    return [
+      { label: '실행…', run: () => runQuick(r) },
+      { label: '입력줄에 넣기', key: '⇧↩', run: () => runQuick(r, { insertOnly: true }) },
+      { label: '명령 복사', run: () => void navigator.clipboard.writeText(qc?.command ?? '').catch(() => {}) },
+      { label: '고치기…', run: () => openQuickEditor(r.taskId, r) },
+      ...(failed ? [{ label: '표시 지우기', run: () => setQuickRuns(({ [runKeyOf(r)]: _x, ...rest }) => rest) }] : []),
+      { label: '지우기', danger: true, run: () => removeQuickButton(r) },
+    ]
+  }
+  /** ⌥1~9 실행 · ⌥0 더 보기 — 처리했으면 true (아니면 셸로 보낸다) */
+  const quickKey = (n: number, repeat: boolean): boolean => {
+    if (document.querySelector('[aria-modal="true"], .menu-backdrop, .palette-backdrop')) return false
+    const s = stateRef.current
+    const task = s.tasks.find((t) => t.id === s.activeTaskId)
+    if (!task) return false
+    const { shown, more } = quickButtons(task, s.settings.quickCommands)
+    if (n === 0) {
+      if (more.length === 0) return false
+      const el = document.querySelector<HTMLElement>(`[data-testid="task-view"][aria-hidden="false"] [data-testid="quick-more"]`)
+      const rect = el?.getBoundingClientRect()
+      if (!repeat) setPopup({ kind: 'more', taskId: task.id, x: rect?.left ?? 200, y: (rect?.bottom ?? 60) + 2 })
+      return true
+    }
+    const b = shown[n - 1]
+    if (!b) return false
+    if (!repeat) runQuick(refOf(task.id, b))
+    return true
+  }
+  // pane 활동이 바뀔 때마다 단추 실행의 시작 · 끝을 굳힌다
+  useEffect(() => {
+    setQuickRuns((prev) => {
+      let changed = false
+      const next: Record<string, QuickRun> = {}
+      for (const [k, run] of Object.entries(prev)) {
+        const r = advanceRun(run, activity[run.paneId])
+        if (r !== run) changed = true
+        next[k] = r
+      }
+      return changed ? next : prev
+    })
+  }, [activity])
+  const quickKeyRef = useRef(quickKey)
+  quickKeyRef.current = quickKey
+
+  // ─── 포트 (20단계) ────────────────────────────────────────
+  const hiddenPorts = new Set(state.settings.hiddenPorts)
+  const onPortsOpened = (opened: PortChip[], all: Record<string, PortChip[]>) => {
+    const s = stateRef.current
+    const hidden = new Set(s.settings.hiddenPorts)
+    const shown = opened.filter((c) => !hidden.has(c.port))
+    if (shown.length === 0) return
+    for (const c of shown) {
+      const clash = portConflict(c, all, (paneId) => findPaneTask(stateRef.current, paneId))
+      if (clash) {
+        const taskId = findPaneTask(s, c.paneId)
+        const ownerTaskId = findPaneTask(s, clash.ownerPaneId)
+        if (taskId && ownerTaskId) setPortClash({ ...clash, taskId, ownerTaskId })
+        break
+      }
+    }
+    // 처음 한 번만: 서버가 떴어요 · 눌러서 열어요
+    if (!s.settings.portTipSeen) {
+      const c = shown[0]!
+      dispatch({ type: 'settings/patch', patch: { portTipSeen: true } })
+      // 알림의 단추는 ⌘Z 를 받는다(되돌리기 자리) — 여는 일은 칩으로 안내만
+      showToast({ text: `${c.port} 에서 서버가 떴어요 · 탭의 :${c.port} 를 눌러 열어요.` })
+    }
+  }
+  const ports = usePorts(load.phase === 'ready', activity, windowFocused, onPortsOpened)
+  const chipsOf = (ids: readonly string[]) => ids.flatMap((id) => ports.chips[id] ?? []).filter((c) => !hiddenPorts.has(c.port))
+  const openPort = (c: PortChip) => {
+    window.taskminal.openLink(portUrl(c.port))
+  }
+  const gotoPane = (paneId: string) => {
+    const taskId = findPaneTask(stateRef.current, paneId)
+    if (!taskId) return
+    dispatch({ type: 'task/select', id: taskId })
+    dispatch({ type: 'pane/focus', taskId, paneId })
+    refocus()
+  }
+  const hidePort = (port: number) => {
+    const s = stateRef.current
+    if (s.settings.hiddenPorts.includes(port)) return
+    dispatch({ type: 'settings/patch', patch: { hiddenPorts: [...s.settings.hiddenPorts, port] } })
+    showToast({
+      text: `${port} 를 숨겼어요.`,
+      sub: '설정 › 터미널 › 숨긴 포트에서 다시 보여요.',
+      ms: 5000,
+      action: { label: '되돌리기', run: () => dispatch({ type: 'settings/patch', patch: { hiddenPorts: stateRef.current.settings.hiddenPorts.filter((p) => p !== port) } }) },
+    })
+    refocus()
+  }
+  const killPortNow = (c: PortChip) => {
+    setPortKill(null)
+    void window.taskminal.ports.kill(c.paneId, c.port, c.pid).then(
+      (r) => {
+        showToast({ text: r === 'killed' ? `${c.port} 의 ${c.proc} 를 껐어요.` : r === 'gone' ? `${c.port} 의 서버는 이미 꺼졌어요.` : `${c.port} 의 서버를 끄지 못했어요.` })
+        ports.refresh()
+      },
+      () => showToast({ text: `${c.port} 의 서버를 끄지 못했어요.` }),
+    )
+    refocus()
+  }
+  const portMenuItems = (c: PortChip): PopupItem[] => [
+    { label: `열기 — ${portUrl(c.port)}`, key: '↩', run: () => openPort(c) },
+    { label: '주소 복사', run: () => void navigator.clipboard.writeText(portUrl(c.port)).catch(() => {}) },
+    { label: '이 서버를 띄운 터미널로', run: () => gotoPane(c.paneId) },
+    { label: '이 포트 끄기…', danger: true, run: () => setPortKill(c) },
+    { label: '이 포트 숨기기', run: () => hidePort(c.port) },
+  ]
+  const tabPorts = (task: Task) => ({
+    of: (tabId: string) => {
+      const tab = task.tabs.find((t) => t.id === tabId)
+      return tab ? chipsOf(paneIds(tab.layout)) : []
+    },
+    failed: ports.failed,
+    onOpen: openPort,
+    onMenu: (c: PortChip, x: number, y: number) => setPopup({ kind: 'port', chip: c, x, y }),
+  })
+  const paletteports = Object.values(ports.chips)
+    .flat()
+    .filter((c) => c.closedAt === undefined && !hiddenPorts.has(c.port))
+    .map((c) => {
+      const task = state.tasks.find((t) => t.id === findPaneTask(state, c.paneId))
+      return { id: `${c.paneId}:${c.port}`, port: c.port, taskName: task?.name ?? '', proc: c.proc }
+    })
+
   /** ⇧⌘F 결과로 — 그 일감 · 탭 · pane 을 보이게 하고 그 줄로 · ⌘F 막대에 같은 글자 */
   const findJump = (t: FindTarget, keepOpen: boolean) => {
     const taskId = findPaneTask(stateRef.current, t.paneId)
@@ -647,6 +903,10 @@ export function App() {
     setPaletteOpen(false)
     setGlobalFind(false)
     setClearingHistory(false)
+    setQuickEdit(null)
+    setQuickAsk(null)
+    setPopup(null)
+    setPortKill(null)
     refocus()
   }
 
@@ -840,7 +1100,7 @@ export function App() {
     }
   }
   // 팔레트에서 고른 것을 실행한다 — 팔레트는 먼저 닫는다
-  const runPaletteItem = (item: PaletteItem, query: string, newTab: boolean) => {
+  const runPaletteItem = (item: PaletteItem, query: string, newTab: boolean, shift?: boolean) => {
     setPaletteOpen(false)
     switch (item.kind) {
       case 'task':
@@ -858,6 +1118,20 @@ export function App() {
       case 'history': {
         const e = history.entries.find((h) => h.id === item.id)
         if (e) historyInsert(e)
+        return refocus()
+      }
+      case 'quick': {
+        // id = `일감 id|t:단추` 또는 `일감 id|a:단추`(모든 일감 — 지금 일감에서)
+        const [taskId, key] = item.id.split('|') as [string, string]
+        const r: QuickRef = { taskId, source: key.startsWith('a:') ? 'all' : 'task', id: key.slice(2) }
+        return runQuick(r, { insertOnly: shift === true })
+      }
+      case 'port': {
+        const at = item.id.lastIndexOf(':')
+        const paneId = item.id.slice(0, at)
+        const port = Number(item.id.slice(at + 1))
+        if (newTab) return gotoPane(paneId)
+        window.taskminal.openLink(portUrl(port))
         return refocus()
       }
       case 'find-all':
@@ -913,6 +1187,12 @@ export function App() {
         e.preventDefault()
         undo.run()
         setToast(null)
+        return
+      }
+      // ⌥1~9 빠른 명령 · ⌥0 더 보기 (20단계) — 물리 키로(한글 · ⌥ 가 만드는 글자와 상관없이). 단추가 없으면 셸로 보낸다
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit\d$/.test(e.code) && quickKeyRef.current(Number(e.code.slice(5)), e.repeat)) {
+        e.preventDefault()
+        e.stopPropagation()
         return
       }
       const command = commandForKey(e, shortcutsRef.current)
@@ -989,6 +1269,7 @@ export function App() {
           onSaveTemplate={(task) => openSaveTemplate(task, null)}
           onMenuClosed={refocus}
           branches={branches}
+          portsOf={(t) => chipsOf(Object.keys(t.panes))}
           updateChip={updateView?.state === 'downloaded' && updateView.version === laterVersion ? laterVersion : null}
           onUpdateChip={() => runCommand('error-log')}
         />
@@ -1005,10 +1286,27 @@ export function App() {
                 data-task-name={task.name}
                 aria-hidden={!taskActive}
               >
+                {(() => {
+                  const { shown, more } = quickButtons(task, state.settings.quickCommands)
+                  return (
+                    <QuickBar
+                      taskName={task.name}
+                      shown={shown}
+                      more={more}
+                      statusOf={quickStatusOf(task.id)}
+                      lastLineOf={quickLastLine(task.id)}
+                      onRun={(b) => runQuick(refOf(task.id, b))}
+                      onMenu={(b, x, y) => setPopup({ kind: 'quick', ...refOf(task.id, b), x, y })}
+                      onMore={(x, y) => setPopup({ kind: 'more', taskId: task.id, x, y })}
+                      onAdd={() => openQuickEditor(task.id, null)}
+                    />
+                  )
+                })()}
                 <TabBar
                   task={task}
                   activity={activity}
                   visible={taskActive}
+                  ports={tabPorts(task)}
                   onSelect={(tabId) => dispatch({ type: 'tab/select', taskId: task.id, tabId })}
                   onAdd={() => addTab(task.id)}
                   onClose={(tabId) => closeTab(task, tabId)}
@@ -1021,6 +1319,29 @@ export function App() {
                   historyOpen={historyOpen !== null}
                   onHistory={() => runCommand('history')}
                 />
+                {/* 겹침 알림은 탭 줄 바로 아래 — 아래 알림(Toast)이 화면 아래를 덮는다 */}
+                {portClash && portClash.taskId === task.id && (
+                  <PortConflictBar
+                    port={portClash.port}
+                    wanted={portClash.wanted}
+                    ownerName={state.tasks.find((t) => t.id === portClash.ownerTaskId)?.name ?? '다른 일감'}
+                    onOpen={() => window.taskminal.openLink(portUrl(portClash.port))}
+                    onGoto={() => {
+                      setPortClash(null)
+                      gotoPane(portClash.ownerPaneId)
+                    }}
+                    onKillOwner={() => {
+                      const owner = (ports.chips[portClash.ownerPaneId] ?? []).find((c) => c.port === portClash.wanted && c.closedAt === undefined)
+                      setPortClash(null)
+                      if (owner) setPortKill(owner)
+                      else showToast({ text: `${portClash.wanted} 의 서버는 이미 꺼졌어요.` })
+                    }}
+                    onClose={() => {
+                      setPortClash(null)
+                      refocus()
+                    }}
+                  />
+                )}
                 {task.tabs.map((tab) => {
                   const tabActive = tab.id === task.activeTabId
                   const mounted = (taskActive && tabActive) || seenTabs.has(tab.id)
@@ -1093,6 +1414,9 @@ export function App() {
             onRunSplit={historySplit}
             onGoto={historyGoto}
             onNewTab={historyNewTab}
+            onSaveQuick={(e) => {
+              if (state.activeTaskId) openQuickEditor(state.activeTaskId, null, e.cmd)
+            }}
             onRemove={historyRemove}
             onClose={() => {
               setHistoryOpen(null)
@@ -1145,7 +1469,60 @@ export function App() {
       )}
       {toast && <Toast toast={toast} onDone={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
-      {paletteOpen && <Palette state={state} shortcuts={shortcuts} history={history.entries} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {paletteOpen && <Palette state={state} shortcuts={shortcuts} history={history.entries} ports={paletteports} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {popup?.kind === 'quick' && (
+        <PopupMenu label="빠른 명령 메뉴" testId="quick-menu" x={popup.x} y={popup.y} items={quickMenuItems(popup)} onClose={(picked) => (setPopup(null), picked || refocus())} />
+      )}
+      {popup?.kind === 'more' &&
+        (() => {
+          const task = state.tasks.find((t) => t.id === popup.taskId)
+          const more = task ? quickButtons(task, state.settings.quickCommands).more : []
+          return (
+            <PopupMenu
+              label="빠른 명령 더 보기"
+              testId="quick-more-menu"
+              x={popup.x}
+              y={popup.y}
+              items={more.map((b) => ({ label: b.qc.label + (b.qc.confirm ? '…' : ''), run: () => runQuick(refOf(popup.taskId, b)) }))}
+              onClose={(picked) => (setPopup(null), picked || refocus())}
+            />
+          )
+        })()}
+      {popup?.kind === 'port' && (
+        <PopupMenu
+          label={`포트 ${popup.chip.port} 메뉴`}
+          heading={`:${popup.chip.port} · ${popup.chip.proc} (${popup.chip.pid})`}
+          testId="port-menu"
+          x={popup.x}
+          y={popup.y}
+          items={portMenuItems(popup.chip)}
+          onClose={(picked) => (setPopup(null), picked || refocus())}
+        />
+      )}
+      {quickEdit && <QuickEditor initial={quickEdit.draft} isNew={quickEdit.ref === null} fromTemplate={quickEdit.fromTemplate} onSave={saveQuickDraft} onCancel={closeDialogs} />}
+      {quickAsk &&
+        (() => {
+          const task = state.tasks.find((t) => t.id === quickAsk.taskId)
+          const where = quickAsk.qc.where === 'current' ? '지금 pane 에서 실행해요.' : `${WHERE_LABEL[quickAsk.qc.where]}에서 ${resolveCwd(task?.cwd ?? '~', quickAsk.qc.cwd)} 기준으로 실행해요.`
+          return (
+            <QuickConfirm
+              qc={quickAsk.qc}
+              where={where}
+              onCancel={closeDialogs}
+              onRun={(dontAsk) => {
+                const r: QuickRef = { taskId: quickAsk.taskId, source: quickAsk.source, id: quickAsk.id }
+                setQuickAsk(null)
+                const now = findQuick(stateRef.current, scopeOf(r), r.id)
+                if (dontAsk && now) {
+                  const { confirm: _c, ...rest } = now
+                  dispatch({ type: 'quick/save', scope: scopeOf(r), qc: rest })
+                }
+                runQuick(r, { confirmed: true })
+              }}
+            />
+          )
+        })()}
+      {portKill && <PortKillConfirm chip={portKill} onKill={() => killPortNow(portKill)} onCancel={closeDialogs} />}
       {globalFind && (
         <GlobalFind
           state={state}

@@ -1,6 +1,6 @@
 // 명령 팔레트(⌘P)의 찾기 · 순위. 순수 함수 — 무엇을 찾을지(일감 · 명령 · 템플릿 · 출력)는 부르는 쪽이 모아 넘긴다.
 
-export type PaletteKind = 'task' | 'command' | 'template' | 'history' | 'output' | 'find-all' | 'create'
+export type PaletteKind = 'task' | 'command' | 'quick' | 'port' | 'template' | 'history' | 'output' | 'find-all' | 'create'
 export type PaletteScope = 'all' | 'task' | 'command' | 'template' | 'output'
 
 export const SCOPES: readonly PaletteScope[] = ['all', 'task', 'command', 'template', 'output']
@@ -14,6 +14,10 @@ export interface PaletteInput {
   outputs: Array<{ paneId: string; taskName: string; line: number; text: string }>
   /** 명령 기록 (19단계) — 최근 것부터. 고르면 입력줄에 넣는다 */
   history?: Array<{ id: string; cmd: string; taskName: string }>
+  /** 빠른 명령 (20단계) — 모든 일감 것. id 는 부르는 쪽이 다시 찾을 열쇠 */
+  quick?: Array<{ id: string; label: string; command: string; taskName: string; hint: string }>
+  /** 듣는 포트 (20단계) — id 는 `paneId:포트` */
+  ports?: Array<{ id: string; port: number; taskName: string; proc: string }>
   query: string
   scope: PaletteScope
 }
@@ -78,6 +82,24 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
   }
   if (want('task')) for (const t of input.tasks) add({ kind: 'task', id: t.id, label: t.name, detail: t.detail }, t.name)
   if (want('command')) for (const c of input.commands) add({ kind: 'command', id: c.id, label: c.label, hint: c.hint }, c.label)
+  // 빠른 명령: 이름이 맞으면 이름 강조, 명령 글자만 맞으면 강조 없이 조금 낮게
+  if (want('command'))
+    for (const q of input.quick ?? []) {
+      const m = matchScore(q.label, query)
+      const c = m ? null : query && q.command.toLowerCase().includes(query.toLowerCase()) ? { score: 500, marks: [] } : null
+      const hit = m ?? c
+      if (hit) out.push({ kind: 'quick', id: q.id, label: q.label, detail: q.taskName, hint: q.hint, score: hit.score, marks: hit.marks })
+    }
+  // 포트: '포트' 로 시작하면 모두, 아니면 번호 · 일감 · 프로세스 글자 그대로 (퍼지로는 거의 모든 것이 맞는다)
+  if (input.scope === 'all' && query !== '') {
+    const q = query.toLowerCase()
+    const rest = q.startsWith('포트') ? q.slice(2).trim() : null
+    for (const p of input.ports ?? []) {
+      const text = `${p.port} ${p.taskName} ${p.proc}`.toLowerCase()
+      if (rest === null ? !text.includes(q) : rest !== '' && !text.includes(rest)) continue
+      out.push({ kind: 'port', id: p.id, label: `:${p.port}`, detail: p.taskName, hint: p.proc, marks: [], score: rest === null ? 400 : 900 })
+    }
+  }
   if (want('template')) for (const t of input.templates) add({ kind: 'template', id: t.id, label: t.name }, t.name)
 
   // 점수순 — 같으면 넣은 순서(일감 > 명령 > 템플릿, 일감은 사이드바 순서). sort 는 안정 정렬이다
