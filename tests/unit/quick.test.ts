@@ -3,6 +3,7 @@ import type { PaneActivity } from '../../src/shared/activity'
 import {
   QUICK_BAR_MAX,
   advanceRun,
+  closeRun,
   decideRun,
   parseQuickList,
   quickButtons,
@@ -114,6 +115,13 @@ describe('advanceRun · quickStatus — 이 단추가 보낸 명령의 시작 ·
     const r = advanceRun(sent, act({ state: 'failed', startedAt: 500, endedAt: 900, exitCode: 1 }))
     expect(r).toBe(sent)
     expect(quickStatus(r, true)).toEqual({ kind: 'running', since: 1000 })
+  })
+  it('pane 이 닫혔으면 끝을 놓친 것으로 굳힌다 (실행 중으로 남지 않게) · 이미 끝난 것은 그대로', () => {
+    const gone = closeRun(sent, 5000)
+    expect(gone).toMatchObject({ endedAt: 5000, code: null })
+    expect(quickStatus(gone, true)).toEqual({ kind: 'unknown' })
+    const done = advanceRun(sent, act({ startedAt: 1200, endedAt: 1500, exitCode: 0 }))
+    expect(closeRun(done, 5000)).toBe(done)
   })
   it('셸 통합이 없는 pane 이면 상태 모름', () => {
     expect(quickStatus(sent, false)).toEqual({ kind: 'unknown' })

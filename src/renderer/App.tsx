@@ -8,7 +8,7 @@ import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
 import { keepIfSame, taskDirs, type Branches } from '../shared/git'
 import { createTask, dropQuick, emptyState, findPaneTask, findQuick, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
-import { advanceRun, decideRun, quickButtons, quickStatus, WHERE_LABEL, type QuickButton, type QuickCommand, type QuickRun, type QuickSource } from '../shared/quick'
+import { advanceRun, closeRun, decideRun, quickButtons, quickStatus, WHERE_LABEL, type QuickButton, type QuickCommand, type QuickRun, type QuickSource } from '../shared/quick'
 import { portConflict, type PortChip } from '../shared/ports'
 import type { BackupMark, LoadedState } from '../shared/ipc'
 import type { AppState, NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
@@ -651,7 +651,11 @@ export function App() {
     setQuickRuns((prev) => ({ ...prev, [runKeyOf(r)]: run }))
     if (decided.fallback)
       showToast({
-        text: target?.busy ? `지금 pane 이 바빠서 새 탭에서 ‘${qc.label}’ 을 실행했어요.` : `지금 pane 은 셸 통합이 없어 새 탭에서 ‘${qc.label}’ 을 실행했어요.`,
+        text: !target
+          ? `그 일감의 터미널이 아직 뜨지 않아 새 탭에서 ‘${qc.label}’ 을 실행했어요.`
+          : target.busy
+            ? `지금 pane 이 바빠서 새 탭에서 ‘${qc.label}’ 을 실행했어요.`
+            : `지금 pane 은 셸 통합이 없어 새 탭에서 ‘${qc.label}’ 을 실행했어요.`,
         sub: '프롬프트가 아닌 셸에는 끼워 넣지 않아요.',
       })
     refocus()
@@ -727,6 +731,8 @@ export function App() {
   const quickKey = (n: number, repeat: boolean): boolean => {
     if (document.querySelector('[aria-modal="true"], .menu-backdrop, .palette-backdrop')) return false
     const s = stateRef.current
+    // 'Option 을 Meta 로' 면 ⌥숫자는 셸 · emacs 의 M-숫자 — 가로채지 않는다
+    if (s.settings.optionAsMeta) return false
     const task = s.tasks.find((t) => t.id === s.activeTaskId)
     if (!task) return false
     const { shown, more } = quickButtons(task, s.settings.quickCommands)
@@ -742,19 +748,19 @@ export function App() {
     if (!repeat) runQuick(refOf(task.id, b))
     return true
   }
-  // pane 활동이 바뀔 때마다 단추 실행의 시작 · 끝을 굳힌다
+  // pane 활동이 바뀔 때마다 단추 실행의 시작 · 끝을 굳힌다. 그 pane 이 닫혔으면 끝을 놓친 것으로(실행 중으로 남지 않게)
   useEffect(() => {
     setQuickRuns((prev) => {
       let changed = false
       const next: Record<string, QuickRun> = {}
       for (const [k, run] of Object.entries(prev)) {
-        const r = advanceRun(run, activity[run.paneId])
+        const r = findPaneTask(state, run.paneId) === null ? closeRun(run, Date.now()) : advanceRun(run, activity[run.paneId])
         if (r !== run) changed = true
         next[k] = r
       }
       return changed ? next : prev
     })
-  }, [activity])
+  }, [activity, state])
   const quickKeyRef = useRef(quickKey)
   quickKeyRef.current = quickKey
 
@@ -1415,7 +1421,9 @@ export function App() {
             onGoto={historyGoto}
             onNewTab={historyNewTab}
             onSaveQuick={(e) => {
-              if (state.activeTaskId) openQuickEditor(state.activeTaskId, null, e.cmd)
+              // 그 기록이 난 일감에 (모든 일감 범위에서 다른 일감 기록을 골랐을 수 있다) — 지워진 일감이면 지금 일감에
+              const taskId = state.tasks.some((t) => t.id === e.taskId) ? e.taskId : state.activeTaskId
+              if (taskId) openQuickEditor(taskId, null, e.cmd)
             }}
             onRemove={historyRemove}
             onClose={() => {
@@ -1499,7 +1507,7 @@ export function App() {
           onClose={(picked) => (setPopup(null), picked || refocus())}
         />
       )}
-      {quickEdit && <QuickEditor initial={quickEdit.draft} isNew={quickEdit.ref === null} fromTemplate={quickEdit.fromTemplate} onSave={saveQuickDraft} onCancel={closeDialogs} />}
+      {quickEdit && <QuickEditor initial={quickEdit.draft} isNew={quickEdit.ref === null} fromTemplate={quickEdit.fromTemplate} taskName={state.tasks.find((t) => t.id === quickEdit.taskId)?.name ?? ''} onSave={saveQuickDraft} onCancel={closeDialogs} />}
       {quickAsk &&
         (() => {
           const task = state.tasks.find((t) => t.id === quickAsk.taskId)

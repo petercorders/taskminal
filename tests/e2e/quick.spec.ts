@@ -205,3 +205,28 @@ test('명령 기록 ⋯ › 빠른 명령으로 저장 — 그 명령이 채워�
   await ed.getByTestId('quick-save').click()
   await expect(button('준비')).toHaveCount(1)
 })
+
+test('새 탭에서 실행 중인 단추의 탭을 닫으면 실행 중으로 남지 않는다 (상태 모름)', async () => {
+  seed({ quickCommands: [{ id: 'q1', label: '오래', command: 'sleep 30', where: 'newTab' }] })
+  await launch()
+  await prompt('pane-a')
+  await button('오래').click()
+  await expect(view().getByTestId('tab')).toHaveCount(2)
+  await expect(button('오래')).toHaveAttribute('data-state', 'running')
+  await view().getByRole('button', { name: /탭 닫기/ }).nth(1).click()
+  const dialog = win.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: '닫기' }).click()
+  await expect(view().getByTestId('tab')).toHaveCount(1)
+  await expect(button('오래')).toHaveAttribute('data-state', 'unknown')
+})
+
+test('Option 을 Meta 로 켜 두면 ⌥1 은 단추가 아니라 셸로 간다', async () => {
+  seed({ quickCommands: [{ id: 'q1', label: '하나', command: 'echo ONE$((0+1))', where: 'current' }] }, { optionAsMeta: true })
+  await launch()
+  await prompt('pane-a')
+  await term('pane-a').click()
+  await win.keyboard.press('Alt+Digit1')
+  await win.waitForTimeout(500)
+  expect(await screenOf('pane-a')).not.toMatch(/ONE1/)
+  await expect(button('하나')).toHaveAttribute('data-state', 'idle')
+})

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { parseLsofListen, parsePsTree, portsByPane, type PortInfo, type ProbeResult } from '../shared/ports'
+import { listenerPids, parseLsofListen, parsePsTree, portsByPane, type PortInfo, type ProbeResult } from '../shared/ports'
 
 const PS = '/bin/ps'
 const LSOF = '/usr/sbin/lsof'
@@ -17,7 +17,7 @@ function run(file: string, args: string[]): Promise<{ ok: boolean; out: string }
 }
 
 /**
- * pane 셸 pid 마다 그 자손이 듣는 TCP 포트 (20단계). ps 한 번 + lsof 한 번 — pane 수와 상관없다.
+ * pane 셸 pid 마다 그 자손이 듣는 TCP 포트 (20단계). ps 한 번 + lsof 한 번(셸 자손 pid 로 좁힘, 자손이 없으면 안 부름) — pane 수와 상관없다.
  * 실패(시간 초과 · 명령 없음)면 { ok: false } — renderer 가 '포트 확인 못 함' 을 한 번 보이고 다음 주기에 다시.
  */
 export async function probePorts(shellPids: Readonly<Record<string, number>>): Promise<ProbeResult> {
@@ -26,13 +26,15 @@ export async function probePorts(shellPids: Readonly<Record<string, number>>): P
   const ps = await run(PS, ['-A', '-o', 'pid=,ppid='])
   if (!ps.ok || !ps.out) return { ok: false }
   const tree = parsePsTree(ps.out)
-  const listens = await listening()
+  const pids = listenerPids(valid, tree)
+  const listens = pids.length === 0 ? [] : await listening(pids)
   if (!listens) return { ok: false }
   return { ok: true, ports: portsByPane(valid, tree, listens) }
 }
 
-async function listening(): Promise<PortInfo[] | null> {
-  const r = await run(LSOF, ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpcn'])
+/** 셸 자손 pid 만 본다(-a -p) — 시스템 전체의 열린 파일을 매 주기 훑지 않게 */
+async function listening(pids: readonly number[]): Promise<PortInfo[] | null> {
+  const r = await run(LSOF, ['-nP', '-a', '-p', pids.join(','), '-iTCP', '-sTCP:LISTEN', '-Fpcn'])
   return r.ok ? parseLsofListen(r.out) : null
 }
 

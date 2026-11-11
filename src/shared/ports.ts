@@ -80,14 +80,30 @@ export function parseLsofListen(out: string): PortInfo[] {
   return found
 }
 
-/** 셸 pid 마다 그 자손이 듣는 포트 (포트 순, 같은 포트는 한 번) */
+/** lsof 를 좁힐 pid — 셸 자신을 뺀 자손들. 비었으면 lsof 를 부르지 않는다(셸 혼자는 포트를 듣지 않는다) */
+export function listenerPids(shellPids: Readonly<Record<string, number>>, tree: ReadonlyMap<number, readonly number[]>): number[] {
+  const roots = new Set(Object.values(shellPids))
+  const out = new Set<number>()
+  for (const root of roots) for (const pid of descendants(tree, root)) if (!roots.has(pid)) out.add(pid)
+  return [...out]
+}
+
+/**
+ * 셸 pid 마다 그 자손이 듣는 포트 (포트 순, 같은 포트는 한 번).
+ * 같은 포트를 여럿이 들으면(gunicorn · node cluster 의 주인과 일꾼) 다른 듣는 pid 의 자식이 아닌 것(주인)을 칩 pid 로 — 끄기가 일꾼만 끄지 않게.
+ */
 export function portsByPane(shellPids: Readonly<Record<string, number>>, tree: ReadonlyMap<number, readonly number[]>, listens: readonly PortInfo[]): Record<string, PortInfo[]> {
   const out: Record<string, PortInfo[]> = {}
   for (const [paneId, shellPid] of Object.entries(shellPids)) {
     const mine = new Set(descendants(tree, shellPid))
-    const ports = new Map<number, PortInfo>()
-    for (const l of listens) if (mine.has(l.pid) && !ports.has(l.port)) ports.set(l.port, l)
-    out[paneId] = [...ports.values()].sort((a, b) => a.port - b.port)
+    const byPort = new Map<number, PortInfo[]>()
+    for (const l of listens) if (mine.has(l.pid)) byPort.set(l.port, [...(byPort.get(l.port) ?? []), l])
+    const ports: PortInfo[] = []
+    for (const group of byPort.values()) {
+      const owner = group.find((l) => !group.some((o) => o.pid !== l.pid && (tree.get(o.pid) ?? []).includes(l.pid)))
+      ports.push(owner ?? group[0]!)
+    }
+    out[paneId] = ports.sort((a, b) => a.port - b.port)
   }
   return out
 }
@@ -163,10 +179,12 @@ export function chipSummary<T>(chips: readonly T[], max: number): { shown: T[]; 
  * 조사 주기의 한 번에 하나 · 옛 응답 버림.
  * - tick: 앞 조사가 안 끝났으면 건너뛴다(false) — 느린 lsof 가 쌓이지 않게.
  * - invalidate: 끄기 · 숨기기 · pane 닫힘 뒤 — 이미 떠난 조사의 응답을 버린다(세대).
+ * - afterCurrent: 그 뒤 다시 묻기 — 조사 중이면 끝난 뒤에.
  */
 export function createPortPoller(probe: (paneIds: string[]) => Promise<ProbeResult>, onResult: (r: ProbeResult, paneIds: string[]) => void) {
   let inFlight = false
   let generation = 0
+  let after: (() => void) | null = null
   return {
     tick(paneIds: string[]): boolean {
       if (inFlight) return false
@@ -175,12 +193,20 @@ export function createPortPoller(probe: (paneIds: string[]) => Promise<ProbeResu
       const done = (r: ProbeResult) => {
         inFlight = false
         if (mine === generation) onResult(r, paneIds)
+        const next = after
+        after = null
+        next?.()
       }
       probe(paneIds).then(done, () => done({ ok: false }))
       return true
     },
     invalidate(): void {
       generation++
+    },
+    /** 조사 중이 아니면 바로, 조사 중이면 그 조사가 끝난 뒤 한 번(여러 번 불러도 마지막 하나) — 끄기 뒤 다시 묻기가 건너뛰어지지 않게 */
+    afterCurrent(fn: () => void): void {
+      if (inFlight) after = fn
+      else fn()
     },
     get busy(): boolean {
       return inFlight

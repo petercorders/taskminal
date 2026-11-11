@@ -60,7 +60,7 @@ export function PopupMenu({ label, heading, items, x, y, testId, onClose }: Prop
             <div key={`sep${i}`} className="menu-sep" role="separator" />
           ) : (
             <button
-              key={item.label}
+              key={i}
               type="button"
               role="menuitem"
               className={`menu-item${item.danger ? ' danger' : ''}`}

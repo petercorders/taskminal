@@ -131,6 +131,11 @@ export function advanceRun(run: QuickRun, act: PaneActivity | undefined): QuickR
   return run
 }
 
+/** 실행한 pane 이 닫혔다 — 끝을 놓친 것으로 굳힌다(실행 중으로 남지 않게). 이미 끝났으면 같은 객체 */
+export function closeRun(run: QuickRun, now: number): QuickRun {
+  return run.endedAt !== undefined ? run : { ...run, endedAt: now, code: null }
+}
+
 /** 단추 상태 — 굳힌 시작 · 끝에서. 아직 시작을 못 봤으면: 셸 통합이 있으면 보낸 때부터 실행 중, 없으면(bash 등) 결과를 모른다 */
 export function quickStatus(run: QuickRun | undefined, integrated: boolean): QuickState {
   if (!run) return { kind: 'idle' }

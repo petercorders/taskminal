@@ -4,6 +4,7 @@ import {
   chipSummary,
   createPortPoller,
   descendants,
+  listenerPids,
   mergePorts,
   parseLsofListen,
   parsePsTree,
@@ -62,6 +63,23 @@ describe('portsByPane', () => {
       b: [{ pid: 21, proc: 'java', port: 8080 }],
       c: [],
     })
+  })
+  it('같은 포트를 부모와 자식(gunicorn · node cluster 일꾼)이 함께 들으면 부모(주인) pid 로 — 끄기가 일꾼만 끄지 않게', () => {
+    const tree = parsePsTree(['10 1', '11 10', '12 11', '13 11'].join('\n'))
+    const listens = [
+      { pid: 12, proc: 'gunicorn', port: 8000 },
+      { pid: 11, proc: 'gunicorn', port: 8000 },
+      { pid: 13, proc: 'gunicorn', port: 8000 },
+    ]
+    expect(portsByPane({ a: 10 }, tree, listens)).toEqual({ a: [{ pid: 11, proc: 'gunicorn', port: 8000 }] })
+  })
+})
+
+describe('listenerPids — lsof 를 좁힐 pid', () => {
+  it('셸 자신을 뺀 자손 pid 만 · 자손이 없으면 빈 목록(lsof 를 부르지 않는다)', () => {
+    const tree = parsePsTree(['10 1', '11 10', '12 11', '20 1'].join('\n'))
+    expect(listenerPids({ a: 10, b: 20 }, tree).sort()).toEqual([11, 12])
+    expect(listenerPids({ b: 20 }, tree)).toEqual([])
   })
 })
 
@@ -159,6 +177,22 @@ describe('createPortPoller — 한 번에 하나 · 옛 응답 버림', () => {
     expect(results).toEqual([])
     // 버린 뒤에도 다음 조사는 돈다
     expect(poller.tick(['a'])).toBe(true)
+  })
+  it('afterCurrent: 조사 중이면 그 조사가 끝난 뒤 한 번 — 끄기 뒤 다시 묻기가 건너뛰어지지 않게', async () => {
+    const g = gate()
+    const poller = createPortPoller(() => g.p, () => {})
+    let again = 0
+    poller.afterCurrent(() => again++)
+    expect(again).toBe(1) // 조사 중이 아니면 바로
+    poller.tick(['a'])
+    poller.afterCurrent(() => again++)
+    poller.afterCurrent(() => again++) // 여러 번 불러도 한 번
+    expect(again).toBe(1)
+    g.open({ ok: true, ports: {} })
+    await g.p
+    await Promise.resolve()
+    expect(again).toBe(2)
+    expect(poller.busy).toBe(false)
   })
   it('실패(예외)는 ok:false 로 알린다', async () => {
     const results: ProbeResult[] = []

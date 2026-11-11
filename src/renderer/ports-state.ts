@@ -64,7 +64,7 @@ export function usePorts(ready: boolean, activity: Readonly<Record<string, PaneA
     /** 끄기 · 숨기기 뒤 — 이미 떠난 조사의 응답을 버리고 바로 다시 묻는다 */
     refresh() {
       poller.invalidate()
-      tickRef.current()
+      poller.afterCurrent(() => tickRef.current())
     },
   }
 }

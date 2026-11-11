@@ -148,6 +148,8 @@ export function draftOf(qc: QuickCommand | null, scope: 'task' | 'all', command 
 }
 
 interface EditorProps {
+  /** 단추를 둘 일감 이름 — 지금 일감이 아닐 수 있다(⌘Y 모든 일감 기록에서 저장) */
+  taskName: string
   initial: QuickDraft
   isNew: boolean
   /** 템플릿에서 온 단추 — 어디에 두나를 바꿀 수 없다 */
@@ -157,7 +159,7 @@ interface EditorProps {
 }
 
 /** 빠른 명령 만들기 · 고치기 — 연 순간의 값을 떠 두고 고친다(그 사이 다른 곳에서 바뀌어도 고치던 글은 그대로) */
-export function QuickEditor({ initial, isNew, fromTemplate, onSave, onCancel }: EditorProps) {
+export function QuickEditor({ initial, isNew, fromTemplate, taskName, onSave, onCancel }: EditorProps) {
   const [d, setD] = useState(initial)
   // 위험 명령이면 만들 때 '실행 전 물어봐요' 를 켜 둔다 — 사용자가 직접 끈 뒤에는 다시 켜지 않는다
   const [touchedConfirm, setTouchedConfirm] = useState(!isNew)
@@ -244,7 +246,7 @@ export function QuickEditor({ initial, isNew, fromTemplate, onSave, onCancel }: 
           <label className="field">
             <span>어디에 두나</span>
             <select value={d.scope} disabled={fromTemplate !== undefined} onChange={(e) => set({ scope: e.target.value as 'task' | 'all' })} data-testid="quick-scope">
-              <option value="task">{fromTemplate ? `이 일감 (템플릿 "${fromTemplate}" 에서 옴)` : '이 일감'}</option>
+              <option value="task">{fromTemplate ? `‘${taskName}’ 일감 (템플릿 "${fromTemplate}" 에서 옴)` : `‘${taskName}’ 일감`}</option>
               <option value="all">모든 일감</option>
             </select>
           </label>
