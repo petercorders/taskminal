@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (18단계 출시 기본기 병합 — 단위 525 · e2e 139, 다음은 19단계 기록과 찾기. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (19단계 기록과 찾기 병합 — 단위 615 · e2e 144 + 패키지 1, 다음은 20단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -15,7 +15,8 @@
 | 16 셸 지킴이 | main 에 병합(브랜치 `stage-16-persist`). 단위 383 · e2e 123 통과 · .app 에서 지킴이 확인. 계획 · 결과 `docs/stages/16-persist.md` |
 | 17 데이터 안전 | main 에 병합(브랜치 `stage-17-safety`). 백업 · 되돌리기 · 손상 복구 · 내보내기/가져오기 · `redact()` · 화면 가림. 계획 · 결과 `docs/stages/17-safety.md` |
 | 18 출시 기본기 | main 에 병합(브랜치 `stage-18-release`). 자동 업데이트(GitHub Releases) · 오류 기록 · 지난번 꺼짐 · 첫 실행 안내 · `npm run release`(서명 · 공증 — Developer ID 인증서 · 공증 프로필 `taskminal-notary` 를 사용자가 만든 뒤). 계획 · 결과 `docs/stages/18-release.md` |
-| 19~25 1차 출시 | 19 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 19 기록과 찾기 | main 에 병합(브랜치 `stage-19-history`). 명령 기록 ⌘Y(`<userData>/history/*.jsonl`, 가린 뒤) · 모든 출력 찾기 ⇧⌘F · ⌘P 기록 · 설정 › 개인정보 모두 지우기. 계획 · 결과 `docs/stages/19-history.md` |
+| 20~25 1차 출시 | 20 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -106,6 +107,16 @@
 - 첫 실행 안내는 state.json 이 없고 `<userData>/first-run-seen` 이 없을 때만 — e2e 는 `TASKMINAL_FIRST_RUN=seen` 이 기본(playwright 설정), 안내를 보는 시험만 지운다.
 - renderer 에 여는 API 를 늘리면 `window.spec` 의 허용 목록도 고친다(보안 기본값 시험).
 
+### 19 기록과 찾기
+계획 · 결과 `docs/stages/19-history.md`. 구조: `src/shared/history.ts`(기록 모양 · 거르기 · 날짜 묶음 · 꼬리 · `hasMask` · `safeToInsert`) · `src/shared/global-find.ts`(찾기 · 가린 글 판정) · `src/shared/danger.ts`(위험 명령 — 20단계 빠른 명령이 같은 표) · `src/main/history-store.ts` · `src/renderer/history-state.ts`(useHistory — 대기열 · 숨김) · `history-ui.tsx` · `GlobalFind.tsx`. 짚어 둔 함정:
+- 기록 · 찾기 미리보기에 원문 비밀값이 나가지 않게 — 명령 · 꼬리 · **고른 줄의 앞뒤 줄**까지 가린 글로(앞뒤 줄은 처음에 원문이었다, 스크린샷으로 찾음).
+- '넣기만' 은 `term.paste` 에 기댄다 — 셸이 괄호 붙여넣기(2004)를 켜지 않았으면 xterm 이 \n 을 \r 로 보내 여러 줄이 실행된다 → `safeToInsert` 로 막는다.
+- 저장 전에 가린 명령(‹가림:…›)은 다시 실행하면 가린 글자가 실행된다 → ⌥↩ 도 넣기만.
+- 칸 · 단추에 글자 폭(auto)을 주면 탭 줄 폭이 소수 px 가 되어 `tabs.spec` 넘침 시험(비율 1)이 깨진다 → 정수 폭.
+- 터미널의 가린 칸 꾸밈(xterm z-index 7)이 좁아진 본문 밖으로 넘친다 → 옆 칸은 `z-index` 를 더 높게.
+- 셸 지킴이에 다시 붙은 셸은 새 프롬프트 전에 133 신호가 없다 — '통합 없음' 을 133 만으로 판정하지 않는다.
+- 알림(Toast)의 `onEnd(undone)` — 되돌리기를 놓친 뒤 할 일(파일 지우기)은 여기서. 창이 내려갈 때도 부른다.
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -113,7 +124,7 @@
 
 - Playwright `expect.poll` 은 콜백이 throw 하면 다시 시도하지 않는다 → `?.` 로 undefined 를 돌려준다.
 - Playwright 는 페이지 포커스를 흉내 내 `document.hasFocus()` 를 못 낮춘다 · 합성 키는 네이티브 메뉴 단축키를 부르지 않는다.
-- 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인.
+- 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인. 19단계 전체 실행 3번 중 1번 다시 나옴: 받은 화면이 `echo BACK$((1+1)) ` 뿐 — **프롬프트가 한 번도 안 그려졌다**(입력은 tty 가 되돌린 글자). 시험은 프롬프트를 기다리지 않고 친다. 지킴이 `spawn` 은 같은 paneId 의 끝나지 않은 세션이 있으면 그 세션에 붙는다(`host-core.ts` spawn 의 `old && !old.exited`) — 지운 B 의 셸(SIGHUP · 2초 뒤 SIGKILL)과 되살린 B 가 같은 `p2` 를 쓰므로 후보지만, 지우기 → 되살리기 사이가 몇 초라 확인 못 함. 다음에 볼 것: 실패 때 지킴이 `list` 로 p2 세션의 pid · killed · 시작 시각을 남기기.
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
 - e2e `win.evaluate` 안에서는 `window` 대신 `globalThis`(tsconfig.node 에 DOM 이 없다).
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
