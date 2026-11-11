@@ -29,7 +29,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
-import { adjacentTask, nextAttention, unreadTasks } from './sidebar-model'
+import { maskActivity, textMasker } from './activity-mask'
+import { adjacentTask, stepStatus, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TemplateNameDialog } from './TemplateNameDialog'
@@ -331,7 +332,7 @@ export function App() {
           : kind === 'long' && act?.startedAt !== undefined && act.endedAt !== undefined
             ? formatDuration(act.endedAt - act.startedAt)
             : undefined
-    const body = [taskName, act?.command, detail].filter(Boolean).join(' · ')
+    const body = diskMaskRef.current([taskName, act?.command, detail].filter(Boolean).join(' · '))
     if (!way.banner) return window.taskminal.beep()
     const n = new Notification(NOTIFY_TITLE[kind], { body, silent: !way.sound })
     n.onclick = () => {
@@ -555,6 +556,17 @@ export function App() {
 
   // 기록에 넣기 전에 renderer 도 가린다(화면에 보이는 기록) — main 이 쓸 때 다시 가린다. 디스크는 종류 끄기와 상관없이 모두
   const historyRedact = useMemo<SecretOptions>(() => ({ allow: maskSettings.allow, custom: maskSettings.custom }), [maskSettings])
+  // 화면에 보이는 명령 글(칸 머리 · 사이드바 둘째 줄 · 닫기 확인) — 화면 가리기를 따른다. 판단은 원래 activity 로(작은 고침 2026-11-11)
+  const screenMask = useMemo(
+    () => (maskSettings.enabled ? textMasker({ toggles: maskSettings.toggles, allow: maskSettings.allow, custom: maskSettings.custom }) : null),
+    [maskSettings],
+  )
+  // 기록(⌘Y) 의 실행 중 줄 · 시스템 알림(알림 센터 = 디스크)은 저장된 기록처럼 늘 가린다
+  const diskMask = useMemo(() => textMasker(historyRedact), [historyRedact])
+  const diskMaskRef = useRef(diskMask)
+  diskMaskRef.current = diskMask
+  const shownActivity = useMemo(() => maskActivity(activity, screenMask), [activity, screenMask])
+  const historyActivity = useMemo(() => maskActivity(activity, diskMask), [activity, diskMask])
   const history = useHistory(load.phase === 'ready')
   const onCommandDone = (paneId: string, done: CommandDone) => {
     const s = stateRef.current
@@ -1123,7 +1135,7 @@ export function App() {
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
-    if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: act.command } : {}) })
+    if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: screenMask ? screenMask(act.command) : act.command } : {}) })
     setConfirming(null)
     // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도. 대화 pane 이면 claude 를 끝내고 화면 기록도 지운다(되돌리기 없음)
     if (isChatPane(paneId)) window.taskminal.chat.close(paneId, true)
@@ -1198,6 +1210,20 @@ export function App() {
         if (!target) return
         dispatch({ type: 'task/select', id: target.taskId })
         dispatch({ type: 'pane/focus', taskId: target.taskId, paneId: target.paneId })
+        return refocus()
+      }
+      case 'status-next':
+      case 'status-prev': {
+        // 지금 일감을 이전 · 다음 상태 칸으로 (작은 고침 2026-11-11). 그 사이 지워졌으면 아무것도 안 한다
+        const t = state.tasks.find((x) => x.id === state.activeTaskId)
+        if (!t) return
+        const to = stepStatus(state, t.id, command === 'status-next' ? 1 : -1)
+        if (!to) {
+          showToast({ text: command === 'status-next' ? '이미 마지막 상태예요.' : '이미 첫 상태예요.' })
+          return refocus()
+        }
+        dispatch({ type: 'task/edit', id: t.id, patch: { statusId: to } })
+        showToast({ text: `‘${t.name}’ → ${state.settings.statuses.find((x) => x.id === to)?.name ?? to}` })
         return refocus()
       }
       case 'next-task':
@@ -1429,7 +1455,7 @@ export function App() {
       <div className="app-body">
         <Sidebar
           state={state}
-          activity={activity}
+          activity={shownActivity}
           loading={load.phase === 'loading'}
           onSelect={(id) => {
             dispatch({ type: 'task/select', id })
@@ -1544,7 +1570,7 @@ export function App() {
                           visible={taskActive && tabActive}
                           focusSignal={focusSignal}
                           term={term}
-                          activity={activity}
+                          activity={shownActivity}
                           onActivity={updateActivity}
                           onFocusPane={(paneId) => dispatch({ type: 'pane/focus', taskId: task.id, paneId })}
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
@@ -1591,7 +1617,7 @@ export function App() {
             tasks={state.tasks}
             activeTaskId={state.activeTaskId}
             activePaneId={activePaneNow}
-            activity={activity}
+            activity={historyActivity}
             signal={historyOpen.signal}
             onInsert={historyInsert}
             onRunSplit={historySplit}

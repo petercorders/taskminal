@@ -125,7 +125,7 @@ function TextField({ label, value, onCommit, placeholder, className, list }: { l
 
 // 단축키 칸에서 바꿀 수 있는 명령 (탭 번호 ⌘1~9 는 고정)
 const KEY_GROUPS: Array<{ title: string; commands: AppCommand[] }> = [
-  { title: '일감', commands: ['new-task', 'palette', 'next-task', 'prev-task', 'next-attention', 'settings'] },
+  { title: '일감', commands: ['new-task', 'palette', 'next-task', 'prev-task', 'status-next', 'status-prev', 'next-attention', 'settings'] },
   { title: '탭 · 분할', commands: ['new-tab', 'split-right', 'split-down', 'close-pane', 'next-tab', 'prev-tab', 'next-pane', 'prev-pane'] },
   { title: '터미널', commands: ['clear', 'font-bigger', 'font-smaller', 'font-reset'] },
 ]

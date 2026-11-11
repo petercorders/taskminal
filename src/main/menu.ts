@@ -120,6 +120,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('next-task'),
         item('prev-task'),
         item('next-attention'),
+        item('status-next'),
+        item('status-prev'),
         { type: 'separator' },
         { role: 'front', label: '모두 앞으로 가져오기' },
       ],

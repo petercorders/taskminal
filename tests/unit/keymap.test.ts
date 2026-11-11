@@ -80,7 +80,7 @@ describe('SHORTCUTS', () => {
           ? `Digit${last}`
           : ({ '[': 'BracketLeft', ']': 'BracketRight', '=': 'Equal', '-': 'Minus', ',': 'Comma', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' } as Record<string, string>)[last]
       expect(code, s.accel).toBeDefined()
-      const ev = key(code!, { shiftKey: parts.includes('Shift'), altKey: parts.includes('Alt') })
+      const ev = key(code!, { shiftKey: parts.includes('Shift'), altKey: parts.includes('Alt'), ctrlKey: parts.includes('Control') })
       expect(commandForKey(ev), s.accel).toBe(s.command)
     }
   })
@@ -153,14 +153,14 @@ describe('단축키 바꾸기 (11단계)', () => {
     expect(commandForKey(key('Equal', { shiftKey: true }), table)).toBeNull()
   })
 
-  it('accelFromEvent: 물리 키로 — 한글 입력 상태여도 같은 키, ⌘ 없거나 ⌃ 함께면 null, 꾸밈키만이면 null', () => {
+  it('accelFromEvent: 물리 키로 — 한글 입력 상태여도 같은 키, ⌘ 없으면 null, 꾸밈키만이면 null', () => {
     expect(accelFromEvent(key('KeyY', {}, 'ㅛ'))).toBe('Command+Y')
     expect(accelFromEvent(key('KeyD', { shiftKey: true, altKey: true }))).toBe('Shift+Alt+Command+D')
     expect(accelFromEvent(key('BracketRight', { shiftKey: true }))).toBe('Shift+Command+]')
     expect(accelFromEvent(key('ArrowLeft', { altKey: true }))).toBe('Alt+Command+Left')
     expect(accelFromEvent(key('Comma'))).toBe('Command+,')
     expect(accelFromEvent(key('KeyY', { metaKey: false }))).toBeNull()
-    expect(accelFromEvent(key('KeyY', { ctrlKey: true }))).toBeNull()
+    expect(accelFromEvent(key('KeyY', { ctrlKey: true }))).toBe('Control+Command+Y') // 작은 고침(2026-11-11): ⌃ 도 받는다
     expect(accelFromEvent(key('MetaLeft'))).toBeNull()
     expect(accelFromEvent(key('F13'))).toBeNull()
   })
@@ -195,5 +195,36 @@ describe('단축키 바꾸기 (11단계)', () => {
 
   it('settings(⌘,) 명령이 있다', () => {
     expect(commandForKey(key('Comma'))).toBe('settings')
+  })
+})
+
+// 작은 고침(2026-11-11): 흐름 보기 상태 옮기기 ⌃⌘← / ⌃⌘→ — ⌃ 가 함께인 단축키
+describe('⌃ 단축키', () => {
+  it('⌃⌘← · ⌃⌘→ 는 이전 · 다음 상태, ⌥⌘← · ⌘← 와 섞이지 않는다', () => {
+    expect(commandForKey(key('ArrowRight', { ctrlKey: true }))).toBe('status-next')
+    expect(commandForKey(key('ArrowLeft', { ctrlKey: true }))).toBe('status-prev')
+    expect(commandForKey(key('ArrowRight', { altKey: true }))).toBe('mask-next')
+    expect(commandForKey(key('ArrowRight'))).toBeNull()
+    expect(commandForKey(key('ArrowRight', { ctrlKey: true, altKey: true }))).toBeNull()
+  })
+  it('표에 없는 ⌃⌘ 키는 여전히 null (⌃⌘F 전체 화면 등은 네이티브 몫)', () => {
+    expect(commandForKey(key('KeyT', { ctrlKey: true }))).toBeNull()
+    expect(commandForKey(key('KeyF', { ctrlKey: true }))).toBeNull()
+  })
+  it('accel 모양 · 표시 · 되돌아오기', () => {
+    expect(isAccel('Control+Command+Left')).toBe(true)
+    expect(isAccel('Shift+Alt+Control+Command+K')).toBe(true)
+    expect(isAccel('Control+K')).toBe(false)
+    expect(accelLabel('Control+Command+Right')).toBe('⌃⌘→')
+    const ev = key('KeyJ', { ctrlKey: true, shiftKey: true })
+    const table = shortcutTable({ 'status-next': accelFromEvent(ev)! })
+    expect(commandForKey(ev, table)).toBe('status-next')
+  })
+  it('⌃⌘F 로 바꾸면 시스템 키(전체 화면)와 겹친다고 알린다', () => {
+    const table = shortcutTable({ 'status-next': 'Control+Command+F' })
+    expect(keyConflicts(table).get('status-next')).toMatch(/전체 화면/)
+  })
+  it('옮기기는 누르고 있으면 되풀이한다', () => {
+    expect(repeatable('status-next')).toBe(true)
   })
 })

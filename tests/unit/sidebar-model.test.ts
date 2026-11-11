@@ -195,3 +195,36 @@ describe('countBar · unreadTasks · lastLine · timeAgo', () => {
     expect(timeAgo(0, 50 * 3600_000)).toBe('2일')
   })
 })
+
+// 작은 고침(2026-11-11): 흐름 보기 상태 옮기기 ⌃⌘← / ⌃⌘→
+import { stepStatus } from '../../src/renderer/sidebar-model'
+
+describe('stepStatus', () => {
+  it('설정 상태 순서로 다음 · 이전 상태 id', () => {
+    const s = flowState()
+    const a = s.tasks.find((t) => t.name === 'a')!.id // doing
+    expect(stepStatus(s, a, 1)).toBe('wait')
+    expect(stepStatus(s, a, -1)).toBeNull() // 첫 칸에서 이전은 없음
+    const b = s.tasks.find((t) => t.name === 'b')!.id // wait
+    expect(stepStatus(s, b, 1)).toBe('done')
+    expect(stepStatus(s, b, -1)).toBe('doing')
+  })
+  it('끝에서는 돌지 않는다 — 완료에서 다음은 null', () => {
+    const s = flowState()
+    const c = s.tasks.find((t) => t.name === 'c')!.id // done
+    expect(stepStatus(s, c, 1)).toBeNull()
+    expect(stepStatus(s, c, -1)).toBe('wait')
+  })
+  it('모르는 상태는 첫 칸으로 보고 거기서 옮긴다 (흐름 보기와 같은 규칙)', () => {
+    const s = flowState()
+    s.tasks[0]!.statusId = 'gone'
+    expect(stepStatus(s, s.tasks[0]!.id, 1)).toBe('wait')
+    expect(stepStatus(s, s.tasks[0]!.id, -1)).toBeNull()
+  })
+  it('없는 일감 · 상태가 하나뿐이면 null', () => {
+    const s = flowState()
+    expect(stepStatus(s, 'nope', 1)).toBeNull()
+    s.settings.statuses = [s.settings.statuses[0]!]
+    expect(stepStatus(s, s.tasks[0]!.id, 1)).toBeNull()
+  })
+})

@@ -31,6 +31,16 @@ export function adjacentTask(state: AppState, step: 1 | -1): string | null {
   return order[(i + step + order.length) % order.length]!
 }
 
+/** ⌃⌘← / ⌃⌘→: 설정 상태 순서에서 이전 · 다음 상태 id. 끝에서는 돌지 않고 null(완료 → 첫 상태로 넘어가면 실수).
+ *  모르는 상태는 첫 칸으로 본다(흐름 보기와 같은 규칙). 없는 일감 · 상태 하나면 null. */
+export function stepStatus(state: AppState, taskId: Id, step: 1 | -1): string | null {
+  const task = state.tasks.find((t) => t.id === taskId)
+  const statuses = state.settings.statuses
+  if (!task || statuses.length < 2) return null
+  const here = Math.max(0, statuses.findIndex((s) => s.id === task.statusId))
+  return statuses[here + step]?.id ?? null
+}
+
 export interface PaneTarget {
   taskId: Id
   tabId: Id

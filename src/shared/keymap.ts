@@ -54,6 +54,9 @@ export const SHORTCUTS = [
   { command: 'review', accel: 'Shift+Command+G', label: '변경 보기' },
   { command: 'review-commit', accel: '', label: '변경 커밋' },
   { command: 'review-reverted', accel: '', label: '되돌린 것 보기' },
+  // 흐름 보기 상태 옮기기(작은 고침 2026-11-11) — 지금 일감을 이전 · 다음 상태 칸으로. ⌥⌘↑↓ 는 다음 · 이전 일감이라 ⌃⌘
+  { command: 'status-next', accel: 'Control+Command+Right', label: '다음 상태로' },
+  { command: 'status-prev', accel: 'Control+Command+Left', label: '이전 상태로' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']
@@ -103,12 +106,12 @@ const codeOf = (k: string): string | null =>
 const keyOfCode = (code: string): string | null =>
   /^Key[A-Z]$/.test(code) ? code.slice(3) : /^Digit\d$/.test(code) ? code.slice(5) : (CODE_KEY[code] ?? null)
 
-/** 'Shift+Alt+Command+K' 꼴인가. '' 은 '키 없음' 이라 허용한다. ⌘ 없는 키는 받지 않는다(셸 입력과 겹친다). */
+/** 'Shift+Alt+Control+Command+K' 꼴인가. '' 은 '키 없음' 이라 허용한다. ⌘ 없는 키는 받지 않는다(셸 입력과 겹친다). */
 export function isAccel(v: unknown): v is string {
   if (v === '') return true
   if (typeof v !== 'string') return false
-  const m = /^(Shift\+)?(Alt\+)?Command\+(.+)$/.exec(v)
-  return m !== null && codeOf(m[3]!) !== null
+  const m = /^(Shift\+)?(Alt\+)?(Control\+)?Command\+(.+)$/.exec(v)
+  return m !== null && codeOf(m[4]!) !== null
 }
 
 /** 기본 표에 바꾼 키(settings.keys)를 덮는다. 모르는 명령 · 틀린 키는 무시. */
@@ -120,12 +123,12 @@ export function shortcutTable(keys: Readonly<Record<string, string>> = {}): Shor
 }
 const DEFAULT_TABLE = shortcutTable()
 
-// "물리 키 · ⇧ · ⌥" → 명령. ⌘ 는 모든 단축키에 있으므로 뺀다.
-const signature = (code: string, shift: boolean, alt: boolean) => `${code}|${shift ? 'S' : ''}${alt ? 'A' : ''}`
+// "물리 키 · ⇧ · ⌥ · ⌃" → 명령. ⌘ 는 모든 단축키에 있으므로 뺀다.
+const signature = (code: string, shift: boolean, alt: boolean, ctrl = false) => `${code}|${shift ? 'S' : ''}${alt ? 'A' : ''}${ctrl ? 'C' : ''}`
 const signatureOf = (accel: string): string | null => {
   const parts = accel.split('+')
   const code = codeOf(parts.at(-1)!)
-  return code && parts.includes('Command') ? signature(code, parts.includes('Shift'), parts.includes('Alt')) : null
+  return code && parts.includes('Command') ? signature(code, parts.includes('Shift'), parts.includes('Alt'), parts.includes('Control')) : null
 }
 
 const indexCache = new WeakMap<readonly Shortcut[], Map<string, AppCommand>>()
@@ -144,19 +147,19 @@ function indexOf(table: readonly Shortcut[]): Map<string, AppCommand> {
   return index
 }
 
-/** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. ⌃ 함께면 null.
+/** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. ⌃ 는 표에 ⌃ 가 있는 키만(⌃⌘← 상태 옮기기).
  *  한글을 조합하는 중(isComposing)이어도 ⌘ 가 눌렸으면 단축키다 — ⌘ 없는 조합 키는 처음부터 해당이 없다. */
 export function commandForKey(ev: KeyLike, table: readonly Shortcut[] = DEFAULT_TABLE): AppCommand | null {
-  if (!ev.metaKey || ev.ctrlKey) return null
-  return indexOf(table).get(signature(ev.code, ev.shiftKey, ev.altKey)) ?? null
+  if (!ev.metaKey) return null
+  return indexOf(table).get(signature(ev.code, ev.shiftKey, ev.altKey, ev.ctrlKey)) ?? null
 }
 
-/** 설정 창에서 누른 키 → accel. ⌘ 가 없거나 ⌃ 함께 · 꾸밈키만 · 모르는 키면 null. */
+/** 설정 창에서 누른 키 → accel. ⌘ 가 없거나 꾸밈키만 · 모르는 키면 null. */
 export function accelFromEvent(ev: KeyLike): string | null {
-  if (!ev.metaKey || ev.ctrlKey) return null
+  if (!ev.metaKey) return null
   const k = keyOfCode(ev.code)
   if (!k) return null
-  return `${ev.shiftKey ? 'Shift+' : ''}${ev.altKey ? 'Alt+' : ''}Command+${k}`
+  return `${ev.shiftKey ? 'Shift+' : ''}${ev.altKey ? 'Alt+' : ''}${ev.ctrlKey ? 'Control+' : ''}Command+${k}`
 }
 
 // 앱 메뉴 role 이 쓰는 키 — 바꾼 단축키가 이것과 겹치면 경고한다
@@ -171,6 +174,7 @@ const SYSTEM_KEYS: Record<string, string> = {
   'Command+H': '가리기',
   'Command+M': '최소화',
   'Shift+Command+W': '창 닫기',
+  'Control+Command+F': '전체 화면',
 }
 
 /** 받침이 있으면 '과', 없으면(한글이 아니어도) '와' */
