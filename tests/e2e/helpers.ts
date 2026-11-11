@@ -1,4 +1,4 @@
-import type { ElectronApplication, Page } from '@playwright/test'
+import { expect, type ElectronApplication, type Page } from '@playwright/test'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -75,4 +75,12 @@ export async function firstWindow(app: ElectronApplication): Promise<Page> {
     appendFileSync('test-results/launch-hangs/log.txt', `${new Date().toISOString()} ${report}\n`)
     throw new Error(report)
   }
+}
+
+/**
+ * 상태 읽기가 끝난 화면까지 기다린다 — 사이드바는 읽는 중에도 그려지고, 그동안 온 명령(메뉴 · app:command)은 버린다
+ * (App runCommand 의 loading 막음). 창이 뜨자마자 명령을 보내는 시험은 이것부터 (18단계 회고: 메뉴 시험 4건이 이 경합으로 실패).
+ */
+export async function waitLoaded(win: Page): Promise<void> {
+  await expect(win.locator('[data-testid="task-view"], [data-testid="empty-view"], [data-testid="first-run"]').first()).toBeVisible()
 }

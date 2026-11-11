@@ -102,7 +102,7 @@
 - `app-update.yml` 은 electron-builder 가 macOS 에서 dmg · zip 대상일 때만 넣는다 — `npm run package`(dir) 결과물엔 없고, 그런 빌드는 업데이트를 '확인하지 않음' 으로 둔다. 검사는 `check-package --release`.
 - e2e 업데이트는 `TASKMINAL_UPDATE_FEED=<로컬 http>` + `TASKMINAL_UPDATE_FIRST_MS` — 실제 electron-updater 가 받고, 받은 파일은 `<userData>/caches`. 서명 없는 개발 앱은 Squirrel 설치가 실패하는 길만 볼 수 있다.
 - crashReporter 는 임시 userData(e2e)에서 켜지 않는다 — crashpad_handler 가 stdio 를 물고 남아 `app.close()` 가 끝나지 않는다(기존 e2e 가 모두 멈췄다).
-- 사이드바는 상태를 읽는 중에도 그려진다 · 그 사이 온 명령(메뉴 · app:command)은 버린다 → e2e 는 `task-view` · `empty-view` · `first-run` 중 하나를 기다린 뒤 명령을 보낸다.
+- 사이드바는 상태를 읽는 중에도 그려진다 · 그 사이 온 명령(메뉴 · app:command)은 버린다 → e2e 는 `waitLoaded(win)`(tests/e2e/helpers.ts) 뒤에 명령을 보낸다.
 - 첫 실행 안내는 state.json 이 없고 `<userData>/first-run-seen` 이 없을 때만 — e2e 는 `TASKMINAL_FIRST_RUN=seen` 이 기본(playwright 설정), 안내를 보는 시험만 지운다.
 - renderer 에 여는 API 를 늘리면 `window.spec` 의 허용 목록도 고친다(보안 기본값 시험).
 

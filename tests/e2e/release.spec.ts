@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, 
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
-import { firstWindow, seedState } from './helpers'
+import { firstWindow, seedState, waitLoaded } from './helpers'
 
 // 18단계 출시 기본기: 업데이트(로컬 가짜 피드 + 진짜 electron-updater) · 첫 실행 안내 · 오류 기록 · 지난번 꺼짐.
 let userData: string
@@ -68,8 +68,7 @@ async function startFeed(): Promise<string> {
 async function launch(env: Record<string, string> = {}): Promise<void> {
   app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData, TASKMINAL_UPDATE_FIRST_MS: '600000', ...env } })
   win = await firstWindow(app)
-  // 사이드바는 상태를 읽는 중에도 그려지고, 그동안 온 명령은 버린다(App runCommand 의 loading 막음) — 읽기가 끝난 화면까지 기다린다
-  await expect(win.locator('[data-testid="task-view"], [data-testid="empty-view"], [data-testid="first-run"]').first()).toBeVisible()
+  await waitLoaded(win)
 }
 async function close(): Promise<void> {
   await app!.close()
