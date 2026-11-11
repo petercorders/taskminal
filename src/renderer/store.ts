@@ -44,10 +44,14 @@ import {
   setChatSession,
   splitActivePaneChat,
   openReviewPane,
+  addNote,
+  removeNote,
+  setViewed,
+  toggleNote,
 } from '../shared/model'
 import type { QuickCommand } from '../shared/quick'
 import type { ChatAgent } from '../shared/chat'
-import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
+import type { AppState, Id, Note, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
 export type SettingsPatch = Partial<Omit<Settings, 'statuses' | 'groups' | 'templates'>>
@@ -100,12 +104,17 @@ export type Action =
   | { type: 'pane/cwd'; paneId: Id; cwd: string }
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
   | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent }
-  | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent }
+  | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent; dir?: SplitDir }
   | { type: 'review/open'; taskId: Id; ids: [Id, Id] }
   | { type: 'chat/rewound'; paneId: Id; forkAt: string | null; sessionId?: string }
   | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string; sessionId?: string }
   | { type: 'chat/session'; paneId: Id; sessionId: string }
   | { type: 'chat/to-terminal'; paneId: Id; newPaneId: Id; bin: string }
+  // 24단계 일감 메모 · 이어받기
+  | { type: 'note/add'; taskId: Id; note: Note }
+  | { type: 'note/toggle'; taskId: Id; id: Id }
+  | { type: 'note/remove'; taskId: Id; id: Id }
+  | { type: 'task/viewed'; taskId: Id; at: number }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
 function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
@@ -239,7 +248,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateTask(state, action.taskId, (t) => openReviewPane(t, () => ids.shift()!))
     }
     case 'chat/split':
-      return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId, action.agent))
+      return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, action.dir ?? 'right', () => action.paneId, action.agent))
     case 'chat/rewound': {
       const taskId = findPaneTask(state, action.paneId)
       return taskId ? updateTask(state, taskId, (t) => chatRewound(t, action.paneId, action.forkAt, action.sessionId)) : state
@@ -256,5 +265,13 @@ export function reducer(state: AppState, action: Action): AppState {
       const taskId = findPaneTask(state, action.paneId)
       return taskId ? updateTask(state, taskId, (t) => chatToTerminal(t, action.paneId, () => action.newPaneId, action.bin)?.task ?? t) : state
     }
+    case 'note/add':
+      return updateTask(state, action.taskId, (t) => addNote(t, action.note))
+    case 'note/toggle':
+      return updateTask(state, action.taskId, (t) => toggleNote(t, action.id))
+    case 'note/remove':
+      return updateTask(state, action.taskId, (t) => removeNote(t, action.id))
+    case 'task/viewed':
+      return updateTask(state, action.taskId, (t) => setViewed(t, action.at))
   }
 }

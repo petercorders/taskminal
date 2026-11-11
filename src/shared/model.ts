@@ -8,6 +8,7 @@ import type {
   AppState,
   Group,
   Id,
+  Note,
   Layout,
   LayoutSpec,
   NewTaskInput,
@@ -791,7 +792,58 @@ function parseTask(v: unknown, settings: Settings, newId: NewId, seen: SeenIds):
     panes,
     createdAt: typeof v.createdAt === 'number' && Number.isFinite(v.createdAt) ? v.createdAt : 0,
     ...(Array.isArray(v.quickCommands) && v.quickCommands.length ? { quickCommands: parseQuickList(v.quickCommands) } : {}),
+    ...(parseNotes(v.notes).length ? { notes: parseNotes(v.notes) } : {}),
+    ...(typeof v.lastViewedAt === 'number' && Number.isFinite(v.lastViewedAt) && v.lastViewedAt > 0 ? { lastViewedAt: v.lastViewedAt } : {}),
   }
+}
+
+function parseNotes(v: unknown): Note[] {
+  if (!Array.isArray(v)) return []
+  const out = uniqueById(
+    v.map((n): Note | null => {
+      if (!isObj(n) || !isId(n.id) || !isStr(n.text) || !n.text.trim()) return null
+      const note: Note = { id: n.id, text: n.text.slice(0, NOTE_MAX_CHARS), at: typeof n.at === 'number' && Number.isFinite(n.at) ? n.at : 0 }
+      if (n.done === true) note.done = true
+      if (n.by === 'agent') note.by = 'agent'
+      return note
+    }),
+  )
+  return out.slice(-NOTES_MAX)
+}
+
+// ─── 일감 메모 (24단계) ─────────────────────────────────────
+
+export const NOTES_MAX = 200
+export const NOTE_MAX_CHARS = 500
+
+/** 메모 한 줄 덧붙이기 — 에이전트(by agent)도 같은 길, 넘치면 오래된 것부터 */
+export function addNote(task: Task, note: Note): Task {
+  const text = note.text.trim().slice(0, NOTE_MAX_CHARS)
+  if (!text) return task
+  const notes = [...(task.notes ?? []), { ...note, text }].slice(-NOTES_MAX)
+  return { ...task, notes }
+}
+
+/** 체크 · 체크 풀기 (사람만 — 화면) */
+export function toggleNote(task: Task, id: Id): Task {
+  const n = task.notes?.find((x) => x.id === id)
+  if (!n) return task
+  const { done: _d, ...rest } = n
+  const next: Note = n.done ? rest : { ...rest, done: true }
+  return { ...task, notes: task.notes!.map((x) => (x === n ? next : x)) }
+}
+
+export function removeNote(task: Task, id: Id): Task {
+  if (!task.notes?.some((x) => x.id === id)) return task
+  const notes = task.notes.filter((x) => x.id !== id)
+  if (notes.length > 0) return { ...task, notes }
+  const { notes: _n, ...rest } = task
+  return rest
+}
+
+/** 이 일감을 봤다 (떠날 때 · 창이 뒤로 갈 때 · 보는 동안 5분마다) */
+export function setViewed(task: Task, at: number): Task {
+  return task.lastViewedAt === at ? task : { ...task, lastViewedAt: at }
 }
 
 export function normalizeState(raw: unknown, newId: NewId): AppState {

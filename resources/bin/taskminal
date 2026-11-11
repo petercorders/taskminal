@@ -1,0 +1,30 @@
+#!/bin/sh
+# Taskminal 명령줄 도구 (24단계) — 앱의 Electron 을 node 로 써서 cli.js 를 돌린다.
+# 앱 안 터미널은 TASKMINAL_CLI_NODE · TASKMINAL_CLI_JS(정확한 경로)를 받는다. 그 밖(설치한 링크)은 자기 위치에서 찾는다.
+if [ -n "$TASKMINAL_CLI_NODE" ] && [ -n "$TASKMINAL_CLI_JS" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$TASKMINAL_CLI_NODE" "$TASKMINAL_CLI_JS" "$@"
+fi
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+bin=$(cd "$(dirname "$self")" && pwd -P)
+up=$(dirname "$(dirname "$bin")")
+if [ -x "$up/MacOS/Taskminal" ]; then
+  # .app/Contents/Resources/bin
+  exe=$up/MacOS/Taskminal
+  js=$up/Resources/app.asar/out/main/cli.js
+else
+  # 저장소의 resources/bin (개발)
+  exe=$up/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+  js=$up/out/main/cli.js
+fi
+if [ ! -x "$exe" ]; then
+  echo "taskminal: Taskminal 앱을 찾지 못했어요 ($exe)" >&2
+  exit 1
+fi
+ELECTRON_RUN_AS_NODE=1 exec "$exe" "$js" "$@"

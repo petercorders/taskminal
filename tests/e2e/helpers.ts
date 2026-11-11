@@ -1,6 +1,7 @@
 import { expect, type ElectronApplication, type Page } from '@playwright/test'
+import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 // e2e 가 미리 깔아 두는 저장 파일. 앱이 쓰는 모양(AppState version 1)과 같아야 normalizeState 를 통과한다.
 
@@ -88,4 +89,20 @@ export async function firstWindow(app: ElectronApplication): Promise<Page> {
  */
 export async function waitLoaded(win: Page): Promise<void> {
   await expect(win.locator('[data-testid="task-view"], [data-testid="empty-view"], [data-testid="first-run"]').first()).toBeVisible()
+}
+
+/**
+ * 24단계 `taskminal` 명령을 앱 밖 셸에서 부른 것처럼 — 저장소의 resources/bin/taskminal 을 그대로(PATH 에 넣지 않는다).
+ * 이 시험을 돌리는 환경의 TASKMINAL_* · ELECTRON_RUN_AS_NODE 는 빼고 시험 userData 만 준다
+ */
+export function runCli(userData: string, ...args: string[]): Promise<{ code: number; out: string; err: string }> {
+  const env: Record<string, string> = {}
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith('TASKMINAL_') && k !== 'ELECTRON_RUN_AS_NODE') env[k] = v
+  env['TASKMINAL_USER_DATA'] = userData
+  return new Promise((done) => {
+    execFile(resolve(__dirname, '../../resources/bin/taskminal'), args, { env, timeout: 60_000 }, (error, stdout, stderr) => {
+      const code = error ? (typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : -1) : 0
+      done({ code, out: String(stdout), err: String(stderr) })
+    })
+  })
 }

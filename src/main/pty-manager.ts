@@ -23,6 +23,8 @@ export class PtyManager {
     private readonly host: HostClient,
     private readonly zshIntegrationDir: string | null = null,
     private readonly allowedShells: readonly string[] = [],
+    /** pane 마다 더할 환경 변수 (24단계 — TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal). PATH 는 끝에 덧붙인다 */
+    private readonly extraEnv: (paneId: string) => Record<string, string> = () => ({}),
   ) {}
 
   private readonly owners = new Map<string, WebContents>()
@@ -91,7 +93,7 @@ export class PtyManager {
     const other = this.owners.get(paneId)
     if (other && other !== owner && !other.isDestroyed()) throw new Error('다른 창의 pane')
     const shell = pickShell(opts.shell, process.env['SHELL'], this.allowedShells)
-    const env = shellEnv(process.env)
+    const env = withExtra(shellEnv(process.env), this.extraEnv(paneId))
     if (!this.host.connected) this.missed = true
     const { r, early } = await this.request(owner, paneId, {
       op: 'spawn',
@@ -142,6 +144,11 @@ export class PtyManager {
 
   write(owner: WebContents, paneId: string, data: string): void {
     if (this.owned(owner, paneId)) this.host.send({ op: 'write', paneId, data })
+  }
+
+  /** CLI(24단계) 의 pane send — 창이 아닌 main 이 보낸다. 지킴이에 그 셸이 없으면 지킴이가 버린다 */
+  writeAny(paneId: string, data: string): boolean {
+    return this.host.send({ op: 'write', paneId, data })
   }
 
   resize(owner: WebContents, paneId: string, cols: number, rows: number): void {
@@ -216,6 +223,16 @@ export class PtyManager {
     this.owners.delete(paneId)
     this.pidOf.delete(paneId)
   }
+}
+
+/** 더할 변수를 넣되 PATH 는 끝에 덧붙인다 (사용자의 PATH 를 앞에 둔다) */
+export function withExtra(env: Record<string, string>, extra: Record<string, string>): Record<string, string> {
+  const out = { ...env }
+  for (const [k, v] of Object.entries(extra)) {
+    if (k === 'PATH') out['PATH'] = out['PATH'] ? `${out['PATH']}:${v}` : v
+    else out[k] = v
+  }
+  return out
 }
 
 function resolveCwd(cwd: string): string {

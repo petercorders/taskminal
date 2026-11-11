@@ -63,6 +63,20 @@ function turn(text, images = 0) {
     result()
     return
   }
+  // 24단계: 늦게 끝나는 턴(taskminal chat wait) · 받은 환경 변수(TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal)
+  if (text.includes('later')) {
+    setTimeout(() => {
+      assistant([{ type: 'text', text: `늦게 끝남: ${text}` }])
+      result()
+    }, 1500)
+    return
+  }
+  if (text.includes('whoami')) {
+    const onPath = (process.env.PATH ?? '').split(':').some((d) => d.endsWith('/resources/bin'))
+    assistant([{ type: 'text', text: `pane=${process.env.TASKMINAL_PANE_ID ?? '-'} socket=${process.env.TASKMINAL_SOCKET ? 'yes' : 'no'} path=${onPath ? 'yes' : 'no'}` }])
+    result()
+    return
+  }
   if (text.includes('slow')) {
     assistant([{ type: 'text', text: '오래 걸리는 일을 시작해요' }])
     interruptWanted = () => {

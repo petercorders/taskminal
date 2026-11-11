@@ -26,14 +26,26 @@ export interface HostControl {
   /** ⌥⌘Q 모두 끝내기 — 확인(실행 중이 있을 때) 뒤 지킴이 · 셸을 끝낸다. false = 확인에서 닫음. 앱은 부르는 쪽이 끝낸다 */
   quitAll(win: BrowserWindow | null, busy: number, confirm: boolean): Promise<boolean>
   action(a: HostAction): Promise<void>
-  tail(paneId: string): Promise<string>
+  tail(paneId: string, lines?: number): Promise<string>
   sessions(clearUnseen: boolean): Promise<SessionInfo[]>
   /** 앱이 끝날 때 — 연결만 놓는다(셸은 남는다) */
   dispose(): void
 }
 
 /** onDown: 지킴이에 연결하지 못함 · 끊김 — 오류 기록에 남긴다 (18단계) */
-export function createHostControl(zshIntegrationDir: string | null, allowedShells: readonly string[], onDown: (error?: string) => void = () => {}): HostControl {
+export interface HostTap {
+  /** 주인(창)과 상관없이 모든 출력 · 끝 — CLI 의 pane wait (24단계) */
+  data(paneId: string, data: string): void
+  exit(paneId: string, exitCode: number): void
+}
+
+export function createHostControl(
+  zshIntegrationDir: string | null,
+  allowedShells: readonly string[],
+  onDown: (error?: string) => void = () => {},
+  paneEnv: (paneId: string) => Record<string, string> = () => ({}),
+  tap: HostTap | null = null,
+): HostControl {
   const userData = app.getPath('userData')
   const protocol = envInt('TASKMINAL_PTYHOST_PROTOCOL') ?? PTYHOST_PROTOCOL // 시험: 옛 버전 흉내
   const sockPath = socketPath(userData, protocol, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
@@ -66,8 +78,14 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
     execPath: process.execPath,
     env: process.env,
     ...(envInt('TASKMINAL_PTYHOST_RETRY_MS') !== undefined ? { retryScale: envInt('TASKMINAL_PTYHOST_RETRY_MS')! } : {}),
-    onData: (paneId, data) => ptys.onHostData(paneId, data),
-    onExit: (paneId, exit) => ptys.onHostExit(paneId, exit),
+    onData: (paneId, data) => {
+      tap?.data(paneId, data)
+      ptys.onHostData(paneId, data)
+    },
+    onExit: (paneId, exit) => {
+      tap?.exit(paneId, exit.exitCode)
+      ptys.onHostExit(paneId, exit)
+    },
     onStatus: (s: HostStatus) => {
       if (s.state === 'connected') {
         patch({ state: 'connected', pid: s.pid, version: s.version, startedAt: s.startedAt, fresh: s.fresh || view.fresh === true, attempt: undefined, of: undefined, error: undefined })
@@ -86,7 +104,7 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
       reloadWindows()
     },
   })
-  const ptys = new PtyManager(host, zshIntegrationDir, allowedShells)
+  const ptys = new PtyManager(host, zshIntegrationDir, allowedShells, paneEnv)
   void host.start().then(() => findOldHosts())
 
   // 메모리 · 셸 수 — 시작 10초 뒤, 그 뒤 5분마다. 기준을 넘으면 실행마다 한 번 알린다
@@ -197,9 +215,9 @@ export function createHostControl(zshIntegrationDir: string | null, allowedShell
           return // index.ts 가 창 · 실행 중 수를 알고 처리한다
       }
     },
-    async tail(paneId) {
+    async tail(paneId, lines = 20) {
       if (!host.connected) return ''
-      const r = await host.request({ op: 'tail', paneId, lines: 20 }).catch(() => null)
+      const r = await host.request({ op: 'tail', paneId, lines }).catch(() => null)
       return typeof r?.['text'] === 'string' ? r['text'] : ''
     },
     sessions: (clearUnseen) => ptys.sessions(clearUnseen),

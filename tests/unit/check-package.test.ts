@@ -30,7 +30,7 @@ beforeEach(async () => {
   writeFileSync(join(res, 'app-update.yml'), 'owner: petercorders\nrepo: taskminal\nprovider: github\nupdaterCacheDirName: taskminal-updater\n')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
@@ -43,6 +43,10 @@ beforeEach(async () => {
   // 개발 폴더에 남은 기록 파일이 섞이지 않게, 넣을 파일만 복사한다
   mkdirSync(join(res, 'shell', 'zsh'), { recursive: true })
   for (const f of ['.zshenv', '.zprofile', '.zshrc', '.zlogin', 'taskminal-hooks.zsh']) cpSync(join(__dirname, '../../resources/shell/zsh', f), join(res, 'shell', 'zsh', f))
+  // 24단계 taskminal 명령
+  mkdirSync(join(res, 'bin'), { recursive: true })
+  cpSync(join(__dirname, '../../resources/bin/taskminal'), join(res, 'bin', 'taskminal'))
+  chmodSync(join(res, 'bin', 'taskminal'), 0o755)
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
@@ -57,6 +61,14 @@ const ptyRoot = () => join(appPath, 'Contents/Resources/app.asar.unpacked/node_m
 describe('check-package (14단계)', () => {
   it('모두 갖춘 .app 은 문제 없음', async () => {
     expect(await check()).toEqual([])
+  })
+
+  it('taskminal 명령이 없거나 실행 권한이 없으면 (24단계)', async () => {
+    const cli = join(appPath, 'Contents/Resources/bin/taskminal')
+    chmodSync(cli, 0o644)
+    expect(await check()).toEqual(['Resources/bin/taskminal 에 실행 권한이 없음'])
+    rmSync(cli)
+    expect(await check()).toEqual(['명령줄 도구 없음: Resources/bin/taskminal (extraResources)'])
   })
 
   it('spawn-helper 에 실행 권한이 없으면 — 셸이 posix_spawnp failed 로 안 뜬다', async () => {

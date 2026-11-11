@@ -23,6 +23,8 @@ export interface ChatManagerDeps {
   channel: string
   now?: () => number
   appVersion?: string
+  /** 에이전트 프로세스에 더할 환경 변수 (24단계 — TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal) */
+  extraEnv?: (paneId: string, path: string) => Record<string, string>
 }
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
@@ -72,13 +74,25 @@ export class ChatManager {
   private cancelled = new Set<string>()
   /** pane 마다 보낸 이벤트 수 — 화면이 기록(history)과 실시간 이벤트를 겹치지도 빠뜨리지도 않게 맞춘다 */
   private counts = new Map<string, number>()
+  /** 모든 pane 의 새 이벤트를 듣는 이 (24단계 chat wait) — 가린 것 */
+  private listeners = new Set<(paneId: string, ev: ChatEvent) => void>()
   constructor(private readonly d: ChatManagerDeps) {}
+
+  /** 새 이벤트를 듣는다 → 그만 듣기 */
+  onEvent(fn: (paneId: string, ev: ChatEvent) => void): () => void {
+    this.listeners.add(fn)
+    return () => void this.listeners.delete(fn)
+  }
 
   /** 번호를 매겨 디스크에 덧붙인다 (가리기는 ChatStore) */
   private record(paneId: string, ev: ChatEvent): number {
     const n = (this.counts.get(paneId) ?? 0) + 1
     this.counts.set(paneId, n)
     void this.d.store.append(paneId, [ev]).catch(() => {})
+    if (this.listeners.size > 0) {
+      const shown = redactEvent(ev, this.d.redactOptions())
+      for (const fn of this.listeners) fn(paneId, shown)
+    }
     return n
   }
 
@@ -113,7 +127,7 @@ export class ChatManager {
       const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
       const common = {
         bin: found.bin,
-        env: agentEnv(process.env, found.path),
+        env: { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path) ?? {}) },
         cwd: expandHome(cwd),
         permission: this.d.permission(),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),

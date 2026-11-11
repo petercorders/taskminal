@@ -32,6 +32,8 @@ import { Sidebar } from './Sidebar'
 import { maskActivity, textMasker } from './activity-mask'
 import { adjacentTask, stepStatus, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
+import { handleCliUi, type CliEffect } from './cli-bridge'
+import type { UiRequest } from '../shared/cli'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TemplateNameDialog } from './TemplateNameDialog'
 import { SettingsView, type SettingsJump } from './settings/SettingsView'
@@ -970,6 +972,44 @@ export function App() {
       },
     })
   }
+
+  // ─── 24단계: taskminal 명령 — main 이 묻는 화면 쪽 일. 사람이 누를 때와 같은 reducer 동작 ───
+  const removeRef = useRef(remove)
+  removeRef.current = remove
+  const loadPhaseRef = useRef(load.phase)
+  loadPhaseRef.current = load.phase
+  useEffect(
+    () =>
+      window.taskminal.cli.onRequest((id, raw) => {
+        if (typeof id !== 'number') return
+        if (loadPhaseRef.current !== 'ready') return window.taskminal.cli.reply(id, { ok: false, error: '앱이 아직 준비 중이에요 — 잠시 뒤 다시 해 주세요' })
+        let e: CliEffect
+        try {
+          e = handleCliUi(raw as UiRequest, { state: stateRef.current, activity: activityRef.current, now: Date.now(), newId, mask: diskMaskRef.current })
+        } catch (err) {
+          return window.taskminal.cli.reply(id, { ok: false, error: `화면에서 처리하지 못했어요: ${String(err)}` })
+        }
+        // 다음 요청이 다시 그리기 전에 와도 바뀐 상태를 보게 — 같은 reducer 의 결과
+        if (e.actions.length > 0) stateRef.current = e.actions.reduce(reducer, stateRef.current)
+        for (const a of e.actions) dispatch(a)
+        if (e.seeTabs.length > 0) setSeenTabs((cur) => (e.seeTabs.every((t) => cur.has(t)) ? cur : new Set([...cur, ...e.seeTabs])))
+        if (e.notify) updateActivityRef.current(e.notify.paneId, { type: 'notify', text: e.notify.text })
+        window.taskminal.cli.reply(id, e.reply)
+        const gone = e.remove ? stateRef.current.tasks.find((t) => t.id === e.remove) : undefined
+        if (gone) removeRef.current(gone)
+      }),
+    [],
+  )
+  // 대화의 세션 id 는 그 pane 이 화면에 없어도 남긴다 — CLI 로 띄운 대화(숨은 탭)의 다음 보내기가 이어 하게
+  useEffect(
+    () =>
+      window.taskminal.chat.onEvent((paneId, ev) => {
+        if (typeof paneId !== 'string' || typeof ev !== 'object' || ev === null) return
+        const e = ev as { t?: unknown; id?: unknown; text?: unknown }
+        if (e.t === 'session' && typeof e.id === 'string') dispatch({ type: 'chat/session', paneId, sessionId: e.id })
+      }),
+    [],
+  )
 
   /** 백업 · 가져오기로 상태를 바꾼다 — 먼저 main 이 지금 모습을 백업(되돌리기 전 · 가져오기 전). 그게 실패하면 바꾸지 않는다 */
   const applyRestore = async (make: (cur: AppState) => Restored | null, mark: BackupMark): Promise<string | null> => {

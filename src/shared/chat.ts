@@ -636,3 +636,18 @@ export function claudeControlLine(requestId: string, request: Obj): string {
 export function claudeAnswerLine(requestId: string, response: Obj): string {
   return JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } })
 }
+
+/** 마지막 턴(마지막 사용자 글 뒤)의 에이전트 글 */
+export function lastTurnText(events: readonly ChatEvent[]): string {
+  let from = 0
+  for (let i = events.length - 1; i >= 0; i--) if (events[i]!.t === 'user') {
+    from = i + 1
+    break
+  }
+  return events
+    .slice(from)
+    .filter((e): e is Extract<ChatEvent, { t: 'text' }> => e.t === 'text')
+    .map((e) => e.text)
+    .join('\n')
+    .trim()
+}

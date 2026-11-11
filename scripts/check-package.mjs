@@ -8,8 +8,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const BUNDLE_ID = 'io.peterbong.taskminal'
-// host.js = 셸 지킴이(16단계, ELECTRON_RUN_AS_NODE 로 asar 안에서 돈다) · @xterm/headless 는 지킴이가 require 한다(번들 밖 dependency)
-const ASAR_ENTRIES = ['out/main/index.js', 'out/main/host.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']
+// host.js = 셸 지킴이(16단계, ELECTRON_RUN_AS_NODE 로 asar 안에서 돈다) · cli.js = taskminal 명령(24단계) · @xterm/headless 는 지킴이가 require 한다(번들 밖 dependency)
+const ASAR_ENTRIES = ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']
 // zsh 가 ZDOTDIR 에서 읽는 점 파일 — 하나라도 빠지면 셸 통합 없이(또는 사용자 설정 없이) 뜬다
 // 이 밖의 파일(개발 중 생긴 .zsh_history · .zcompdump …)이 들어가면 개발자의 명령 기록이 .app 에 실린다 — 목록 밖은 문제로 본다
 const SHELL_FILES = ['.zshenv', '.zprofile', '.zshrc', '.zlogin', 'taskminal-hooks.zsh']
@@ -66,6 +66,11 @@ export async function checkPackage(appPath, { arch = lipoArch, verify = codesign
   const zsh = join(res, 'shell', 'zsh')
   for (const f of SHELL_FILES) if (!existsSync(join(zsh, f))) problems.push(`셸 통합 파일 없음: Resources/shell/zsh/${f} (extraResources)`)
   if (existsSync(zsh)) for (const f of readdirSync(zsh)) if (!SHELL_FILES.includes(f)) problems.push(`셸 폴더에 넣지 말아야 할 파일: Resources/shell/zsh/${f}`)
+
+  // taskminal 명령(24단계) — 실행 권한이 없으면 링크로 불러도 'permission denied'
+  const cli = join(res, 'bin', 'taskminal')
+  if (!existsSync(cli)) problems.push('명령줄 도구 없음: Resources/bin/taskminal (extraResources)')
+  else if ((statSync(cli).mode & 0o111) === 0) problems.push('Resources/bin/taskminal 에 실행 권한이 없음')
 
   const bin = join(c, 'MacOS', 'Taskminal')
   if (!existsSync(bin)) problems.push('실행 파일 없음: Contents/MacOS/Taskminal')

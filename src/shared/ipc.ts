@@ -78,6 +78,9 @@ export const IPC = {
   reviewWatch: 'review:watch', // send(paneId, root|null) — 보이는 동안만 폴더 감시
   reviewChanged: 'review:changed', // main → renderer: (paneId) 폴더가 바뀜(0.5초 모음)
   reviewOpenFile: 'review:open-file', // send(root, path) — 편집기로 열기(open -t — shell.openPath 는 .command 를 실행한다, 저장소 안만)
+  // 24단계 taskminal 명령 — main 이 소켓으로 받은 요청 중 화면 상태를 바꾸는 것 · 이름 풀기를 창에 묻는다
+  cliRequest: 'cli:request', // main → renderer: (번호, UiRequest)
+  cliReply: 'cli:reply', // send(번호, UiReply) — 5초 안에, 늦은 답은 main 이 버린다
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

@@ -87,6 +87,19 @@ export interface Task {
   createdAt: number
   /** 빠른 명령 (20단계) — 단추 줄 · ⌥1~9 */
   quickCommands?: QuickCommand[]
+  /** 일감 메모 · 할 일 (24단계) — 사람은 더하기 · 체크 · 지우기, 에이전트(taskminal task note)는 덧붙이기만 */
+  notes?: Note[]
+  /** 이 일감을 마지막으로 본 때 (24단계 이어받기 요약) */
+  lastViewedAt?: number
+}
+
+export interface Note {
+  id: Id
+  text: string
+  done?: true
+  /** 에이전트가 남김 (taskminal task note) */
+  by?: 'agent'
+  at: number
 }
 
 export type StartupMode = 'restore' | 'list' | 'blank'
@@ -170,6 +183,13 @@ export interface Settings {
   sidebarView: 'flow' | 'group'
   /** 흐름 보기에서 접은 칸 (상태 id · 'need') — 처음은 마지막 상태(완료)만 */
   sidebarClosed: string[]
+  // 24단계 이어받기 요약
+  /** 오래 안 본 일감을 열면 요약 카드 */
+  resumeCard: boolean
+  /** 본 지 몇 분 뒤부터 (RESUME_AFTER_CHOICES) */
+  resumeAfterMin: number
+  /** '30분 넘게 안 본 일감이라 …' 처음 한 번 */
+  resumeTipSeen: boolean
 }
 
 export interface SecretAllow {

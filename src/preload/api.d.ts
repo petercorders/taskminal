@@ -175,6 +175,13 @@ export interface TaskminalApi {
   ports: PortsApi
   chat: ChatApi
   review: ReviewApi
+  /** taskminal 명령 (24단계) — main 이 묻는 화면 쪽 일 */
+  cli: CliApi
+}
+
+export interface CliApi {
+  onRequest(listener: (id: unknown, req: unknown) => void): () => void
+  reply(id: number, reply: import('../shared/cli').UiReply): void
 }
 
 /** 23단계 변경 검토 — 일감 폴더의 저장소. 패치는 main 이 만든다 */

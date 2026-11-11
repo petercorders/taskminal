@@ -25,6 +25,9 @@ extraResources:
       - "!**/.zsh_history"
       - "!**/.zcompdump*"
       - "!**/.zsh_sessions/**"
+  # 24단계 `taskminal` 명령 — sh 로 asar 밖에 (메뉴 '명령줄 도구 설치…' 가 /usr/local/bin 에 링크)
+  - from: resources/bin
+    to: bin
 afterPack: scripts/after-pack.cjs
 mac:
   target:

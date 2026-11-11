@@ -42,8 +42,13 @@ describe('앱 메뉴 ↔ 키 표', () => {
   })
   it('키 없는 메뉴 항목은 키 표에서 키 없는 명령만 — 업데이트 확인… 은 앱 메뉴에 (18단계)', () => {
     const unkeyed = itemsOf().filter((i) => i.accelerator === undefined)
-    expect(unkeyed.map((i) => i.id)).toEqual(['update-check'])
+    expect(unkeyed.map((i) => i.id)).toEqual(['update-check', 'cli-install'])
     expect(unkeyed[0]!.label).toBe('업데이트 확인…')
     expect(SHORTCUTS.find((s) => s.command === 'update-check')!.accel).toBeFalsy()
+  })
+  it('명령줄 도구 설치… 는 main 이 바로 받는다 — 키 표에 없고 창에 보내지 않는다 (24단계)', () => {
+    const item = itemsOf().find((i) => i.id === 'cli-install')!
+    expect(item.label).toBe('명령줄 도구 설치…')
+    expect(SHORTCUTS.some((s) => s.command === ('cli-install' as never))).toBe(false)
   })
 })

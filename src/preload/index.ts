@@ -101,6 +101,10 @@ const api: TaskminalApi = {
     close: (paneId, forget) => ipcRenderer.send(IPC.chatClose, paneId, forget),
     onEvent: (listener) => subscribe(IPC.chatEvent, listener),
   },
+  cli: {
+    onRequest: (listener) => subscribe<[unknown, unknown]>(IPC.cliRequest, listener),
+    reply: (id, reply) => ipcRenderer.send(IPC.cliReply, id, reply),
+  },
   review: {
     load: (dir, base) => ipcRenderer.invoke(IPC.reviewLoad, dir, base) as ReturnType<ReviewApiT['load']>,
     revertLines: (dir, path, sig, keys) => ipcRenderer.invoke(IPC.reviewRevertLines, dir, path, sig, keys) as ReturnType<ReviewApiT['revertLines']>,

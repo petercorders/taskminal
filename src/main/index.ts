@@ -1,9 +1,9 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { autoUpdater, type ProgressInfo } from 'electron-updater'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { homedir, hostname } from 'node:os'
+import { homedir, hostname, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
 import { IPC, isBackupMark, isHostAction, isRedactFix, isUpdateAction, type AppInfo, type RedactStatus } from '../shared/ipc'
@@ -17,7 +17,11 @@ import { MAX_LINK, webUrl } from '../shared/links'
 import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import type { AppState, Settings } from '../shared/types'
-import { installAppMenu, onQuitAll } from './menu'
+import { installAppMenu, onCliInstall, onQuitAll } from './menu'
+import { CliServer } from './cli-server'
+import { installCli } from './cli-install'
+import { cliSocketPath, parseUiReply, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
+import { PaneWatch } from '../shared/pane-watch'
 import { lsofCwds } from './cwd-probe'
 import { killPort, probePorts } from './port-probe'
 import type { ProbeResult } from '../shared/ports'
@@ -73,6 +77,101 @@ const allowedShells = ((): string[] => {
 })()
 // 셸 지킴이(16단계) — userData 가 정해진 뒤(ready) 만든다. 셸 프로세스는 지킴이가 갖는다.
 let hostControl: HostControl | null = null
+
+// ─── 24단계: taskminal 명령 ───
+// sh 도구 폴더 — 셸 · 대화 에이전트의 PATH 끝에 덧붙인다. 패키징하면 Resources/bin (extraResources), 개발 · e2e 는 저장소 resources/bin
+const cliBinDir = app.isPackaged ? join(process.resourcesPath, 'bin') : join(app.getAppPath(), 'resources', 'bin')
+const cliJs = join(__dirname, 'cli.js')
+let cliSockPath = '' // ready 뒤 정한다(userData)
+let cliServer: CliServer | null = null
+// main 이 받은 마지막 상태 — 새 셸의 TASKMINAL_TASK_ID 를 찾는다. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
+let lastState: AppState | null = null
+const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
+/** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
+function cliEnv(paneId: string): Record<string, string> {
+  const taskId = lastState?.tasks.find((t) => Object.hasOwn(t.panes, paneId))?.id
+  return {
+    TASKMINAL_PANE_ID: paneId,
+    ...(taskId ? { TASKMINAL_TASK_ID: taskId } : {}),
+    ...(cliSockPath ? { TASKMINAL_SOCKET: cliSockPath } : {}),
+    TASKMINAL_CLI_NODE: process.execPath,
+    TASKMINAL_CLI_JS: cliJs,
+    PATH: cliBinDir,
+  }
+}
+// 창에 묻는 요청 — 번호마다 답을 기다린다(5초). 시간이 지난 번호의 답은 버린다
+let cliSeq = 0
+const cliPending = new Map<number, (r: UiReply) => void>()
+const CLI_UI_MS = 5000
+function askUi(req: UiRequest): Promise<UiReply> {
+  const win = mainWindow
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return Promise.resolve({ ok: false, error: '앱 창이 없어요 — Dock 의 Taskminal 을 눌러 창을 연 뒤 다시 해 주세요' })
+  return new Promise((resolve) => {
+    const id = ++cliSeq
+    const timer = setTimeout(() => {
+      cliPending.delete(id)
+      resolve({ ok: false, error: '앱 화면이 답하지 않아요 — 잠시 뒤 다시 해 주세요' })
+    }, CLI_UI_MS)
+    cliPending.set(id, (r) => {
+      clearTimeout(timer)
+      cliPending.delete(id)
+      resolve(r)
+    })
+    win.webContents.send(IPC.cliRequest, id, req)
+  })
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+function startCliServer(): void {
+  cliServer = new CliServer({
+    sockPath: cliSockPath,
+    askUi,
+    pane: {
+      async ready(paneId, ms) {
+        const end = Date.now() + ms
+        for (;;) {
+          const s = (await control().ptys.sessions().catch(() => [])).find((x) => x.paneId === paneId)
+          if (s && !s.exited) return true
+          if (Date.now() >= end) return false
+          await sleep(150)
+        }
+      },
+      write: (paneId, data) => control().ptys.writeAny(paneId, data),
+      tail: (paneId, lines) => control().tail(paneId, lines),
+      async info(paneId) {
+        const s = (await control().ptys.sessions().catch(() => [])).find((x) => x.paneId === paneId)
+        return s ? { running: s.running, lastOutputAt: s.lastOutputAt, ...(s.exited ? { exited: s.exited.exitCode } : {}) } : null
+      },
+    },
+    watch: paneWatch,
+    chat: {
+      async send(t: PaneTarget, text: string) {
+        const sink = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+        if (!sink) return 'no-window'
+        const ref = t.chat ? { agent: t.chat.agent, ...(t.chat.sessionId ? { sessionId: t.chat.sessionId } : {}), ...(t.chat.sessionId && t.chat.forkAt ? { forkAt: t.chat.forkAt } : {}) } : { agent: 'claude' as const }
+        return chats().send(sink, t.paneId, text, t.cwd, ref)
+      },
+      history: async (paneId) => (await chats().history(paneId)).events,
+      subscribe: (fn) => chats().onEvent(fn),
+    },
+    redact: (text) => redact(text, secretOpts),
+  })
+  cliServer.listen().catch((e: unknown) => report('error', 'cli-socket', '명령줄 도구 소켓을 열지 못했어요', e))
+}
+/** 앱 메뉴 '명령줄 도구 설치…' — 사용자가 누를 때만. 시험은 TASKMINAL_CLI_INSTALL_DIR */
+async function installCliMenu(): Promise<void> {
+  const dir = process.env['TASKMINAL_CLI_INSTALL_DIR'] || '/usr/local/bin'
+  const r = installCli(join(cliBinDir, 'taskminal'), dir)
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+  const box = (o: Electron.MessageBoxOptions) => (win ? dialog.showMessageBox(win, o) : dialog.showMessageBox(o))
+  if (r.kind === 'installed' || r.kind === 'already') {
+    await box({ type: 'info', message: r.kind === 'installed' ? '명령줄 도구를 설치했어요' : '명령줄 도구가 이미 설치돼 있어요', detail: `${r.path}\n아무 터미널에서나 'taskminal help' 를 쳐 보세요. 앱 안 터미널은 설치하지 않아도 돼요.` })
+  } else if (r.kind === 'conflict') {
+    await box({ type: 'warning', message: '같은 이름의 다른 파일이 있어요', detail: `${r.path} 를 덮지 않았어요. 지운 뒤 다시 해 주세요.` })
+  } else {
+    const c = await box({ type: 'info', message: '그 폴더에 쓸 권한이 없어요', detail: `터미널에서 이 명령을 쳐 주세요 (관리자 암호를 물어요):\n\n${r.command}`, buttons: ['명령 복사', '닫기'], defaultId: 0, cancelId: 1 })
+    if (c.response === 0) clipboard.writeText(r.command)
+  }
+}
 const control = (): HostControl => {
   if (!hostControl) throw new Error('셸 지킴이가 아직 준비되지 않음')
   return hostControl
@@ -128,6 +227,8 @@ const chatSpawn: SpawnFn = (bin, args, o) => spawnChild(bin, args, { cwd: o.cwd,
 const agentBins = new AgentBinFinder()
 const chats = () =>
   (chatManager ??= new ChatManager({
+    // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
+    extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || ''}:${cliBinDir}` }),
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
@@ -510,6 +611,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     if (bytes > MAX_STATE_BYTES) return
     const state = normalizeState(raw, randomUUID)
+    lastState = state
     if (stateFile?.canWrite) {
       secretOpts = optsFrom(state.settings)
       updatePrefs = prefsFrom(state.settings)
@@ -786,6 +888,15 @@ if (!app.requestSingleInstanceLock()) {
     if (fromOurWindow(event) && isPaneId(paneId)) chats().close(paneId, forget === true)
   })
 
+  // 24단계 taskminal — 창의 답. 번호가 맞는(아직 기다리는) 답만, 모양을 다시 본다
+  ipcMain.on(IPC.cliReply, (event, id: unknown, raw: unknown) => {
+    if (!fromOurWindow(event) || typeof id !== 'number') return
+    const done = cliPending.get(id)
+    if (!done) return
+    done(parseUiReply(raw) ?? { ok: false, error: '앱 화면의 답을 읽지 못했어요' })
+  })
+  onCliInstall(() => void installCliMenu())
+
   // 셸 지킴이 — 설정 칸 · 위 줄
   ipcMain.handle(IPC.hostView, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -910,6 +1021,7 @@ if (!app.requestSingleInstanceLock()) {
     } finally {
       hostControl?.dispose()
       chatManager?.killAll()
+      cliServer?.close() // 소켓 파일을 지운다 — 기다리던 CLI 는 '연결이 끊겼어요'
       markRunning(false) // 정상으로 끝남 — 다음 실행이 '갑자기 꺼짐' 으로 보지 않게
     }
   })
@@ -931,7 +1043,12 @@ if (!app.requestSingleInstanceLock()) {
     if (crashedLast) errlog().write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
     markRunning(true)
     installAppMenu()
-    hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error))
+    cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
+    hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error), cliEnv, {
+      data: (paneId, data) => paneWatch.feed(paneId, data),
+      exit: (paneId, code) => paneWatch.exit(paneId, code),
+    })
+    startCliServer()
     updater = createUpdater()
     const firstMs = Number(process.env['TASKMINAL_UPDATE_FIRST_MS'])
     setTimeout(() => void updater?.check(), Number.isInteger(firstMs) && firstMs >= 0 ? firstMs : UPDATE_FIRST_DELAY_MS).unref()

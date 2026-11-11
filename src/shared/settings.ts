@@ -17,6 +17,8 @@ export const ACCENTS = [
 /** 고를 수 있는 터미널 글꼴 — 설치되지 않았으면 xterm 이 다음 글꼴(한글 대체 · monospace)로 그린다 */
 export const FONT_FAMILIES = ['JetBrains Mono', 'D2Coding', 'SF Mono', 'Menlo'] as const
 export const LONG_AFTER_CHOICES = [10, 30, 60, 300] as const
+/** 이어받기 요약 카드 (24단계) — 본 지 몇 분 뒤부터 */
+export const RESUME_AFTER_CHOICES = [10, 30, 60, 120] as const
 export const NOTIFY_KINDS: readonly NotifyKind[] = ['wait', 'long', 'fail', 'exit']
 
 export const LINE_HEIGHT = { min: 1, max: 1.6 } as const
@@ -67,6 +69,9 @@ export function defaultExtraSettings(): ExtraSettings {
     chatPermission: 'ask',
     sidebarView: 'flow',
     sidebarClosed: ['done'], // 흐름 보기에서 기본 마지막 상태(완료)는 접어 둔다 (21b 보드)
+    resumeCard: true,
+    resumeAfterMin: 30,
+    resumeTipSeen: false,
   }
 }
 
@@ -166,6 +171,9 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     chatPermission: isChatPermission(v['chatPermission']) ? v['chatPermission'] : d.chatPermission,
     sidebarView: oneOf<'flow' | 'group'>(v['sidebarView'], ['flow', 'group'], d.sidebarView),
     sidebarClosed: Array.isArray(v['sidebarClosed']) ? [...new Set(v['sidebarClosed'].filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 64) : d.sidebarClosed,
+    resumeCard: bool(v['resumeCard'], d.resumeCard),
+    resumeAfterMin: oneOf<number>(v['resumeAfterMin'], RESUME_AFTER_CHOICES, d.resumeAfterMin),
+    resumeTipSeen: bool(v['resumeTipSeen'], d.resumeTipSeen),
   }
 }
 

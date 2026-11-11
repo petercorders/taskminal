@@ -7,6 +7,11 @@ let quitAllHandler: () => void = () => {}
 export const onQuitAll = (fn: () => void): void => {
   quitAllHandler = fn
 }
+// 24단계: '명령줄 도구 설치…' — 사용자가 눌러야만 /usr/local/bin 에 링크를 만든다 (index.ts 가 정한다)
+let cliInstallHandler: () => void = () => {}
+export const onCliInstall = (fn: () => void): void => {
+  cliInstallHandler = fn
+}
 
 /** 우리 명령 항목: 단축키는 보여 주기만 한다(registerAccelerator: false) — 실제 키는 renderer 가 같은 표로 처리한다.
  *  네이티브로도 등록하면 키 하나에 명령이 두 번 돈다. 누르면 그 창의 renderer 에 명령을 보낸다. */
@@ -36,6 +41,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { role: 'about' },
         // 18단계: 누르면 확인하고 설정 › 정보에서 결과를 보여 준다
         { ...item('update-check'), label: '업데이트 확인…' },
+        { id: 'cli-install', label: '명령줄 도구 설치…', click: () => cliInstallHandler() },
         { type: 'separator' },
         item('settings'),
         { type: 'separator' },
