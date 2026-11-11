@@ -215,11 +215,11 @@ describe('stepStatus', () => {
     expect(stepStatus(s, c, 1)).toBeNull()
     expect(stepStatus(s, c, -1)).toBe('wait')
   })
-  it('모르는 상태는 첫 칸으로 보고 거기서 옮긴다 (흐름 보기와 같은 규칙)', () => {
+  it('모르는 상태는 첫 칸에 보이므로: 다음은 둘째 상태, 이전은 첫 상태 자체(바른 id 로 고침)', () => {
     const s = flowState()
     s.tasks[0]!.statusId = 'gone'
     expect(stepStatus(s, s.tasks[0]!.id, 1)).toBe('wait')
-    expect(stepStatus(s, s.tasks[0]!.id, -1)).toBeNull()
+    expect(stepStatus(s, s.tasks[0]!.id, -1)).toBe('doing')
   })
   it('없는 일감 · 상태가 하나뿐이면 null', () => {
     const s = flowState()

@@ -566,7 +566,13 @@ export function App() {
   const diskMaskRef = useRef(diskMask)
   diskMaskRef.current = diskMask
   const shownActivity = useMemo(() => maskActivity(activity, screenMask), [activity, screenMask])
-  const historyActivity = useMemo(() => maskActivity(activity, diskMask), [activity, diskMask])
+  // ⌘Y 가 열렸을 때만 만든다(닫혀 있으면 활동마다 훑지 않게, 리뷰)
+  const historyActivity = useMemo(() => (historyOpen ? maskActivity(activity, diskMask) : activity), [historyOpen, activity, diskMask])
+  // 다시 켤 때 '꺼져 있던 동안 입력을 기다려요' 막대의 메시지도 화면 가리기를 따른다(리뷰)
+  const shownStartup = useMemo(
+    () => (startup && screenMask ? { ...startup, waiting: startup.waiting.map((w) => (w.message ? { ...w, message: screenMask(w.message) } : w)) } : startup),
+    [startup, screenMask],
+  )
   const history = useHistory(load.phase === 'ready')
   const onCommandDone = (paneId: string, done: CommandDone) => {
     const s = stateRef.current
@@ -1135,7 +1141,7 @@ export function App() {
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
-    if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: screenMask ? screenMask(act.command) : act.command } : {}) })
+    if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: shownActivity[paneId]?.command ?? act.command } : {}) })
     setConfirming(null)
     // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도. 대화 pane 이면 claude 를 끝내고 화면 기록도 지운다(되돌리기 없음)
     if (isChatPane(paneId)) window.taskminal.chat.close(paneId, true)
@@ -1218,12 +1224,16 @@ export function App() {
         const t = state.tasks.find((x) => x.id === state.activeTaskId)
         if (!t) return
         const to = stepStatus(state, t.id, command === 'status-next' ? 1 : -1)
+        // 되돌리기가 걸린 알림(지운 일감 ⌘Z 등)은 덮지 않는다 — 덮으면 되돌리기가 사라진다(리뷰)
+        const say = (text: string) => {
+          if (!toastRef.current?.action) showToast({ text })
+        }
         if (!to) {
-          showToast({ text: command === 'status-next' ? '이미 마지막 상태예요.' : '이미 첫 상태예요.' })
+          say(command === 'status-next' ? '이미 마지막 상태예요.' : '이미 첫 상태예요.')
           return refocus()
         }
         dispatch({ type: 'task/edit', id: t.id, patch: { statusId: to } })
-        showToast({ text: `‘${t.name}’ → ${state.settings.statuses.find((x) => x.id === to)?.name ?? to}` })
+        say(`‘${t.name}’ → ${state.settings.statuses.find((x) => x.id === to)?.name ?? to}`)
         return refocus()
       }
       case 'next-task':
@@ -1439,7 +1449,7 @@ export function App() {
       )}
       <HostBanners
         view={hostView}
-        startup={startup}
+        startup={shownStartup}
         onOpenSettings={() => runCommand('host-view')}
         onNextAttention={() => runCommand('next-attention')}
         onConfirm={setHostConfirm}

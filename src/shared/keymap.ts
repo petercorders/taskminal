@@ -175,6 +175,8 @@ const SYSTEM_KEYS: Record<string, string> = {
   'Command+M': '최소화',
   'Shift+Command+W': '창 닫기',
   'Control+Command+F': '전체 화면',
+  'Control+Command+Q': '화면 잠금',
+  'Control+Command+D': '사전 찾아보기',
 }
 
 /** 받침이 있으면 '과', 없으면(한글이 아니어도) '와' */
@@ -204,7 +206,8 @@ export function keyConflicts(table: readonly Shortcut[]): Map<AppCommand, string
 }
 
 // 누르고 있으면(키 반복) 되풀이해도 되는 명령은 옮기기 · 글꼴뿐 — 만들거나 지우는 명령은 한 번만(셸이 여럿 뜨거나 닫히지 않게)
-const ONCE: ReadonlySet<AppCommand> = new Set(['new-task', 'new-tab', 'split-right', 'split-down', 'close-pane', 'clear', 'palette', 'settings'])
+// 상태 옮기기도 한 번만 — 누르고 있으면 완료까지 미끄러진다(리뷰)
+const ONCE: ReadonlySet<AppCommand> = new Set(['new-task', 'new-tab', 'split-right', 'split-down', 'close-pane', 'clear', 'palette', 'settings', 'status-next', 'status-prev'])
 export const repeatable = (command: AppCommand): boolean => !ONCE.has(command)
 
 const SYMBOL: Record<string, string> = { Shift: '⇧', Command: '⌘', Alt: '⌥', Control: '⌃', Up: '↑', Down: '↓', Left: '←', Right: '→', '-': '−' }

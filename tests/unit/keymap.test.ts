@@ -224,7 +224,12 @@ describe('⌃ 단축키', () => {
     const table = shortcutTable({ 'status-next': 'Control+Command+F' })
     expect(keyConflicts(table).get('status-next')).toMatch(/전체 화면/)
   })
-  it('옮기기는 누르고 있으면 되풀이한다', () => {
-    expect(repeatable('status-next')).toBe(true)
+  it('상태 옮기기는 누르고 있어도 한 번만 (완료까지 미끄러지지 않게)', () => {
+    expect(repeatable('status-next')).toBe(false)
+    expect(repeatable('status-prev')).toBe(false)
+  })
+  it('⌃⌘Q · ⌃⌘D 로 바꾸면 시스템 키와 겹친다고 알린다', () => {
+    expect(keyConflicts(shortcutTable({ 'status-next': 'Control+Command+Q' })).get('status-next')).toMatch(/화면 잠금/)
+    expect(keyConflicts(shortcutTable({ 'status-prev': 'Control+Command+D' })).get('status-prev')).toMatch(/사전/)
   })
 })

@@ -63,6 +63,18 @@ test.describe('상태 옮기기', () => {
     await expect(section('wait').locator('[data-task-name="A 일감"]')).toBeVisible()
   })
 
+  test('되돌리기가 걸린 알림(일감 지움)은 상태 옮기기 알림이 덮지 않는다 — ⌘Z 가 그대로 된다', async () => {
+    await win.getByRole('button', { name: 'B 일감 지우기' }).click()
+    await win.getByRole('alertdialog').getByRole('button', { name: '지우기' }).click()
+    await expect(win.getByTestId('toast')).toContainText('‘B 일감’ 일감을 지웠어요')
+    await menu('status-next') // 지금 일감 A
+    await expect.poll(() => statusOf('A 일감'), { timeout: 5_000 }).toBe('wait')
+    await expect(win.getByTestId('toast')).toContainText('지웠어요')
+    await win.getByTestId('pane-pa').click()
+    await win.keyboard.press('Meta+z')
+    await expect(sidebar().locator('[data-task-name="B 일감"]')).toBeVisible()
+  })
+
   test('⌃⌘→ 키도 같은 명령 (renderer 가 capture 로 받는다)', async () => {
     await win.getByTestId('pane-pa').click()
     await win.keyboard.press('Control+Meta+ArrowRight')

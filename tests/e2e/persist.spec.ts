@@ -173,6 +173,20 @@ test('꺼져 있던 동안 입력을 기다리게 되면 다시 열 때 사이�
   await win.screenshot({ path: 'test-results/persist-waiting.png' })
 })
 
+// 작은 고침(2026-11-11 리뷰): 위 줄의 기다림 메시지도 화면 가리기를 따른다
+test('꺼져 있던 동안 온 기다림 메시지의 비밀값은 다시 열 때 위 줄에서 가린다', async () => {
+  const KEY = 'sk-ant-api03-' + 'Wv3nR_k-8'.repeat(6)
+  seedState(userData, [{ id: 't', name: '기다림 일감', paneId: 'p1' }])
+  await launch()
+  await run('p1', `(sleep 2; printf '\\e]9;키 ${KEY} 를 쓸까요?\\a') & echo ARMED`)
+  await waitFor('p1', /^ARMED/m)
+  await close()
+  await new Promise((r) => setTimeout(r, 3500))
+  await launch()
+  await expect(banner('waiting')).toContainText('‹가림:')
+  await expect(banner('waiting')).not.toContainText(KEY)
+})
+
 test('처음 ⌘Q 는 한 번만 안내 — 취소면 그대로, 앱만 끄기면 셸이 남고 다음에는 묻지 않는다', async () => {
   seedState(userData, [{ id: 't', name: '안내', paneId: 'p1' }])
   await launch({ TASKMINAL_QUIT_NOTICE: 'show' })
