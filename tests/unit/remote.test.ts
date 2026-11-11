@@ -6,7 +6,7 @@ describe('isSshHost · isRemotePath', () => {
     for (const h of ['nas', 'peter@192.168.0.20', 'my-host.example.com', 'u_1@h', '[::1]', 'nas:2222']) expect(isSshHost(h)).toBe(true)
   })
   it('- 로 시작(옵션 주입) · 공백 · 제어 글자 · 따옴표 · 빈 글 · 너무 긴 글은 거절', () => {
-    for (const h of ['', '-oProxyCommand=x', 'a b', 'a\nb', "a'b", 'a;b', 'a$(x)', 'x'.repeat(256)]) expect(isSshHost(h)).toBe(false)
+    for (const h of ['', '-oProxyCommand=x', '-oProxyCommand', '-p22', 'a b', 'a\nb', "a'b", 'a;b', 'a$(x)', 'x'.repeat(256)]) expect(isSshHost(h)).toBe(false)
   })
   it('원격 경로는 줄바꿈 · NUL · 빈 글 거절', () => {
     expect(isRemotePath('/volume1/docker/app')).toBe(true)

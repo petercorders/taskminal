@@ -52,7 +52,7 @@ export function sshArgs(s: SshSpec): string[] {
   ]
 }
 
-/** ~/.ssh/config 의 Host 이름들 — 와일드카드(* ?) · 부정(!) · Match 는 빼고, 처음 나온 순서로 한 번씩 */
+/** ~/.ssh/config 의 Host 이름들 — 와일드카드(* ?) · 부정(!) 은 isSshHost 가 거르고 Match 는 줄째 뺀다, 처음 나온 순서로 한 번씩 */
 export function parseSshConfigHosts(text: string): string[] {
   const out: string[] = []
   for (const raw of text.split('\n')) {
@@ -60,7 +60,7 @@ export function parseSshConfigHosts(text: string): string[] {
     const m = /^host\s+(.+)$/i.exec(line)
     if (!m) continue
     for (const name of m[1]!.split(/\s+/)) {
-      if (!name || /[*?!]/.test(name) || !isSshHost(name) || out.includes(name)) continue
+      if (!isSshHost(name) || out.includes(name)) continue
       out.push(name)
     }
   }
