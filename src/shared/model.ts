@@ -1,5 +1,6 @@
 import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
 import { isObj } from './guards'
+import { AGENT_NAME, isChatAgent, type ChatAgent } from './chat'
 import { parseQuickList, removeQuick, restoreQuick, upsertQuick, type QuickCommand } from './quick'
 import { defaultExtraSettings, parseExtraSettings } from './settings'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
@@ -274,7 +275,8 @@ export function renameTab(task: Task, tabId: Id, title: string): Task {
 /** 탭에 보일 이름: 정한 이름, 없으면 활성 pane 폴더의 끝 이름 (`~` · `/` 는 그대로). */
 export function tabLabel(task: Task, tab: Tab): string {
   if (tab.title) return tab.title
-  if (task.panes[tab.activePaneId]?.kind === 'chat') return 'Claude 대화'
+  const active = task.panes[tab.activePaneId]
+  if (active?.kind === 'chat') return `${AGENT_NAME[active.chat?.agent ?? 'claude']} 대화`
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd
   return cwd.slice(cwd.lastIndexOf('/') + 1)
@@ -343,32 +345,56 @@ export function markCommandSent(task: Task, paneId: Id): Task {
 
 // ─── 대화 pane (21단계) ─────────────────────────────────────
 
-function chatPane(id: Id, cwd: string): Pane {
-  return { id, cwd, kind: 'chat', chat: { agent: 'claude' } }
+function chatPane(id: Id, cwd: string, agent: ChatAgent = 'claude'): Pane {
+  return { id, cwd, kind: 'chat', chat: { agent } }
 }
 
-/** 새 탭에 대화 pane (⌘P '새 대화') */
-export function addChatTab(task: Task, newId: NewId): Task {
+/** 새 탭에 대화 pane (⌘P '새 대화 (Claude · Codex)') */
+export function addChatTab(task: Task, newId: NewId, agent: ChatAgent = 'claude'): Task {
   const tabId = newId()
   const paneId = newId()
   const tab: Tab = { id: tabId, layout: { type: 'pane', paneId }, activePaneId: paneId }
-  return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: chatPane(paneId, activePaneCwd(task)) } }
+  return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: chatPane(paneId, activePaneCwd(task), agent) } }
 }
 
 /** 지금 pane 옆에 대화 pane — 시험 출력과 같이 보게 */
-export function splitActivePaneChat(task: Task, dir: SplitDir, newId: NewId): Task {
+export function splitActivePaneChat(task: Task, dir: SplitDir, newId: NewId, agent: ChatAgent = 'claude'): Task {
   const next = splitActivePane(task, dir, newId)
   if (next === task) return task
   const tab = next.tabs.find((t) => t.id === next.activeTabId)!
   const id = tab.activePaneId
-  return { ...next, panes: { ...next.panes, [id]: chatPane(id, next.panes[id]!.cwd) } }
+  return { ...next, panes: { ...next.panes, [id]: chatPane(id, next.panes[id]!.cwd, agent) } }
 }
 
-/** 대화의 session_id 를 남긴다 — 재시작 뒤 다음 보내기가 --resume 으로 잇는다. 같으면 같은 객체 */
+/** 대화의 session_id(Codex thread id)를 남긴다 — 재시작 뒤 다음 보내기가 이어 한다. 갈라진 새 세션이 떴으면 forkAt 을 지운다. 같으면 같은 객체 */
 export function setChatSession(task: Task, paneId: Id, sessionId: string): Task {
   const p = task.panes[paneId]
-  if (!p || p.kind !== 'chat' || p.chat?.sessionId === sessionId) return task
-  return { ...task, panes: { ...task.panes, [paneId]: { ...p, chat: { agent: 'claude', sessionId } } } }
+  if (!p || p.kind !== 'chat' || (p.chat?.sessionId === sessionId && !p.chat.forkAt)) return task
+  return { ...task, panes: { ...task.panes, [paneId]: { ...p, chat: { agent: p.chat?.agent ?? 'claude', sessionId } } } }
+}
+
+/**
+ * 되감기 뒤 (22단계): 다음 보내기가 forkAt 에서 갈라진 세션으로 — 앱을 껐다 켜도 잃지 않게 상태에 남긴다.
+ * forkAt = null 이면 갈라질 앞 턴이 없다 → 세션을 지워 새로 시작.
+ */
+export function chatRewound(task: Task, paneId: Id, forkAt: string | null): Task {
+  const p = task.panes[paneId]
+  if (!p || p.kind !== 'chat') return task
+  const agent = p.chat?.agent ?? 'claude'
+  const chat = forkAt && p.chat?.sessionId ? { agent, sessionId: p.chat.sessionId, forkAt } : { agent }
+  return { ...task, panes: { ...task.panes, [paneId]: { ...p, chat } } }
+}
+
+/** 나누기 (22단계): 그 대화 pane 오른쪽에 같은 에이전트의 새 대화 pane — 다음 보내기가 forkAt 에서 갈라진다 */
+export function branchChat(task: Task, paneId: Id, newPaneId: Id, forkAt: string): Task {
+  const p = task.panes[paneId]
+  const tab = task.tabs.find((t) => hasPane(t.layout, paneId))
+  if (!p || p.kind !== 'chat' || !p.chat?.sessionId || !tab) return task
+  const focused: Task = { ...task, activeTabId: tab.id, tabs: task.tabs.map((t) => (t.id === tab.id ? { ...t, activePaneId: paneId } : t)) }
+  const next = splitActivePaneChat(focused, 'right', () => newPaneId, p.chat.agent)
+  if (next === focused) return task
+  const np = next.panes[newPaneId]!
+  return { ...next, panes: { ...next.panes, [newPaneId]: { ...np, chat: { agent: p.chat.agent, sessionId: p.chat.sessionId, forkAt } } } }
 }
 
 function swapPaneId(layout: Layout, from: Id, to: Id): Layout {
@@ -384,8 +410,8 @@ export function chatToTerminal(task: Task, paneId: Id, newId: NewId, bin = 'clau
   const p = task.panes[paneId]
   if (!p || p.kind !== 'chat') return null
   const id = newId()
-  const sid = p.chat?.sessionId
-  const command = sid ? `${bin} --resume ${sid}` : bin
+  const sid = p.chat?.forkAt ? undefined : p.chat?.sessionId // 아직 안 보낸 되감기 · 나누기면 옛 세션이 아니라 새로
+  const command = sid ? (p.chat?.agent === 'codex' ? `${bin} resume ${sid}` : `${bin} --resume ${sid}`) : bin
   const panes = { ...task.panes }
   delete panes[paneId]
   panes[id] = { id, cwd: p.cwd, pendingCommand: command }
@@ -676,7 +702,12 @@ function parsePane(id: Id, v: unknown, taskCwd: string): Pane | null {
   if (v.kind === 'chat') {
     pane.kind = 'chat'
     const c = isObj(v.chat) ? v.chat : {}
-    pane.chat = { agent: 'claude', ...(typeof c.sessionId === 'string' && /^[\w-]{1,100}$/.test(c.sessionId) ? { sessionId: c.sessionId } : {}) }
+    const okId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
+    pane.chat = {
+      agent: isChatAgent(c.agent) ? c.agent : 'claude',
+      ...(okId(c.sessionId) ? { sessionId: c.sessionId } : {}),
+      ...(okId(c.sessionId) && okId(c.forkAt) ? { forkAt: c.forkAt } : {}),
+    }
     delete pane.pendingCommand
     delete pane.pendingInsert
   }

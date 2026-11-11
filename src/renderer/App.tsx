@@ -66,6 +66,7 @@ const loadState = () =>
       runtime.cwdPollMs = info.cwdPollMs
       runtime.portPollMs = info.portPollMs
       runtime.claudeTui = info.claudeTui
+      runtime.codexTui = info.codexTui
       runtime.renderer = info.renderer
       runtime.crashedLast = info.crashedLast
       return window.taskminal.state.load()
@@ -1011,20 +1012,34 @@ export function App() {
     const s = stateRef.current
     return s.tasks.find((t) => t.id === findPaneTask(s, paneId))?.panes[paneId]?.kind === 'chat'
   }
-  /** ⇧⌘J — 같은 자리에 새 id 의 터미널 pane 을 두고 claude --resume. 대화 프로세스를 끝내고 화면 기록도 지운다(대화는 터미널이 같은 세션으로 잇는다 · 되돌리기 없음) */
+  const chatAgentOf = (paneId: string) => {
+    const s = stateRef.current
+    return s.tasks.find((t) => t.id === findPaneTask(s, paneId))?.panes[paneId]?.chat?.agent ?? 'claude'
+  }
+  /** ⇧⌘J — 같은 자리에 새 id 의 터미널 pane 을 두고 claude --resume · codex resume. 대화 프로세스를 끝내고 화면 기록도 지운다(대화는 터미널이 같은 세션으로 잇는다 · 되돌리기 없음) */
   const chatToTerminalPane = (paneId: string) => {
+    const bin = chatAgentOf(paneId) === 'codex' ? runtime.codexTui : runtime.claudeTui
     window.taskminal.chat.close(paneId, true)
-    dispatch({ type: 'chat/to-terminal', paneId, newPaneId: newId(), bin: runtime.claudeTui })
+    dispatch({ type: 'chat/to-terminal', paneId, newPaneId: newId(), bin })
     refocus()
   }
-  /** 로그인 띠 — 같은 폴더 새 탭에서 claude (사용자가 /login) */
+  /** 로그인 띠 — 같은 폴더 새 탭에서 claude(사용자가 /login) · codex login */
   const chatLogin = (paneId: string) => {
     const s = stateRef.current
     const task = s.tasks.find((t) => t.id === findPaneTask(s, paneId))
     const pane = task?.panes[paneId]
     if (!task || !pane) return
-    dispatch({ type: 'tab/add', taskId: task.id, tabId: newId(), paneId: newId(), spec: { cwd: pane.cwd, command: runtime.claudeTui } })
+    const command = pane.chat?.agent === 'codex' ? `${runtime.codexTui} login` : runtime.claudeTui
+    dispatch({ type: 'tab/add', taskId: task.id, tabId: newId(), paneId: newId(), spec: { cwd: pane.cwd, command } })
     refocus()
+  }
+  /** 나누기 (22단계) — main 이 그 턴까지의 기록을 새 pane 으로 쓴 뒤에 pane 을 만든다(마운트가 기록을 읽는다) */
+  const chatBranch = async (paneId: string, index: number, at: number) => {
+    const to = newId()
+    const r = await window.taskminal.chat.branch(paneId, to, index, at).catch(() => null)
+    if (!r) return showToast({ text: '여기서 나누지 못했어요.', sub: '그 사이 대화가 바뀌었거나 아직 끝나지 않은 턴이에요.' })
+    if (!isChatPane(paneId)) return // 기다리는 사이 pane 이 닫혔다
+    dispatch({ type: 'chat/branch', paneId, newPaneId: to, forkAt: r.forkAt })
   }
   const chatProps = {
     permission: state.settings.chatPermission,
@@ -1032,6 +1047,9 @@ export function App() {
     onSession: (paneId: string, sessionId: string) => dispatch({ type: 'chat/session', paneId, sessionId }),
     onToTerminal: chatToTerminalPane,
     onOpenLogin: chatLogin,
+    onRewound: (paneId: string, forkAt: string | null) => dispatch({ type: 'chat/rewound', paneId, forkAt }),
+    onBranch: (paneId: string, index: number, at: number) => void chatBranch(paneId, index, at),
+    onToast: (text: string, sub?: string) => showToast({ text, ...(sub ? { sub } : {}) }),
   }
 
   const closePane = (paneId: string, confirmed = false) => {
@@ -1129,12 +1147,18 @@ export function App() {
         setFilterSignal((n) => n + 1)
         return
       case 'chat-new':
-        dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId() })
+      case 'chat-new-codex': {
+        const agent = command === 'chat-new-codex' ? 'codex' : 'claude'
+        dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId(), agent })
         return refocus()
+      }
       case 'chat-split':
-        if (task.tabs.length === 0) dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId() })
-        else dispatch({ type: 'chat/split', taskId: task.id, paneId: newId() })
+      case 'chat-split-codex': {
+        const agent = command === 'chat-split-codex' ? 'codex' : 'claude'
+        if (task.tabs.length === 0) dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId(), agent })
+        else dispatch({ type: 'chat/split', taskId: task.id, paneId: newId(), agent })
         return refocus()
+      }
       case 'split-right':
       case 'split-down':
         dispatch({ type: 'pane/split', taskId: task.id, dir: command === 'split-right' ? 'right' : 'down', paneId: newId() })

@@ -9,7 +9,7 @@ import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { WorktreeResult } from '../shared/worktree'
-import type { TaskminalApi } from './api'
+import type { ChatApi as ChatApiT, TaskminalApi } from './api'
 
 // renderer 에 여는 유일한 통로. ipcRenderer 자체나 채널 이름을 받는 함수는 열지 않는다.
 // 이벤트 객체(sender 등)는 renderer 에 넘기지 않는다.
@@ -91,7 +91,10 @@ const api: TaskminalApi = {
     clear: () => ipcRenderer.invoke(IPC.historyClear) as Promise<void>,
   },
   chat: {
-    send: (paneId, text, cwd, sessionId) => ipcRenderer.invoke(IPC.chatSend, paneId, text, cwd, sessionId) as Promise<'ok' | 'busy' | 'missing'>,
+    send: (paneId, text, cwd, chat, images) => ipcRenderer.invoke(IPC.chatSend, paneId, text, cwd, chat, images) as Promise<'ok' | 'busy' | 'missing'>,
+    rewind: (paneId, index, at, chat) => ipcRenderer.invoke(IPC.chatRewind, paneId, index, at, chat) as ReturnType<ChatApiT['rewind']>,
+    branch: (from, to, index, at) => ipcRenderer.invoke(IPC.chatBranch, from, to, index, at) as Promise<{ forkAt: string } | null>,
+    pickImages: () => ipcRenderer.invoke(IPC.chatPickImages) as ReturnType<ChatApiT['pickImages']>,
     answer: (paneId, requestId, decision) => ipcRenderer.send(IPC.chatAnswer, paneId, requestId, decision),
     interrupt: (paneId) => ipcRenderer.send(IPC.chatInterrupt, paneId),
     history: (paneId) => ipcRenderer.invoke(IPC.chatHistory, paneId) as Promise<{ events: ChatEvent[]; upTo: number }>,

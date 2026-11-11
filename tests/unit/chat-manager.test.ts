@@ -23,11 +23,18 @@ function setup(found = true, saved: ChatEvent[] = []) {
   const stored: ChatEvent[] = []
   const children: FakeChild[] = []
   const envs: Record<string, string>[] = []
+  const replaced: { p: string; ev: ChatEvent[] }[] = []
   let release: () => void = () => {}
   const gate = new Promise<void>((r) => (release = r))
   const sink: Sink = { send: (...a) => sent.push(a), isDestroyed: () => false }
   const m = new ChatManager({
-    store: { append: async (_p, ev) => void stored.push(...ev), read: async () => [...saved], remove: async () => void stored.splice(0) },
+    store: {
+      append: async (_p, ev) => void stored.push(...ev),
+      read: async () => [...saved],
+      remove: async () => void stored.splice(0),
+      replace: async (p, ev) => void replaced.push({ p, ev: [...ev] }),
+      saveImage: async () => '/img',
+    },
     redactOptions: () => ({}),
     spawn: (_b, _a, o) => {
       envs.push(o.env)
@@ -43,14 +50,14 @@ function setup(found = true, saved: ChatEvent[] = []) {
     channel: 'chat:event',
     now: () => 7,
   })
-  return { m, sink, sent, stored, children, envs, release }
+  return { m, sink, sent, stored, children, envs, release, replaced }
 }
 
 describe('ChatManager', () => {
   it('사용자 글은 claude 로는 원문, 창 · 디스크로는 가린 사본', async () => {
     const t = setup()
     t.release()
-    expect(await t.m.send(t.sink, 'p1', `키 ${KEY}`, '/tmp', undefined)).toBe('ok')
+    expect(await t.m.send(t.sink, 'p1', `키 ${KEY}`, '/tmp', { agent: 'claude' })).toBe('ok')
     expect(t.children[0]!.written.join('')).toContain(KEY)
     expect(JSON.stringify(t.sent)).not.toContain(KEY)
     expect(t.sent[0]).toEqual(['chat:event', 'p1', { t: 'user', text: expect.stringContaining('‹가림'), at: 7 }, 1])
@@ -59,23 +66,23 @@ describe('ChatManager', () => {
   })
   it('실행 파일을 찾는 사이 두 번째 보내기는 busy', async () => {
     const t = setup()
-    const first = t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)
-    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', undefined)).toBe('busy')
+    const first = t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
+    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', { agent: 'claude' })).toBe('busy')
     t.release()
     expect(await first).toBe('ok')
-    expect(await t.m.send(t.sink, 'p1', 'c', '/tmp', undefined)).toBe('busy') // 턴이 열려 있다
+    expect(await t.m.send(t.sink, 'p1', 'c', '/tmp', { agent: 'claude' })).toBe('busy') // 턴이 열려 있다
   })
   it('claude 가 없으면 missing 오류 이벤트, 다음 보내기가 다시 찾는다', async () => {
     const t = setup(false)
     t.release()
-    expect(await t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)).toBe('missing')
+    expect(await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })).toBe('missing')
     expect(t.sent.map((s) => (s[2] as ChatEvent).t)).toEqual(['user', 'error'])
     expect(t.m.size).toBe(0)
   })
   it('창이 닫히면 그 창의 대화를 끝낸다', async () => {
     const t = setup()
     t.release()
-    await t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
     t.m.closeSink(t.sink)
     expect(t.m.size).toBe(0)
   })
@@ -84,7 +91,7 @@ describe('ChatManager', () => {
 describe('ChatManager — 리뷰 반영', () => {
   it('실행 파일을 찾는 사이 pane 을 닫으면 띄우지 않는다', async () => {
     const t = setup()
-    const p = t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)
+    const p = t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
     t.m.close('p1', true)
     t.release()
     expect(await p).toBe('busy')
@@ -94,7 +101,7 @@ describe('ChatManager — 리뷰 반영', () => {
   it('닫은(지운) 뒤 늦게 온 exit 는 대화 파일을 다시 만들지 않는다', async () => {
     const t = setup()
     t.release()
-    await t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
     t.m.close('p1', true)
     t.children[0]!.emit('exit', null, 'SIGTERM')
     expect(t.stored).toEqual([])
@@ -102,14 +109,14 @@ describe('ChatManager — 리뷰 반영', () => {
   it('stdin 에 못 쓰면 사용자 글을 기록하지 않는다(턴이 열린 채 남지 않게)', async () => {
     const t = setup()
     t.release()
-    await t.m.send(t.sink, 'p1', 'a', '/tmp', undefined)
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
     t.children[0]!.stdout.emit('data', JSON.stringify({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1 }) + '\n')
     t.children[0]!.ok = false
     t.children[0]!.stdin.write = () => {
       throw new Error('destroyed')
     }
     const before = t.stored.length
-    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', undefined)).toBe('busy')
+    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', { agent: 'claude' })).toBe('busy')
     expect(t.stored.length).toBe(before)
   })
   it('앱이 턴 도중 끝나 열린 턴이 남은 기록은 다시 그릴 때 멈춤으로 닫는다', async () => {
@@ -124,7 +131,67 @@ describe('ChatManager — 리뷰 반영', () => {
   })
 })
 
+describe('ChatManager — 되감기 · 나누기 (22단계)', () => {
+  const saved: ChatEvent[] = [
+    { t: 'session', id: 's1' },
+    { t: 'user', text: '하나', at: 1 },
+    { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u1' },
+    { t: 'user', text: '둘', at: 2 },
+    { t: 'text', text: '답' },
+    { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u2' },
+  ]
+  it('되감기: 그 메시지 앞까지 잘라 쓰고 앞 턴 anchor · 되감은 글', async () => {
+    const t = setup(true, saved)
+    const r = await t.m.rewind('p1', 3, 2, { agent: 'claude', sessionId: 's1' })
+    expect(r).toMatchObject({ forkAt: 'u1', refill: '둘', masked: false })
+    expect(r!.events).toHaveLength(3)
+    expect(t.replaced).toEqual([{ p: 'p1', ev: saved.slice(0, 3) }])
+  })
+  it('확인 띠가 열린 사이 기록이 바뀌었으면(자리 · 시각이 다르면) 버린다', async () => {
+    const t = setup(true, saved)
+    expect(await t.m.rewind('p1', 3, 99, { agent: 'claude' })).toBeNull()
+    expect(await t.m.rewind('p1', 4, 2, { agent: 'claude' })).toBeNull()
+    expect(t.replaced).toEqual([])
+  })
+  it('도는 중에는 되감지 않는다', async () => {
+    const t = setup(true, saved)
+    t.release()
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
+    expect(await t.m.rewind('p1', 3, 2, { agent: 'claude' })).toBeNull()
+  })
+  it('나누기: 그 턴 끝까지를 새 pane 기록으로 · 그 턴 anchor', async () => {
+    const t = setup(true, saved)
+    expect(await t.m.branch('p1', 'p2', 1, 1)).toEqual({ forkAt: 'u1' })
+    expect(t.replaced).toEqual([{ p: 'p2', ev: saved.slice(0, 3) }])
+    expect(await t.m.branch('p1', 'p3', 1, 5)).toBeNull()
+  })
+  it('codex 대화는 codex 실행 파일을 찾아 app-server 로 띄운다', async () => {
+    const t = setup()
+    const asked: string[] = []
+    const m = new ChatManager({
+      store: { append: async () => {}, read: async () => [], remove: async () => {}, replace: async () => {}, saveImage: async () => '/img' },
+      redactOptions: () => ({}),
+      spawn: (bin, args) => {
+        asked.push(bin, ...args)
+        return new FakeChild()
+      },
+      findBin: async (agent) => ({ bin: `/x/${agent}`, path: '' }),
+      permission: () => 'ask',
+      channel: 'chat:event',
+    })
+    expect(await m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'codex' })).toBe('ok')
+    expect(asked).toEqual(['/x/codex', 'app-server'])
+  })
+})
+
 describe('AgentBinFinder', () => {
+  it('codex: TASKMINAL_CODEX_BIN 가짜 · 로그인 셸에서 command -v codex', async () => {
+    expect(await new AgentBinFinder({ TASKMINAL_CODEX_BIN: '/fake-codex', PATH: '/p' }, async () => '').codex()).toEqual({ bin: '/fake-codex', path: '/p' })
+    const cmds: string[] = []
+    const f = new AgentBinFinder({ SHELL: '/bin/zsh' }, async (_f, args) => (cmds.push(args[1]!), '/opt/bin/codex\n__TASKMINAL_PATH__/p'))
+    expect(await f.codex()).toEqual({ bin: '/opt/bin/codex', path: '/p' })
+    expect(cmds[0]).toMatch(/^command -v codex;/)
+  })
   it('가짜(TASKMINAL_CLAUDE_BIN)가 먼저', async () => {
     expect(await new AgentBinFinder({ TASKMINAL_CLAUDE_BIN: '/fake', PATH: '/p' }, async () => '').claude()).toEqual({ bin: '/fake', path: '/p' })
   })

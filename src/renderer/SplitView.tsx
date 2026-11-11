@@ -46,6 +46,9 @@ interface Props {
     onSession(paneId: Id, sessionId: string): void
     onToTerminal(paneId: Id): void
     onOpenLogin(paneId: Id): void
+    onRewound(paneId: Id, forkAt: string | null): void
+    onBranch(paneId: Id, index: number, at: number): void
+    onToast(text: string, sub?: string): void
   }
 }
 
@@ -148,7 +151,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
               <ChatPane
                 paneId={pane.id}
                 cwd={pane.cwd}
-                sessionId={pane.chat?.sessionId}
+                chat={pane.chat ?? { agent: 'claude' }}
                 active={visible && focused}
                 visible={visible}
                 focusSignal={focusSignal}
@@ -157,6 +160,9 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onSession={(id) => chat.onSession(pane.id, id)}
                 onToTerminal={() => chat.onToTerminal(pane.id)}
                 onOpenLogin={() => chat.onOpenLogin(pane.id)}
+                onRewound={(forkAt) => chat.onRewound(pane.id, forkAt)}
+                onBranch={(index, at) => chat.onBranch(pane.id, index, at)}
+                onToast={chat.onToast}
                 onActivity={(ev) => onActivity(pane.id, ev)}
               />
             )}

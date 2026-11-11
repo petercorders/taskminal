@@ -2,9 +2,12 @@
 // Claude 모양은 2026-11-11 스파이크(claude 2.1.322, stream-json + --permission-prompt-tool stdio)로 확인했다 — tests/fixtures/claude/*.jsonl
 import { isDangerous } from './danger'
 import { isObj, type Obj } from './guards'
+import { hasMask } from './history'
 import { redact, type SecretOptions } from './redact'
 
-export type ChatAgent = 'claude'
+export type ChatAgent = 'claude' | 'codex'
+export const isChatAgent = (v: unknown): v is ChatAgent => v === 'claude' || v === 'codex'
+export const AGENT_NAME: Record<ChatAgent, string> = { claude: 'Claude', codex: 'Codex' }
 /** 허락 방식 — 처음은 'ask'(매번 묻기). 앱 설정에 저장돼 새 대화 · 재시작 뒤에도 유지 */
 export type ChatPermission = 'ask' | 'edits' | 'auto'
 export const CHAT_PERMISSIONS: ReadonlyArray<{ id: ChatPermission; name: string; mode: string }> = [
@@ -21,13 +24,15 @@ export interface ChatQuestion {
   options: { label: string; description: string }[]
 }
 
-/** 허락 · 질문 답 (renderer → main) */
-export type ChatDecision = { how: 'allow' | 'always' | 'deny'; message?: string } | { how: 'answer'; answers: Record<string, string> }
+/** 허락 · 질문 답 (renderer → main). 여러 개 고르기(multi) 질문의 답은 고른 label 배열 */
+export type ChatDecision = { how: 'allow' | 'always' | 'deny'; message?: string } | { how: 'answer'; answers: Record<string, string | string[]> }
+const isAnswerValue = (x: unknown): boolean =>
+  (typeof x === 'string' && x.length <= 20000) || (Array.isArray(x) && x.length <= 20 && x.every((s) => typeof s === 'string' && s.length <= 2000))
 export function isChatDecision(v: unknown): v is ChatDecision {
   if (!isObj(v)) return false
   if (v['how'] === 'answer') {
     const a = v['answers']
-    return isObj(a) && Object.keys(a).length <= 20 && Object.entries(a).every(([k, x]) => k.length <= 2000 && typeof x === 'string' && x.length <= 20000)
+    return isObj(a) && Object.keys(a).length <= 20 && Object.entries(a).every(([k, x]) => k.length <= 2000 && isAnswerValue(x))
   }
   if (v['how'] !== 'allow' && v['how'] !== 'always' && v['how'] !== 'deny') return false
   return v['message'] === undefined || (typeof v['message'] === 'string' && v['message'].length <= 20000)
@@ -38,7 +43,8 @@ export type AnswerHow = 'allow' | 'always' | 'deny' | 'answer' | 'lost'
 
 /** 에이전트가 무엇이든 화면 · 디스크는 이 모양만 안다 */
 export type ChatEvent =
-  | { t: 'user'; text: string; at: number }
+  /** images: 붙인 그림의 이름(가린 것) — 그림 자체는 기록하지 않는다 */
+  | { t: 'user'; text: string; at: number; images?: string[] }
   | { t: 'session'; id: string; model?: string }
   | { t: 'text'; text: string }
   | { t: 'tool'; id: string; name: string; summary: string }
@@ -46,7 +52,8 @@ export type ChatEvent =
   | { t: 'permission'; id: string; tool: string; summary: string; why: string; danger: boolean }
   | { t: 'question'; id: string; questions: ChatQuestion[] }
   | { t: 'answered'; id: string; how: AnswerHow }
-  | { t: 'turn_end'; ok: boolean; ms: number; reason: string; ctxPct?: number }
+  /** anchor: 이 턴 끝에서 갈라질 자리 — Claude 는 마지막 assistant 줄의 uuid, Codex 는 turn id (22단계 되감기 · 나누기) */
+  | { t: 'turn_end'; ok: boolean; ms: number; reason: string; ctxPct?: number; anchor?: string }
   | { t: 'stopped' }
   | { t: 'error'; kind: ErrorKind; message: string; code?: number; resetsAt?: number }
 
@@ -225,7 +232,12 @@ export function permissionMode(p: ChatPermission): string {
   return chatPermissionArgs(p)[1]!
 }
 
-export function claudeArgs(p: ChatPermission, sessionId?: string): string[] {
+/**
+ * forkAt: 되감기 · 나누기 뒤 첫 띄우기 — 그 assistant 줄(uuid)까지만 남긴 새 세션으로 가른다.
+ * `--resume-session-at` 은 `--help` 에 없는 옵션이다(2026-11-11 스파이크 claude 2.1.322 에서 확인) — CLI 가 바꾸면 깨질 수 있다.
+ */
+export function claudeArgs(p: ChatPermission, sessionId?: string, forkAt?: string): string[] {
+  const fork = sessionId && forkAt ? ['--fork-session', '--resume-session-at', forkAt] : []
   return [
     '-p',
     '--input-format',
@@ -237,6 +249,7 @@ export function claudeArgs(p: ChatPermission, sessionId?: string): string[] {
     'stdio',
     ...chatPermissionArgs(p),
     ...(sessionId ? ['--resume', sessionId] : []),
+    ...fork,
   ]
 }
 
@@ -245,6 +258,7 @@ export function redactEvent(ev: ChatEvent, opts: SecretOptions = {}): ChatEvent 
   const r = (s: string) => redact(s, opts)
   switch (ev.t) {
     case 'user':
+      return { ...ev, text: r(ev.text), ...(ev.images ? { images: ev.images.map(r) } : {}) }
     case 'text':
       return { ...ev, text: r(ev.text) }
     case 'tool':
@@ -272,7 +286,8 @@ export interface ToolItem {
   tail: string
 }
 export type ChatBlock =
-  | { kind: 'user'; key: string; text: string }
+  /** index: 이벤트 목록 안 자리 · at: 보낸 시각 — 되감기 · 나누기가 main 에 자리를 알리고 main 이 같은 메시지인지 다시 본다 */
+  | { kind: 'user'; key: string; text: string; images: string[]; index: number; at: number }
   | { kind: 'text'; key: string; text: string }
   | { kind: 'tools'; key: string; items: ToolItem[] }
   | { kind: 'permission'; key: string; id: string; tool: string; summary: string; why: string; danger: boolean; answer: AnswerHow | null }
@@ -295,7 +310,7 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
     switch (ev.t) {
       case 'user':
         turnHadError = false
-        out.push({ kind: 'user', key, text: ev.text })
+        out.push({ kind: 'user', key, text: ev.text, images: ev.images ?? [], index: i, at: ev.at })
         break
       case 'text':
         out.push({ kind: 'text', key, text: ev.text })
@@ -406,9 +421,197 @@ export function chatStatus(events: readonly ChatEvent[]): ChatStatus {
   return last
 }
 
-/** 가짜 · 진짜 에이전트에 보낼 사용자 글 한 줄 */
-export function claudeUserLine(text: string): string {
-  return JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } })
+/** 붙인 그림 (renderer → main · 메모리에만). data 는 base64 */
+export interface ChatImage {
+  name: string
+  mime: string
+  data: string
+}
+export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
+export const IMAGE_MAX_BYTES = 5 * 1024 * 1024
+export const IMAGE_MAX_COUNT = 4
+/** base64 길이로 잰 크기 */
+export const imageBytes = (data: string): number => Math.floor((data.length * 3) / 4)
+export function isChatImages(v: unknown): v is ChatImage[] {
+  return (
+    Array.isArray(v) &&
+    v.length <= IMAGE_MAX_COUNT &&
+    v.every(
+      (x) =>
+        isObj(x) &&
+        typeof x['name'] === 'string' &&
+        x['name'].length <= 200 &&
+        (IMAGE_MIMES as readonly string[]).includes(x['mime'] as string) &&
+        typeof x['data'] === 'string' &&
+        /^[A-Za-z0-9+/]*={0,2}$/.test(x['data']) &&
+        imageBytes(x['data']) <= IMAGE_MAX_BYTES,
+    )
+  )
+}
+export const IMAGE_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+
+/** 가짜 · 진짜 에이전트에 보낼 사용자 글 한 줄 — 그림은 base64 image 블록(스파이크에서 확인) */
+export function claudeUserLine(text: string, images: readonly ChatImage[] = []): string {
+  const content: Obj[] = [{ type: 'text', text }]
+  for (const im of images) content.push({ type: 'image', source: { type: 'base64', media_type: im.mime, data: im.data } })
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } })
+}
+
+// ─── Codex app-server (22단계) ─────────────────────────────
+// 모양은 codex-cli 0.167.1 `codex app-server generate-ts` 타입 + 로그인 없이 돌린 실제 줄(tests/fixtures/codex/*.jsonl).
+// 글 · 명령 · 승인 · 질문의 실제 줄은 로그인이 필요해 미확인 — 타입 모양 그대로 받는다.
+
+/** 허락 방식 → 턴마다 보내는 approvalPolicy · sandbox. 사용자 ~/.codex/config.toml 은 건드리지 않는다 */
+export function codexPolicy(p: ChatPermission): { approvalPolicy: string; sandbox: string } {
+  const approvalPolicy = p === 'auto' ? 'never' : p === 'edits' ? 'on-request' : 'untrusted'
+  return { approvalPolicy, sandbox: 'workspace-write' }
+}
+
+function codexItemTool(item: Obj, cwd: string): { name: string; summary: string } | null {
+  switch (item['type']) {
+    case 'commandExecution':
+      return { name: 'Bash', summary: clip(str(item['command']), 300) }
+    case 'fileChange': {
+      const ch = Array.isArray(item['changes']) ? item['changes'].filter(isObj) : []
+      return { name: 'Edit', summary: clip(ch.map((c) => rel(cwd, str(c['path']))).join(', '), 300) }
+    }
+    case 'mcpToolCall':
+      return { name: `${str(item['server'])}.${str(item['tool'])}`, summary: '' }
+    case 'webSearch':
+      return { name: 'WebSearch', summary: clip(str(item['query']), 300) }
+    default:
+      return null
+  }
+}
+
+function codexError(err: unknown): { kind: ErrorKind; message: string } | null {
+  if (!isObj(err)) return null
+  const info = JSON.stringify(err['codexErrorInfo'] ?? '')
+  const message = clip(str(err['message']), 300)
+  if (/"httpStatusCode":401/.test(info) || /\b401\b|unauthori[sz]ed/i.test(message)) return { kind: 'login', message }
+  if (/usageLimit|rateLimit/i.test(info) || /usage limit/i.test(message)) return { kind: 'limit', message }
+  return null
+}
+
+/** 서버 알림 → 이벤트. extra.ctxPct: 어댑터가 tokenUsage 알림에서 잰 대화 창 % */
+export function codexNoteToEvents(method: string, params: unknown, cwd: string, extra: { ctxPct?: number } = {}): ChatEvent[] {
+  if (!isObj(params)) return []
+  if (method === 'item/started' || method === 'item/completed') {
+    const item = params['item']
+    if (!isObj(item) || typeof item['id'] !== 'string') return []
+    if (method === 'item/completed' && item['type'] === 'agentMessage') {
+      const text = str(item['text'])
+      return text.trim() ? [{ t: 'text', text }] : []
+    }
+    const tool = codexItemTool(item, cwd)
+    if (!tool) return []
+    if (method === 'item/started') return [{ t: 'tool', id: item['id'], ...tool }]
+    const status = str(item['status'])
+    const code = item['exitCode']
+    const ok = status === 'completed' && (typeof code !== 'number' || code === 0)
+    const tail = item['type'] === 'commandExecution' ? tailOf(str(item['aggregatedOutput'])) : ''
+    return [{ t: 'tool_end', id: item['id'], ok, tail }]
+  }
+  if (method === 'turn/completed' && isObj(params['turn'])) {
+    const turn = params['turn']
+    const status = str(turn['status'])
+    if (status === 'interrupted') return [{ t: 'stopped' }]
+    const ms = typeof turn['durationMs'] === 'number' ? turn['durationMs'] : 0
+    const anchor = typeof turn['id'] === 'string' ? { anchor: turn['id'] } : {}
+    const pct = extra.ctxPct !== undefined ? { ctxPct: extra.ctxPct } : {}
+    if (status === 'completed') return [{ t: 'turn_end', ok: true, ms, reason: 'completed', ...anchor, ...pct }]
+    const known = codexError(turn['error'])
+    const reason = isObj(turn['error']) ? clip(str(turn['error']['message']), 200) : status
+    return [...(known ? [{ t: 'error' as const, ...known }] : []), { t: 'turn_end', ok: false, ms, reason, ...anchor, ...pct }]
+  }
+  return []
+}
+
+/** 대화 창 % — tokenUsage 알림의 마지막 요청 입력 + 출력 / 모델 창 */
+export function codexCtxPercent(params: unknown): number | undefined {
+  if (!isObj(params) || !isObj(params['tokenUsage'])) return undefined
+  const u = params['tokenUsage']
+  const win = typeof u['modelContextWindow'] === 'number' ? u['modelContextWindow'] : 0
+  const last = isObj(u['last']) ? u['last'] : null
+  if (!win || !last) return undefined
+  const n = (k: string) => (typeof last[k] === 'number' ? (last[k] as number) : 0)
+  return Math.min(100, Math.round(((n('inputTokens') + n('outputTokens')) / win) * 100))
+}
+
+/** 서버가 앱에 묻는 요청(승인 · 질문) → 카드 이벤트. id 는 JSON-RPC 요청 번호(글) */
+export function codexRequestToEvents(method: string, rpcId: number | string, params: unknown, cwd: string): ChatEvent[] {
+  const p: Obj = isObj(params) ? params : {}
+  const id = String(rpcId)
+  if (method === 'item/commandExecution/requestApproval') {
+    const command = str(p['command'])
+    const where = str(p['cwd'])
+    const danger = isDangerousTool('Bash', { command }, cwd) || (where.startsWith('/') && !inside(cwd, where))
+    return [{ t: 'permission', id, tool: 'Bash', summary: clip(command || '명령 실행', 300), why: clip(str(p['reason']), 200), danger }]
+  }
+  if (method === 'item/fileChange/requestApproval') {
+    const root = str(p['grantRoot'])
+    const summary = root ? `${rel(cwd, root)} 에 쓰기` : str(p['reason']) || '파일 바꾸기'
+    return [{ t: 'permission', id, tool: 'Edit', summary: clip(summary, 300), why: root ? clip(str(p['reason']), 200) : '', danger: root.startsWith('/') && !inside(cwd, root) }]
+  }
+  if (method === 'item/tool/requestUserInput') {
+    const qs = Array.isArray(p['questions']) ? p['questions'].filter(isObj) : []
+    return [
+      {
+        t: 'question',
+        id,
+        questions: qs.map((q) => ({
+          question: str(q['question']),
+          header: str(q['header']),
+          multi: false,
+          options: (Array.isArray(q['options']) ? q['options'] : []).filter(isObj).map((op) => ({ label: str(op['label']), description: str(op['description']) })),
+        })),
+      },
+    ]
+  }
+  return []
+}
+
+// ─── 되감기 · 나누기 (22단계) ──────────────────────────────
+
+export interface RewindPlan {
+  /** 기록에서 남길 앞쪽 이벤트 수 */
+  keep: number
+  /** 갈라질 자리(턴 끝 anchor). null = 갈라질 앞 턴이 없다 → 새 세션 */
+  forkAt: string | null
+  /** 되감기: 입력창에 다시 넣을 글. 가린 글이면 null + masked */
+  refill: string | null
+  /** 사라질 메시지 수 (내 글 + 답 글) */
+  removed: number
+  masked?: true
+}
+
+/**
+ * 되감기(rewind): 그 메시지 앞까지 남기고, 앞 턴 끝에서 가른다 — 되감은 글은 입력창에.
+ * 나누기(branch): 그 메시지의 턴 끝까지 남기고, 그 턴 끝에서 가른다 — 턴이 아직 안 끝났으면 null.
+ * index 자리가 사용자 메시지가 아니면 null.
+ */
+export function rewindPlan(events: readonly ChatEvent[], index: number, mode: 'rewind' | 'branch'): RewindPlan | null {
+  const target = events[index]
+  if (!target || target.t !== 'user') return null
+  if (mode === 'branch') {
+    for (let i = index + 1; i < events.length; i++) {
+      const e = events[i]!
+      if (e.t === 'user') return null
+      if (e.t === 'turn_end') return e.anchor ? { keep: i + 1, forkAt: e.anchor, refill: null, removed: 0 } : null
+    }
+    return null
+  }
+  let forkAt: string | null = null
+  for (let i = index - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.t === 'turn_end' && e.anchor) {
+      forkAt = e.anchor
+      break
+    }
+  }
+  const removed = events.slice(index).filter((e) => e.t === 'user' || e.t === 'text').length
+  if (hasMask(target.text)) return { keep: index, forkAt, refill: null, removed, masked: true }
+  return { keep: index, forkAt, refill: target.text, removed }
 }
 export function claudeControlLine(requestId: string, request: Obj): string {
   return JSON.stringify({ type: 'control_request', request_id: requestId, request })

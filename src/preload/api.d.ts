@@ -108,10 +108,28 @@ export interface PortsApi {
   kill(paneId: string, port: number, pid: number): Promise<'killed' | 'gone' | 'failed'>
 }
 
-/** 대화 pane (21단계) — main 이 claude 프로세스를 띄우고 이벤트를 가려서 보낸다 */
+/** pane 의 대화 정보 — 에이전트 · 세션 · 아직 안 보낸 갈라질 자리 (22단계) */
+export interface ChatRefT {
+  agent: import('../shared/chat').ChatAgent
+  sessionId?: string
+  forkAt?: string
+}
+
+/** 대화 pane (21 · 22단계) — main 이 claude · codex 프로세스를 띄우고 이벤트를 가려서 보낸다 */
 export interface ChatApi {
-  /** 새 턴. 실행 중이면 'busy'(보내지 않음), claude 가 없으면 'missing' */
-  send(paneId: string, text: string, cwd: string, sessionId: string | undefined): Promise<'ok' | 'busy' | 'missing'>
+  /** 새 턴. 실행 중이면 'busy'(보내지 않음), 실행 파일이 없으면 'missing'. images 는 붙인 그림(메모리에만) */
+  send(paneId: string, text: string, cwd: string, chat: ChatRefT, images?: import('../shared/chat').ChatImage[]): Promise<'ok' | 'busy' | 'missing'>
+  /** 되감기 (22단계) — 그 메시지 앞까지. 자리가 바뀌었거나 도는 중이면 null */
+  rewind(
+    paneId: string,
+    index: number,
+    at: number,
+    chat: ChatRefT,
+  ): Promise<{ events: import('../shared/chat').ChatEvent[]; upTo: number; forkAt: string | null; refill: string | null; masked: boolean } | null>
+  /** 나누기 (22단계) — 그 메시지의 턴까지를 새 pane 기록으로 */
+  branch(fromPaneId: string, toPaneId: string, index: number, at: number): Promise<{ forkAt: string } | null>
+  /** 📎 그림 고르기 — main 이 읽어 돌려준다. 크기 · 종류가 맞지 않으면 skipped */
+  pickImages(): Promise<{ images: import('../shared/chat').ChatImage[]; skipped: string[] }>
   /** 허락 · 질문 답 — 같은 요청에 두 번이면 main 이 버린다 */
   answer(paneId: string, requestId: string, decision: import('../shared/chat').ChatDecision): void
   interrupt(paneId: string): void

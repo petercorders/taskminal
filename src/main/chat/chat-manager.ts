@@ -1,10 +1,12 @@
 // 대화 pane 들의 주인 (main) — paneId 마다 Claude 프로세스 하나. 이벤트를 가려서 창 · 디스크로 보낸다.
 import { homedir } from 'node:os'
-import { chatStatus, redactEvent, type ChatEvent, type ChatPermission } from '../../shared/chat'
+import { chatStatus, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
 import type { AgentBin } from './find-bin'
 import { ClaudeSession, type Decision, type SpawnFn } from './claude-adapter'
+import { CodexSession } from './codex-adapter'
+import type { AgentSession } from './session'
 import type { ChatStore } from './chat-store'
 
 export interface Sink {
@@ -13,19 +15,37 @@ export interface Sink {
 }
 
 export interface ChatManagerDeps {
-  store: Pick<ChatStore, 'append' | 'read' | 'remove'>
+  store: Pick<ChatStore, 'append' | 'read' | 'remove' | 'replace' | 'saveImage'>
   redactOptions(): SecretOptions
   spawn: SpawnFn
-  findBin(): Promise<AgentBin | null>
+  findBin(agent: ChatAgent): Promise<AgentBin | null>
   permission(): ChatPermission
   channel: string
   now?: () => number
+  appVersion?: string
+}
+
+/** pane 의 대화 정보 (상태 파일의 Pane.chat) */
+export interface ChatRef {
+  agent: ChatAgent
+  sessionId?: string
+  /** 되감기 · 나누기 뒤 아직 보내지 않았다 — 다음 띄울 때 여기서 가른다 */
+  forkAt?: string
+}
+
+export interface RewindResult {
+  events: ChatEvent[]
+  upTo: number
+  forkAt: string | null
+  refill: string | null
+  masked: boolean
 }
 
 export type SendResult = 'ok' | 'busy' | 'missing'
 
 interface Entry {
-  s: ClaudeSession
+  s: AgentSession
+  agent: ChatAgent
   sink: Sink
   /** close 뒤 — 늦게 오는 exit 의 '멈춤' 등을 기록하지 않는다(지운 대화 파일을 다시 만들지 않게) */
   closed?: boolean
@@ -65,48 +85,83 @@ export class ChatManager {
     if (!sink.isDestroyed()) sink.send(this.d.channel, paneId, redactEvent(ev, this.d.redactOptions()), n)
   }
 
-  async send(sink: Sink, paneId: string, text: string, cwd: string, sessionId: string | undefined): Promise<SendResult> {
+  async send(sink: Sink, paneId: string, text: string, cwd: string, chat: ChatRef, images: readonly ChatImage[] = []): Promise<SendResult> {
     const have = this.panes.get(paneId)
     if (this.starting.has(paneId) || have?.s.busy) return 'busy'
     const now = this.d.now ?? Date.now
+    const user: ChatEvent = { t: 'user', text, at: now(), ...(images.length ? { images: images.map((i) => i.name) } : {}) }
     // 사용자 글은 실제로 보낸 뒤 기록한다 — 못 보냈는데 기록하면 턴이 열린 채 남아 다시 보낼 수 없다.
-    // claude 의 응답은 stdout 으로 늦게 오므로 이 순서여도 사용자 글이 먼저 기록된다.
+    // 에이전트의 응답은 stdout 으로 늦게 오므로 이 순서여도 사용자 글이 먼저 기록된다.
     if (have) {
       have.sink = sink
-      if (!have.s.send(text)) return 'busy'
-      this.emit(paneId, sink, { t: 'user', text, at: now() })
+      if (!have.s.send(text, images)) return 'busy'
+      this.emit(paneId, sink, user)
       return 'ok'
     }
     this.starting.add(paneId)
     this.cancelled.delete(paneId)
     try {
-      const found = await this.d.findBin()
+      const found = await this.d.findBin(chat.agent)
       if (this.cancelled.delete(paneId)) return 'busy' // 찾는 사이 pane 이 닫혔다
       if (!found) {
-        this.emit(paneId, sink, { t: 'user', text, at: now() })
-        this.emit(paneId, sink, { t: 'error', kind: 'missing', message: 'claude 명령을 찾지 못했어요' })
+        this.emit(paneId, sink, user)
+        this.emit(paneId, sink, { t: 'error', kind: 'missing', message: `${chat.agent} 명령을 찾지 못했어요` })
         return 'missing'
       }
-      const entry: Entry = { sink, s: null as unknown as ClaudeSession }
-      entry.s = new ClaudeSession({
+      const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
+      const common = {
         bin: found.bin,
         env: agentEnv(process.env, found.path),
         cwd: expandHome(cwd),
         permission: this.d.permission(),
-        ...(sessionId ? { sessionId } : {}),
+        ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),
+        ...(chat.sessionId && chat.forkAt ? { forkAt: chat.forkAt } : {}),
         spawn: this.d.spawn,
-        onEvent: (ev) => {
+        onEvent: (ev: ChatEvent) => {
           if (!entry.closed) this.emit(paneId, entry.sink, ev)
         },
         onExit: () => {},
-      })
+      }
+      entry.s =
+        chat.agent === 'codex'
+          ? new CodexSession({ ...common, saveImage: (img, n) => this.d.store.saveImage(paneId, img, n), ...(this.d.appVersion ? { clientVersion: this.d.appVersion } : {}) })
+          : new ClaudeSession(common)
       this.panes.set(paneId, entry)
-      if (!entry.s.send(text)) return 'busy'
-      this.emit(paneId, sink, { t: 'user', text, at: now() })
+      if (!entry.s.send(text, images)) return 'busy'
+      this.emit(paneId, sink, user)
       return 'ok'
     } finally {
       this.starting.delete(paneId)
     }
+  }
+
+  /**
+   * 되감기 (22단계): 그 메시지 앞까지 기록을 잘라 쓰고, 다음 보내기가 앞 턴 끝에서 갈라진 세션으로 가게 한다.
+   * index · at 으로 같은 메시지인지 다시 본다 — 확인 띠가 열린 사이 기록이 바뀌었으면 null(버림). 도는 중이면 null.
+   */
+  async rewind(paneId: string, index: number, at: number, chat: ChatRef): Promise<RewindResult | null> {
+    const e = this.panes.get(paneId)
+    if (this.starting.has(paneId) || e?.s.busy) return null
+    const events = await this.d.store.read(paneId)
+    const target = events[index]
+    if (!target || target.t !== 'user' || target.at !== at) return null
+    const plan = rewindPlan(events, index, 'rewind')
+    if (!plan) return null
+    const kept = events.slice(0, plan.keep)
+    await this.d.store.replace(paneId, kept)
+    e?.s.fork(chat.sessionId, plan.forkAt)
+    return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, refill: plan.refill, masked: plan.masked === true }
+  }
+
+  /** 나누기 (22단계): 그 메시지의 턴 끝까지를 새 pane 의 기록으로. 갈라질 자리(anchor)를 돌려준다 · 자리가 맞지 않으면 null */
+  async branch(from: string, to: string, index: number, at: number): Promise<{ forkAt: string } | null> {
+    const events = await this.d.store.read(from)
+    const target = events[index]
+    if (!target || target.t !== 'user' || target.at !== at) return null
+    const plan = rewindPlan(events, index, 'branch')
+    if (!plan || !plan.forkAt) return null
+    await this.d.store.replace(to, events.slice(0, plan.keep))
+    return { forkAt: plan.forkAt }
   }
 
   answer(paneId: string, requestId: string, d: Decision): boolean {

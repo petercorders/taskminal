@@ -11,8 +11,10 @@ import {
   permissionMode,
   type ChatDecision,
   type ChatEvent,
+  type ChatImage,
   type ChatPermission,
 } from '../../shared/chat'
+import type { AgentSession } from './session'
 import { isObj } from '../../shared/guards'
 
 export interface ChildLike {
@@ -42,6 +44,8 @@ export interface ClaudeSessionOptions {
   cwd: string
   permission: ChatPermission
   sessionId?: string
+  /** 되감기 · 나누기 뒤 — 다음 띄울 때 이 assistant 줄에서 갈라진 새 세션으로 (init 을 받으면 지운다) */
+  forkAt?: string
   spawn: SpawnFn
   /** 원래 모양의 이벤트 — 가리기는 받는 쪽(manager)이 한다 */
   onEvent(ev: ChatEvent): void
@@ -51,7 +55,7 @@ export interface ClaudeSessionOptions {
 
 const STDERR_KEEP = 2000
 
-export class ClaudeSession {
+export class ClaudeSession implements AgentSession {
   private child: ChildLike | null = null
   /** 띄울 때마다 +1 — 옛 프로세스의 늦은 줄 · exit 를 버린다 */
   private gen = 0
@@ -61,6 +65,8 @@ export class ClaudeSession {
   /** '이 명령만 늘 허락' 한 것 (이 대화 동안) */
   private always = new Set<string>()
   private seq = 0
+  /** 이번 턴의 마지막 assistant 줄 uuid — 턴 끝 anchor (되감기 · 나누기가 여기서 가른다) */
+  private lastUuid: string | undefined
   /** 턴이 열려 있다 (보냈고 result · 멈춤을 아직 못 받음) */
   busy = false
   private stopping = false
@@ -75,7 +81,7 @@ export class ClaudeSession {
     const gen = ++this.gen
     this.buf = ''
     this.stderr = ''
-    const child = this.o.spawn(this.o.bin, claudeArgs(this.o.permission, this.o.sessionId), { cwd: this.o.cwd, env: this.o.env })
+    const child = this.o.spawn(this.o.bin, claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt), { cwd: this.o.cwd, env: this.o.env })
     this.child = child
     child.stdin?.on?.('error', () => {}) // EPIPE — 끝남은 exit 가 알린다
     child.stdout?.on('data', (d: Buffer | string) => gen === this.gen && this.onData(String(d)))
@@ -121,7 +127,11 @@ export class ClaudeSession {
       return
     }
     if (!isObj(o)) return
-    if (o['type'] === 'system' && o['subtype'] === 'init' && typeof o['session_id'] === 'string') this.o.sessionId = o['session_id']
+    if (o['type'] === 'system' && o['subtype'] === 'init' && typeof o['session_id'] === 'string') {
+      this.o.sessionId = o['session_id']
+      delete this.o.forkAt // 갈라진 새 세션이 떴다 — 다음에 다시 띄우면 그냥 --resume
+    }
+    if (o['type'] === 'assistant' && typeof o['uuid'] === 'string') this.lastUuid = o['uuid']
     if (o['type'] === 'control_request' && typeof o['request_id'] === 'string' && isObj(o['request']) && o['request']['subtype'] === 'can_use_tool') {
       const r = o['request']
       const tool = typeof r['tool_name'] === 'string' ? r['tool_name'] : ''
@@ -140,7 +150,7 @@ export class ClaudeSession {
         this.stopping = false
         this.pending.clear()
       }
-      this.o.onEvent(ev)
+      this.o.onEvent(ev.t === 'turn_end' && this.lastUuid ? { ...ev, anchor: this.lastUuid } : ev)
     }
   }
 
@@ -155,12 +165,13 @@ export class ClaudeSession {
   }
 
   /** 새 턴을 보낸다. 턴이 열려 있으면 false (한 번에 하나) */
-  send(text: string): boolean {
+  send(text: string, images: readonly ChatImage[] = []): boolean {
     if (this.busy) return false
     if (!this.child) this.start()
     this.busy = true
     this.stopping = false
-    if (!this.write(claudeUserLine(text))) {
+    this.lastUuid = undefined
+    if (!this.write(claudeUserLine(text, images))) {
       this.busy = false
       return false
     }
@@ -202,6 +213,28 @@ export class ClaudeSession {
     if (!this.child) this.o.sessionId = id
   }
 
+  /** 되감기 · 나누기 — 떠 있으면 끝내고, 다음 보내기가 갈라진 세션으로 띄운다. null = 새 세션 */
+  fork(sessionId: string | undefined, at: string | null) {
+    // 떠 있는 프로세스를 바로 떼어 낸다(세대 +1) — 끝나기 전에 온 보내기가 그 프로세스에 쓰지 않고, 늦은 exit 는 버린다
+    const c = this.child
+    this.child = null
+    this.gen++
+    this.busy = false
+    this.stopping = false
+    this.pending.clear()
+    if (c) {
+      try {
+        c.stdin?.end()
+      } catch {
+        /* 이미 닫힘 */
+      }
+      c.kill('SIGTERM')
+    }
+    this.o.sessionId = at ? sessionId : undefined
+    if (at) this.o.forkAt = at
+    else delete this.o.forkAt
+  }
+
   kill() {
     const c = this.child
     if (!c) return
@@ -219,7 +252,9 @@ export class ClaudeSession {
  * 질문 답의 키를 claude 가 보낸 원래 질문 글로 — 창은 가린 사본의 질문 글을 키로 보낸다(비밀값이 섞이면 달라진다).
  * 창은 질문 순서대로 답을 넣으므로, 원래 글로 못 찾으면 같은 자리의 답을 쓴다.
  */
-function originalKeys(input: unknown, answers: Record<string, string>): Record<string, string> {
+function originalKeys(input: unknown, raw: Record<string, string | string[]>): Record<string, string> {
+  // 여러 개 고르기의 답은 label 을 ", " 로 이은 글 (AskUserQuestion 이 받는 모양)
+  const answers = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : v]))
   const qs = isObj(input) && Array.isArray(input['questions']) ? input['questions'] : []
   if (qs.length === 0) return answers
   const vals = Object.values(answers)

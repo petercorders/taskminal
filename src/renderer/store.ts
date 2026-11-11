@@ -38,11 +38,14 @@ import {
   saveQuick,
   type TaskEdit,
   addChatTab,
+  branchChat,
+  chatRewound,
   chatToTerminal,
   setChatSession,
   splitActivePaneChat,
 } from '../shared/model'
 import type { QuickCommand } from '../shared/quick'
+import type { ChatAgent } from '../shared/chat'
 import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
@@ -95,8 +98,10 @@ export type Action =
   /** 셸 안의 cd — OSC 7 · lsof 가 알려 준 폴더 */
   | { type: 'pane/cwd'; paneId: Id; cwd: string }
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
-  | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id }
-  | { type: 'chat/split'; taskId: Id; paneId: Id }
+  | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent }
+  | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent }
+  | { type: 'chat/rewound'; paneId: Id; forkAt: string | null }
+  | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string }
   | { type: 'chat/session'; paneId: Id; sessionId: string }
   | { type: 'chat/to-terminal'; paneId: Id; newPaneId: Id; bin: string }
 
@@ -225,10 +230,18 @@ export function reducer(state: AppState, action: Action): AppState {
       return editTask(state, action.id, action.patch)
     case 'chat/add-tab': {
       const ids = [action.tabId, action.paneId]
-      return updateTask(state, action.taskId, (t) => addChatTab(t, () => ids.shift()!))
+      return updateTask(state, action.taskId, (t) => addChatTab(t, () => ids.shift()!, action.agent))
     }
     case 'chat/split':
-      return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId))
+      return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId, action.agent))
+    case 'chat/rewound': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => chatRewound(t, action.paneId, action.forkAt)) : state
+    }
+    case 'chat/branch': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => branchChat(t, action.paneId, action.newPaneId, action.forkAt)) : state
+    }
     case 'chat/session': {
       const taskId = findPaneTask(state, action.paneId)
       return taskId ? updateTask(state, taskId, (t) => setChatSession(t, action.paneId, action.sessionId)) : state

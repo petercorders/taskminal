@@ -181,3 +181,51 @@ describe('ClaudeSession', () => {
     expect(resp.response.response.updatedInput.answers).toEqual({ '키 sk-ant-api03-원문 을 쓸까요?': '예', '어디에?': '여기' })
   })
 })
+
+describe('ClaudeSession — 22단계', () => {
+  it('그림은 user 메시지의 base64 image 블록으로', () => {
+    const { s, children } = setup()
+    s.send('봐', [{ name: 'a.png', mime: 'image/png', data: 'AAAA' }])
+    expect(children[0]!.sent()[0]).toEqual({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: '봐' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }] },
+    })
+  })
+  it('턴 끝에 마지막 assistant uuid 를 anchor 로', () => {
+    const { s, children, events } = setup()
+    s.send('x')
+    children[0]!.out({ type: 'assistant', uuid: 'u-1', message: { content: [{ type: 'text', text: 'a' }] } })
+    children[0]!.out({ type: 'assistant', uuid: 'u-2', message: { content: [{ type: 'text', text: 'b' }] } })
+    children[0]!.out(result)
+    expect(events.at(-1)).toMatchObject({ t: 'turn_end', anchor: 'u-2' })
+  })
+  it('fork(): 떠 있는 것을 끝내고 다음 띄우기에 --fork-session --resume-session-at, init 뒤에는 그냥 --resume', () => {
+    const { s, children, calls } = setup('s-old')
+    s.send('x')
+    children[0]!.out(result)
+    s.fork('s-old', 'u-9')
+    expect(children[0]!.killed).toBe(true)
+    s.send('y')
+    expect(calls[1]).toEqual(expect.arrayContaining(['--resume', 's-old', '--fork-session', '--resume-session-at', 'u-9']))
+    children[1]!.out({ type: 'system', subtype: 'init', session_id: 's-new' })
+    children[1]!.out(result)
+    children[1]!.emit('exit', 0, null)
+    s.send('z')
+    expect(calls[2]).toEqual(expect.arrayContaining(['--resume', 's-new']))
+    expect(calls[2]).not.toContain('--fork-session')
+  })
+  it('fork(null): 갈라질 앞 턴이 없으면 새 세션(--resume 없음)', () => {
+    const { s, calls } = setup('s-old')
+    s.fork('s-old', null)
+    s.send('x')
+    expect(calls[0]).not.toContain('--resume')
+  })
+  it('여러 개 고르기 답은 label 을 ", " 로 이어 원래 질문 글에', () => {
+    const { s, children } = setup()
+    s.send('x')
+    children[0]!.out({ type: 'control_request', request_id: 'q1', request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', input: { questions: [{ question: '고르기', multiSelect: true, options: [] }] } } })
+    s.answer('q1', { how: 'answer', answers: { 고르기: ['A', 'C'] } })
+    const ans = children[0]!.sent().at(-1) as { response: { response: { updatedInput: { answers: Record<string, string> } } } }
+    expect(ans.response.response.updatedInput.answers).toEqual({ 고르기: 'A, C' })
+  })
+})

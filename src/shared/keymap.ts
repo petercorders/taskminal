@@ -46,6 +46,8 @@ export const SHORTCUTS = [
   // 대화(21단계)
   { command: 'chat-new', accel: '', label: '새 대화 (Claude)' },
   { command: 'chat-split', accel: '', label: '대화로 오른쪽 나누기' },
+  { command: 'chat-new-codex', accel: '', label: '새 대화 (Codex)' },
+  { command: 'chat-split-codex', accel: '', label: '대화(Codex)로 오른쪽 나누기' },
   { command: 'chat-terminal', accel: 'Shift+Command+J', label: '대화를 터미널로 전환' },
   { command: 'sidebar-filter', accel: '', label: '사이드바에서 거르기' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>

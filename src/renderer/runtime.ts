@@ -16,6 +16,8 @@ export const runtime = {
   crashedLast: false,
   /** ⇧⌘J 에서 칠 claude 명령 (21단계) */
   claudeTui: 'claude',
+  /** 같은 것 — codex (22단계) */
+  codexTui: 'codex',
 }
 
 /** 지금 WebGL 로 그리는 pane 수 · pane 마다 WebGL 실패 수 · 상한에 걸려 자리를 기다리는 pane 의 다시 해 보기 (15e) */

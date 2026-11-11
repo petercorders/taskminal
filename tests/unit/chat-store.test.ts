@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -40,5 +40,26 @@ describe('ChatStore', () => {
     await s.remove('p1')
     await s.remove('p1')
     expect(await s.read('p1')).toEqual([])
+  })
+  it('되감기 replace: 앞 n 개만 남기고 0600 · 가린 글로', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'chat-'))
+    const s = new ChatStore(dir)
+    await s.append('p1', [{ t: 'user', text: '하나', at: 1 }, { t: 'text', text: '답' }, { t: 'user', text: '둘', at: 2 }])
+    await s.replace('p1', [{ t: 'user', text: `하나 ${KEY}`, at: 1 }])
+    expect(await s.read('p1')).toEqual([{ t: 'user', text: expect.stringContaining('하나'), at: 1 }])
+    expect(readFileSync(join(dir, 'p1.jsonl'), 'utf8')).not.toContain(KEY)
+    expect(statSync(join(dir, 'p1.jsonl')).mode & 0o777).toBe(0o600)
+  })
+  it('그림 파일: <pane>.img/ 에 0600 · 내용 그대로 · remove 가 함께 지움', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'chat-'))
+    const s = new ChatStore(dir)
+    const f = await s.saveImage('p1', { name: 'a.png', mime: 'image/png', data: Buffer.from('PNGDATA').toString('base64') }, 1)
+    expect(f.startsWith(join(dir, 'p1.img') + '/')).toBe(true)
+    expect(f.endsWith('.png')).toBe(true)
+    expect(readFileSync(f, 'utf8')).toBe('PNGDATA')
+    expect(statSync(f).mode & 0o777).toBe(0o600)
+    expect(statSync(join(dir, 'p1.img')).mode & 0o777).toBe(0o700)
+    await s.remove('p1')
+    expect(existsSync(join(dir, 'p1.img'))).toBe(false)
   })
 })

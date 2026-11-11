@@ -32,7 +32,9 @@ import { ChatManager } from './chat/chat-manager'
 import { ChatStore } from './chat/chat-store'
 import { AgentBinFinder } from './chat/find-bin'
 import type { SpawnFn } from './chat/claude-adapter'
-import { isChatDecision, type ChatPermission } from '../shared/chat'
+import { IMAGE_MAX_BYTES, IMAGE_MAX_COUNT, isChatAgent, isChatDecision, isChatImages, type ChatImage, type ChatPermission } from '../shared/chat'
+import type { ChatRef } from './chat/chat-manager'
+import { isObj } from '../shared/guards'
 import { StateFile } from './state-file'
 import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
@@ -126,9 +128,10 @@ const chats = () =>
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
-    findBin: () => agentBins.claude(),
+    findBin: (agent) => agentBins.find(agent),
     permission: () => chatPermission,
     channel: IPC.chatEvent,
+    appVersion: app.getVersion(),
   }))
 const setChatPermission = (p: ChatPermission) => {
   if (p === chatPermission) return
@@ -416,7 +419,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude' }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
   })
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -646,11 +649,54 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // ─── 21단계: 대화 ───
-  ipcMain.handle(IPC.chatSend, async (event, paneId: unknown, text: unknown, cwd: unknown, sessionId: unknown) => {
+  const okSid = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
+  /** renderer 가 보낸 pane 의 대화 정보 — 에이전트 · id 모양만 믿는다 */
+  const chatRef = (v: unknown): ChatRef | null => {
+    if (!isObj(v) || !isChatAgent(v['agent'])) return null
+    return { agent: v['agent'], ...(okSid(v['sessionId']) ? { sessionId: v['sessionId'] } : {}), ...(okSid(v['forkAt']) ? { forkAt: v['forkAt'] } : {}) }
+  }
+  ipcMain.handle(IPC.chatSend, async (event, paneId: unknown, text: unknown, cwd: unknown, chat: unknown, images: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     if (!isPaneId(paneId) || typeof text !== 'string' || !text.trim() || text.length > 100_000 || typeof cwd !== 'string' || cwd.length > 4096) throw new Error('잘못된 대화 인자')
-    const sid = typeof sessionId === 'string' && /^[\w-]{1,100}$/.test(sessionId) ? sessionId : undefined
-    return chats().send(event.sender, paneId, text, cwd, sid)
+    const ref = chatRef(chat)
+    if (!ref) throw new Error('잘못된 대화 인자')
+    const imgs = images === undefined ? [] : images
+    if (!isChatImages(imgs)) throw new Error('붙일 수 없는 그림')
+    return chats().send(event.sender, paneId, text, cwd, ref, imgs)
+  })
+  const isIndex = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1_000_000
+  ipcMain.handle(IPC.chatRewind, async (event, paneId: unknown, index: unknown, at: unknown, chat: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const ref = chatRef(chat)
+    if (!isPaneId(paneId) || !isIndex(index) || typeof at !== 'number' || !ref) return null
+    return chats().rewind(paneId, index, at, ref)
+  })
+  ipcMain.handle(IPC.chatBranch, async (event, from: unknown, to: unknown, index: unknown, at: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isPaneId(from) || !isPaneId(to) || from === to || !isIndex(index) || typeof at !== 'number') return null
+    return chats().branch(from, to, index, at)
+  })
+  /** 📎 — 그림 파일을 골라 읽는다(renderer 는 파일을 못 읽는다). 크기 · 종류가 맞지 않는 것은 빼고 그 이름을 돌려준다 */
+  ipcMain.handle(IPC.chatPickImages, async (event): Promise<{ images: ChatImage[]; skipped: string[] }> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = { title: '그림 붙이기', properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>, filters: [{ name: '그림', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }] }
+    const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    if (r.canceled) return { images: [], skipped: [] }
+    const mimeOf: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }
+    const images: ChatImage[] = []
+    const skipped: string[] = []
+    for (const f of r.filePaths) {
+      const name = basename(f)
+      const mime = mimeOf[name.split('.').pop()?.toLowerCase() ?? '']
+      try {
+        if (!mime || images.length >= IMAGE_MAX_COUNT || statSync(f).size > IMAGE_MAX_BYTES) throw new Error('skip')
+        images.push({ name, mime, data: readFileSync(f).toString('base64') })
+      } catch {
+        skipped.push(name)
+      }
+    }
+    return { images, skipped }
   })
   ipcMain.on(IPC.chatAnswer, (event, paneId: unknown, requestId: unknown, decision: unknown) => {
     if (fromOurWindow(event) && isPaneId(paneId) && typeof requestId === 'string' && requestId.length <= 200 && isChatDecision(decision)) chats().answer(paneId, requestId, decision)

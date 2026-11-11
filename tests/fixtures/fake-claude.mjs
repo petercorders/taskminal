@@ -9,11 +9,13 @@ const log = (o) => process.env.FAKE_CLAUDE_LOG && appendFileSync(process.env.FAK
 log({ argv: args, cwd: process.cwd() })
 
 const resumeAt = args.indexOf('--resume')
-const sessionId = resumeAt >= 0 ? args[resumeAt + 1] : `sess-${process.pid}`
+// 22단계: --fork-session 이면 갈라진 새 세션 id (스파이크 tests/fixtures/claude/fork.jsonl)
+const sessionId = resumeAt >= 0 && !args.includes('--fork-session') ? args[resumeAt + 1] : `sess-${process.pid}`
 const modeAt = args.indexOf('--permission-mode')
 let mode = modeAt >= 0 ? args[modeAt + 1] : 'default'
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n')
-const assistant = (content) => out({ type: 'assistant', message: { model: 'claude-fake', role: 'assistant', content }, session_id: sessionId })
+let uuidSeq = 0
+const assistant = (content) => out({ type: 'assistant', uuid: `u-${process.pid}-${++uuidSeq}`, message: { model: 'claude-fake', role: 'assistant', content }, session_id: sessionId })
 const result = (extra = {}) =>
   out({
     type: 'result',
@@ -43,7 +45,7 @@ function ask(request, then) {
   out({ type: 'control_request', request_id: id, request })
 }
 
-function turn(text) {
+function turn(text, images = 0) {
   init()
   if (text.includes('crash')) {
     assistant([{ type: 'text', text: '곧 끝나요' }])
@@ -88,6 +90,21 @@ function turn(text) {
     })
     return
   }
+  if (text.includes('multi')) {
+    ask(
+      {
+        subtype: 'can_use_tool',
+        tool_name: 'AskUserQuestion',
+        input: { questions: [{ question: '무엇을 넣을까요?', header: '넣기', multiSelect: true, options: [{ label: '시험', description: '' }, { label: '문서', description: '' }, { label: '린트', description: '' }] }] },
+        requires_user_interaction: true,
+      },
+      (resp) => {
+        assistant([{ type: 'text', text: `고른 것: ${resp.updatedInput?.answers?.['무엇을 넣을까요?']}` }])
+        result()
+      },
+    )
+    return
+  }
   if (text.includes('ask')) {
     ask(
       {
@@ -105,7 +122,7 @@ function turn(text) {
   }
   assistant([{ type: 'tool_use', id: `tu-r${++seq}`, name: 'Read', input: { file_path: `${process.cwd()}/a.ts` } }])
   out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `tu-r${seq}`, content: 'export const a = 1', is_error: false }] } })
-  assistant([{ type: 'text', text: `echo: ${text}` }])
+  assistant([{ type: 'text', text: `echo: ${text}${images ? ` · 그림 ${images}` : ''}` }])
   result()
 }
 
@@ -119,8 +136,9 @@ rl.on('line', (line) => {
   }
   log({ stdin: o })
   if (o.type === 'user') {
-    const text = (o.message?.content ?? []).map((c) => c.text ?? '').join('')
-    turn(text)
+    const content = o.message?.content ?? []
+    const text = content.map((c) => c.text ?? '').join('')
+    turn(text, content.filter((c) => c.type === 'image').length)
   } else if (o.type === 'control_response') {
     const then = waiting.get(o.response?.request_id)
     waiting.delete(o.response?.request_id)
