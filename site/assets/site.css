@@ -1,0 +1,50 @@
+/* Taskminal 홈페이지 공용 스타일. 화면 대부분은 디자인 보드에서 옮긴 인라인 스타일이고, 여기에는 상태 · 반응형 · 접근성만 둔다. */
+html { background: #0e0f11; scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: #0e0f11; color: #e6e7e9; }
+/* 한국어는 낱말 중간에서 줄을 바꾸지 않는다('다 / 른 일로' 방지) */
+html[lang="ko"] body { word-break: keep-all; overflow-wrap: anywhere; }
+*, *::before, *::after { box-sizing: border-box; }
+[id] { scroll-margin-top: 16px; }
+
+a { color: #c4b8ff; }
+a:hover { color: #e2dcff; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid #c4b8ff; outline-offset: 3px; border-radius: 8px; }
+main:focus { outline: none; }
+
+/* 본문 바로가기 */
+.skip { position: absolute; left: 16px; top: -60px; z-index: 10; padding: 10px 16px; border-radius: 10px; background: #a996ff; color: #170f38; font-weight: 700; text-decoration: none; }
+.skip:focus { top: 12px; }
+
+/* 출시 상태 — 기본은 '곧 공개'. assets/site.js 의 RELEASE 를 'ready' 로 바꾸면 html.is-ready 가 붙는다 */
+.when { display: contents; }
+html:not(.is-ready) .when[data-when="ready"] { display: none; }
+html.is-ready .when[data-when="soon"] { display: none; }
+
+/* 쇼케이스 장면 고르기 */
+.scene-tab { background: transparent; color: #b8bcc2; border: 1px solid #2c3036; font-weight: 500; }
+.scene-tab:hover { color: #e6e7e9; border-color: #4a4f57; }
+.scene-tab[aria-pressed="true"] { background: #e6e7e9; color: #0e0f11; border-color: #e6e7e9; font-weight: 600; }
+.scene[hidden] { display: none; }
+
+/* 자주 묻는 것 */
+summary { cursor: pointer; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+details[open] .faq-plus { transform: rotate(45deg); }
+
+/* 단추 · 링크 손에 닿는 느낌 */
+a[style*="background: #a996ff"]:hover { background: #bcadff !important; color: #170f38; }
+a[style*="border: 1px solid #2c3036"]:hover { border-color: #4a4f57 !important; }
+
+/* 좁은 화면 — 머리 줄 메뉴는 아래쪽 바닥글에도 있으니 숨겨 첫 화면을 넓힌다 */
+@media (max-width: 720px) {
+  header nav[aria-label] { display: none !important; }
+  header > div { justify-content: space-between; flex-wrap: nowrap !important; gap: 8px !important; padding: 12px 16px !important; }
+  header > div > div { flex-wrap: nowrap !important; gap: 8px !important; }
+  header a { white-space: nowrap; }
+  header a[href="#download"] { padding: 0 12px !important; }
+  section[aria-labelledby="hero-h"] { padding-top: 48px !important; }
+  section[aria-labelledby="hero-h"] > .when > a span { white-space: nowrap; }
+  pre { font-size: 12.5px !important; padding: 18px !important; }
+  #download > div { padding: 40px 20px !important; }
+}

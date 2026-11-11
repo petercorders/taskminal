@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Taskminal 앱 아이콘 원본 (2026-11-10 사용자 결정: C1 모양 · 보라). 디자인 캔버스 '앱 아이콘' 보드.
+     viewBox 여백은 macOS 아이콘 격자(1024 중 몸통 약 824)에 맞춘 것. 14단계에서 1024 PNG → .icns 로 만든다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-14 -14 228 228">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a996ff"/><stop offset="1" stop-color="#5b45d6"/></linearGradient>
+    <linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect x="8" y="8" width="184" height="184" rx="44" fill="url(#bg)"/>
+  <rect x="9.5" y="9.5" width="181" height="181" rx="42.5" fill="none" stroke="url(#hl)" stroke-width="3"/>
+  <g fill="#140b3a" fill-opacity="0.25" transform="translate(0 5)"><rect x="44" y="46" width="112" height="28" rx="9"/><rect x="86" y="46" width="28" height="108" rx="9"/></g>
+  <rect x="44" y="46" width="112" height="28" rx="9" fill="#170f38"/>
+  <rect x="86" y="46" width="28" height="108" rx="9" fill="#170f38"/>
+  <circle cx="146" cy="138" r="30" fill="#6a55e0"/>
+  <circle cx="146" cy="138" r="25" fill="#170f38"/>
+  <path d="M134 138l8 8 16-17" fill="none" stroke="#6ee39a" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://taskminal.petercoders.com/sitemap.xml
