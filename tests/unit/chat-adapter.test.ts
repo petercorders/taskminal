@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import { ClaudeSession, type ChildLike } from '../../src/main/chat/claude-adapter'
-import type { ChatEvent } from '../../src/shared/chat'
+import { claudeArgs, type ChatEvent } from '../../src/shared/chat'
 
 class FakeChild extends EventEmitter implements ChildLike {
   written: string[] = []
@@ -183,6 +183,11 @@ describe('ClaudeSession', () => {
 })
 
 describe('ClaudeSession — 22단계', () => {
+  it('claudeArgs: 세션과 forkAt 이 다 있을 때만 fork 인자 (세션 없이 --resume-session-at 만 가면 새 대화가 아니다)', () => {
+    expect(claudeArgs('ask', 's1', 'u-1').slice(-5)).toEqual(['--resume', 's1', '--fork-session', '--resume-session-at', 'u-1'])
+    expect(claudeArgs('ask', undefined, 'u-1')).not.toContain('--fork-session')
+    expect(claudeArgs('ask', undefined, 'u-1')).not.toContain('--resume-session-at')
+  })
   it('그림은 user 메시지의 base64 image 블록으로', () => {
     const { s, children } = setup()
     s.send('봐', [{ name: 'a.png', mime: 'image/png', data: 'AAAA' }])

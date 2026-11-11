@@ -2935,6 +2935,18 @@ input[type='checkbox'] {
 .chat-keys {
   flex: 1;
   text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 좁은 pane(나누기) — 한 글자씩 꺾이지 않게: 단추는 줄이지 않고, 단축키 안내 · 모델 이름만 줄임표로 */
+.chat-input-row > * {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.chat-input-row > .chat-keys,
+.chat-input-row > .chat-model {
+  flex-shrink: 1;
 }
 .chat-send {
   height: 24px;
@@ -3142,8 +3154,6 @@ input[type='checkbox'] {
   right: calc(100% + 6px);
   top: 4px;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
   visibility: hidden;
   white-space: nowrap;
@@ -3192,5 +3202,7 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 .chat-model {
-  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

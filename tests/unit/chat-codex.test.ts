@@ -132,6 +132,10 @@ describe('rewindPlan — 되감기 · 나누기', () => {
     expect(rewindPlan(ev, 99, 'rewind')).toBeNull()
     expect(rewindPlan([...ev, { t: 'user', text: '넷째', at: 4 }], 10, 'branch')).toBeNull()
   })
+  it('나누기: 턴 끝 없이 다음 메시지가 왔으면(멈춤 · 실패) 다음 턴의 anchor 로 가르지 않는다', () => {
+    const cut: ChatEvent[] = [{ t: 'user', text: '하나', at: 1 }, { t: 'stopped' }, { t: 'user', text: '둘', at: 2 }, { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'a2' }]
+    expect(rewindPlan(cut, 0, 'branch')).toBeNull()
+  })
 })
 
 describe('foldBlocks — 22단계 더함', () => {
