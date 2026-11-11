@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (22단계 대화 2 — Codex · 그림 · 되감기 · 나누기 · 대기열 병합 — 단위 785 · e2e 186, 다음은 23단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (23단계 변경 검토 병합 — 단위 840 · e2e 193, 다음은 24단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -19,7 +19,8 @@
 | 20 빠른 명령 · 포트 | main 에 병합(브랜치 `stage-20-quick-ports`). 빠른 명령 단추 줄(일감 · 템플릿 · 모든 일감, ⌥1~9, ⌘P) · 포트 칩(탭 · 사이드바 · ⌘P · 끄기 · 숨기기 · 겹침 막대). 계획 · 결과 `docs/stages/20-quick-ports.md` |
 | 21 대화 1 — Claude · 사이드바 | main 에 병합(브랜치 `stage-21-chat-claude`). 대화 pane(가짜 claude 로 e2e · stream-json · 허락/질문 카드 · `--resume` · 허락 방식 · ⇧⌘J 터미널 전환 · 가린 대화 기록 `<userData>/chat/*.jsonl`) + 사이드바 흐름 보기(상태 칸 · 개수 막대 · `/` 거르기 · 끌어 놓기 · 안 본 점). 계획 · 결과 `docs/stages/21-chat-claude.md` |
 | 22 대화 2 — Codex · 확장 | main 에 병합(브랜치 `stage-22-chat-codex`). Codex app-server 대화(가짜 codex 로 e2e · 같은 카드로 승인 · 로그인 없음 띠 · `thread/resume`) · 그림(📎 · ⌘V · 끌어 놓기) · 되감기 · 여기서 새 대화로 나누기(둘 다 앞 턴 끝에서 갈라진 새 세션, 파일은 그대로) · 대기열 · ⌘↩ 지금 보내기 · 여러 개 고르기. Codex 승인 · 질문 · 항목 줄은 로그인한 codex 로 **미확인**. 계획 · 결과 `docs/stages/22-chat-codex.md` |
-| 23~25 1차 출시 | 23 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 23 변경 검토 | main 에 병합(브랜치 `stage-23-review`). pane 종류 '변경'(⇧⌘G · ⌘P): 파일별 diff · 줄 골라 ⌫ 되돌리기(⌘Z · '되돌린 것' 7일, add 한 파일은 인덱스도 함께) · 체크한 파일만 `commit --only` · 막을 때만 경고(main 에 바로 · 비밀값) · 커밋 전 검사 실패 마지막 20줄 · 커밋 취소 · 대화 도구 줄의 'diff 열기 →' 카드 · 보일 때만 폴더 감시. 전체 보기 '± 변경' 칩은 그 화면이 없어 안 함. 계획 · 결과 `docs/stages/23-review.md` |
+| 24~25 1차 출시 | 24 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -151,6 +152,15 @@
 - 같은 글의 카드가 둘이면 `.last()` 가 첫 카드를 잡은 채 기다린다 — 개수로 먼저 기다린다.
 - ⌘P '새 대화' 는 Codex 가 위(짧은 이름 점수). 대화 e2e 는 '새 대화 (Claude)' 로 고른다.
 
+### 23 변경 검토
+계획 · 결과 `docs/stages/23-review.md`(0절 스파이크 = fs.watch 비용 · 문맥 방식 역패치 · 서명 기다림). 구조: `src/shared/review.ts`(해석 · `buildPatch` · 경고) · `src/main/review-git.ts`(git CLI · `RevertStore` · `ReviewWatch`) · `src/renderer/ReviewPane.tsx`. 짚어 둔 함정:
+- 패치는 renderer 가 보내지 않는다 — renderer 는 경로 · 표지(`fileSig`) · 줄 키(`덩어리:줄`)만, main 이 다시 읽어 표지가 다르면 거절한다. 경로는 `safeRel` + 바뀐 파일 목록 둘 다, 편집기로 열기는 `safeRel` 만 보므로 직접 시험이 있다(변이에서 드러남).
+- 편집기로 열기는 `/usr/bin/open -t` — `shell.openPath` 는 `.command` · `.app` 을 실행한다.
+- git 은 `LC_ALL=C` · `GIT_TERMINAL_PROMPT=0` · `GIT_OPTIONAL_LOCKS=0` · `GIT_LITERAL_PATHSPECS=1` · `core.quotepath=false`. e2e 저장소는 로컬 설정으로 서명을 끈다(전역 설정은 건드리지 않는다).
+- e2e 에서 diff 줄을 글자로 찾지 않는다 — `hasText` 는 대소문자를 가리지 않아 `b` · `B` 가 겹친다. `[data-key="덩어리:줄"]` 로 찾는다.
+- 막 연 pane 은 첫 읽기 전이라 커밋 칸이 없다 — 포커스 요청은 기억했다가 그려진 뒤에 준다.
+- macOS 임시 폴더는 `/var` → `/private/var` — git 이 돌려주는 뿌리와 비교하는 단위 시험은 `realpathSync(mkdtempSync(…))`.
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -160,6 +170,7 @@
 - Playwright 는 페이지 포커스를 흉내 내 `document.hasFocus()` 를 못 낮춘다 · 합성 키는 네이티브 메뉴 단축키를 부르지 않는다.
 - 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인. 19단계 전체 실행 3번 중 1번 다시 나옴: 받은 화면이 `echo BACK$((1+1)) ` 뿐 — **프롬프트가 한 번도 안 그려졌다**(입력은 tty 가 되돌린 글자). 시험은 프롬프트를 기다리지 않고 친다. 지킴이 `spawn` 은 같은 paneId 의 끝나지 않은 세션이 있으면 그 세션에 붙는다(`host-core.ts` spawn 의 `old && !old.exited`) — 지운 B 의 셸(SIGHUP · 2초 뒤 SIGKILL)과 되살린 B 가 같은 `p2` 를 쓰므로 후보지만, 지우기 → 되살리기 사이가 몇 초라 확인 못 함. 다음에 볼 것: 실패 때 지킴이 `list` 로 p2 세션의 pid · killed · 시작 시각을 남기기.
 - 22단계 전체 검사에서 한 번씩 불안정: `safety.spec` '일감 지우기 → … 되살리기' 의 셸 출력 기다림 · `sidebar-flow.spec` 의 afterEach `rmSync` ENOTEMPTY. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림 · 정리를 고친다.
+- 23단계 리뷰 뒤 전체 검사에서 한 번씩 불안정(처음 나옴): `persist.spec:93` ⌥⌘Q 묻기 전에 셸 자식 pid 하나가 이미 죽어 있음 · `ports.spec:56` python 서버 칩이 15초 안에 안 뜸. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림을 고친다.
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
 - e2e `win.evaluate` 안에서는 `window` 대신 `globalThis`(tsconfig.node 에 DOM 이 없다).
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
