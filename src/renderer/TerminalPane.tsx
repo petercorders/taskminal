@@ -50,6 +50,9 @@ interface Props {
   onAllow?(hit: { hash: string; kind: string }): void
 }
 
+/** 셸이 붙기 전에 친 키를 모아 두는 상한 (붙여넣기 한 번쯤) */
+const EARLY_INPUT_MAX = 64 * 1024
+
 export interface CommandDone {
   id: string
   cmd: string
@@ -335,9 +338,26 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     })
     // 키를 친 것만 센다 — onData 는 터미널 질의에 xterm 이 스스로 내는 답에도 불린다
     const keys = term.onKey(() => (typed = true))
+    // 셸이 붙기(spawn · attach 답) 전에 친 키는 main 이 주인을 몰라 버린다 — 그동안은 모아 두었다가 붙으면 보낸다.
+    // (전체 e2e 의 '친 글자 앞부분이 셸에 안 닿음' 불안정의 원인, 24단계 확인)
+    let live = false
+    let early: string[] = []
+    let earlyLen = 0
+    const send = (data: string) => {
+      for (const part of splitForWrite(data)) pty.write(paneId, part)
+    }
+    const goLive = () => {
+      live = true
+      const queued = early
+      early = []
+      for (const d of queued) send(d)
+    }
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
-      for (const part of splitForWrite(data)) pty.write(paneId, part)
+      if (live) return send(data)
+      if (earlyLen + data.length > EARLY_INPUT_MAX) return // 셸이 끝내 안 뜨면 끝없이 쌓지 않는다
+      early.push(data)
+      earlyLen += data.length
     })
 
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
@@ -346,11 +366,13 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       if (disposed) return
       pty.spawn(paneId, { cwd: cwdRef.current, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration }).then(
         () => {
+          if (!disposed) goLive()
           // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
           if (disposed || !startRef.current.command) return
           startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
         },
         (error: unknown) => {
+          early = []
           term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
         },
       )
@@ -384,6 +406,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         if (!r.attached) return restoreThenSpawn()
         restoredPanes.add(paneId)
         pty.resize(paneId, term.cols, term.rows)
+        goLive()
       },
       () => {
         if (!disposed) restoreThenSpawn()
