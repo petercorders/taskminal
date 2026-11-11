@@ -1802,6 +1802,7 @@ export function App() {
                   templates={state.settings.templates}
                   onAddTemplate={(id) => addTemplateTab(task.id, id)}
                   onSaveTemplate={(tabId) => openSaveTemplate(task, tabId)}
+                  onChat={(agent) => runCommand(agent === 'codex' ? 'chat-new-codex' : 'chat-new')}
                   historyOpen={historyOpen !== null}
                   onHistory={() => runCommand('history')}
                   notes={{

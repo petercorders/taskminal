@@ -10,12 +10,14 @@ interface Props {
   onPick(templateId: Id): void
   onSaveTab(): void
   onSaveTask(): void
+  /** 26단계: 새 대화 탭(Claude · Codex) — ⌘P 밖에서도 대화를 연다 */
+  onChat(agent: 'claude' | 'codex'): void
   /** 고르지 않고 닫힘(Esc · 바깥 클릭 · Tab) */
   onClose(): void
 }
 
 /** 탭 줄 "▾": 템플릿의 탭을 이 일감에 붙이기 · 이 탭/일감을 템플릿으로 저장. 모양 · 키보드는 일감 우클릭 메뉴와 같다. */
-export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSaveTask, onClose }: Props) {
+export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSaveTask, onChat, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const box = ref.current!
@@ -46,7 +48,13 @@ export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSav
 
   return (
     <div className="menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => e.preventDefault()}>
-      <div ref={ref} className="menu" role="menu" aria-label="템플릿 탭" data-testid="template-menu" style={{ left: x, top: y }} onKeyDown={onKeyDown}>
+      <div ref={ref} className="menu" role="menu" aria-label="새 탭" data-testid="template-menu" style={{ left: x, top: y }} onKeyDown={onKeyDown}>
+        <div className="menu-heading" role="presentation">
+          새 대화
+        </div>
+        {item('chat-claude', '새 대화 (Claude)', () => onChat('claude'), false, 'tab-menu-chat-claude')}
+        {item('chat-codex', '새 대화 (Codex)', () => onChat('codex'), false, 'tab-menu-chat-codex')}
+        <div className="menu-sep" role="separator" />
         <div className="menu-heading" role="presentation">
           템플릿 탭 열기
         </div>

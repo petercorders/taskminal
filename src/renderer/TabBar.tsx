@@ -25,6 +25,8 @@ interface Props {
   templates: Template[]
   onAddTemplate(templateId: Id): void
   onSaveTemplate(tabId: Id | null): void
+  /** 26단계: "▾" 메뉴의 새 대화 탭 */
+  onChat(agent: 'claude' | 'codex'): void
   /** 명령 기록 칸 (19단계 ⌘Y) — 열려 있으면 눌린 모양 */
   historyOpen: boolean
   onHistory(): void
@@ -39,7 +41,7 @@ export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, historyOpen, onHistory, ports, notes }: Props) {
+export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, onChat, historyOpen, onHistory, ports, notes }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -132,10 +134,10 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
       <button
         type="button"
         className="tab-add more"
-        aria-label="템플릿 탭"
+        aria-label="새 대화 · 템플릿 탭"
         aria-haspopup="menu"
         aria-expanded={menuAt !== null}
-        title="템플릿으로 탭 열기 · 템플릿으로 저장"
+        title="새 대화 · 템플릿으로 탭 열기 · 템플릿으로 저장"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect()
           setMenuAt({ x: r.left, y: r.bottom + 2 })
@@ -160,6 +162,10 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
           onSaveTask={() => {
             setMenuAt(null)
             onSaveTemplate(null)
+          }}
+          onChat={(agent) => {
+            setMenuAt(null)
+            onChat(agent)
           }}
           onClose={() => {
             setMenuAt(null)

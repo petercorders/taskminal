@@ -57,10 +57,17 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
       ],
     },
     {
-      label: '셸',
+      // 26단계: 대화를 ⌘P 밖에서도 찾게 — 이름도 '셸' → '파일'(대화 · 터미널 모두 여기서 연다)
+      label: '파일',
       submenu: [
         item('new-task'),
+        item('chat-new'),
+        item('chat-new-codex'),
         item('new-tab'),
+        { type: 'separator' },
+        item('chat-split'),
+        item('chat-split-codex'),
+        { type: 'separator' },
         item('palette'),
         { type: 'separator' },
         item('split-right'),
