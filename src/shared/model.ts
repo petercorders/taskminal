@@ -134,7 +134,7 @@ export function createTask(input: NewTaskInput, settings: Settings, newId: NewId
   const tabSpecs: TemplateTab[] = template && template.tabs.length ? template.tabs : [{ layout: { pane: {} } }]
   const panes: Record<Id, Pane> = {}
   const tabs = tabSpecs.map((tt) => expandTab(tt, cwd, newId, panes))
-  // 26단계: 대화로 시작 — 템플릿 · 원격이 아니면 첫 pane 을 대화로 (셸은 ⌃` 로 꺼낸다)
+  // 26단계: 대화로 시작 — 템플릿 · 원격이 아니면 첫 pane 을 대화로 (셸은 ⌘J 로 꺼낸다)
   if (!template && !host && (input.start === 'chat-claude' || input.start === 'chat-codex')) {
     const first = tabs[0]!.activePaneId
     panes[first] = chatPane(first, cwd, input.start === 'chat-codex' ? 'codex' : 'claude')
@@ -378,8 +378,11 @@ export function shellToggle(task: Task, newId: NewId): Task {
   if (!tab) return task
   const ids = paneIds(tab.layout)
   const isTerm = (id: Id) => !task.panes[id]?.kind
+  const isChat = (id: Id | undefined): id is Id => id !== undefined && task.panes[id]?.kind === 'chat'
   const shell = ids.find(isTerm)
-  const chat = ids.find((id) => task.panes[id]?.kind === 'chat')
+  // 누른 대화(활성) → 아니면 셸 바로 옆 대화 → 아니면 첫 대화 (대화가 둘인 탭에서 엉뚱한 대화로 가지 않게 — 26 리뷰)
+  const near = shell === undefined ? undefined : siblingOf(tab.layout, shell)
+  const chat = isChat(tab.activePaneId) ? tab.activePaneId : isChat(near) ? near : ids.find(isChat)
   if (!chat) return task
   if (shell === undefined) {
     // 대화 pane 아래로 — 활성이 대화가 아니면(변경 칸 등) 먼저 대화를 골라 둔다
@@ -388,9 +391,20 @@ export function shellToggle(task: Task, newId: NewId): Task {
     const t2 = activeTab(split)!
     // 대화 하나뿐인 탭이면 대화를 크게(65%) — 이미 나뉜 탭은 splitPane 의 기본 비율 그대로
     const tabs = ids.length === 1 ? split.tabs.map((x) => (x.id === t2.id ? { ...x, layout: setRatio(x.layout, 0.65) } : x)) : split.tabs
-    return { ...split, tabs, panes: { ...split.panes, [t2.activePaneId]: makePane(t2.activePaneId, task.cwd) } }
+    // 셸은 그 대화의 폴더에서 (일감 폴더와 다를 수 있다 — 26 리뷰)
+    const cwd = task.panes[chat]?.cwd ?? task.cwd
+    return { ...split, tabs, panes: { ...split.panes, [t2.activePaneId]: makePane(t2.activePaneId, cwd) } }
   }
   return focusPane(task, tab.activePaneId === shell ? chat : shell)
+}
+
+/** 분할에서 이 pane 의 바로 옆 칸(그쪽이 pane 하나일 때만) */
+function siblingOf(layout: Layout, id: Id): Id | undefined {
+  if (layout.type !== 'split') return undefined
+  const { a, b } = layout
+  if (a.type === 'pane' && a.paneId === id) return b.type === 'pane' ? b.paneId : undefined
+  if (b.type === 'pane' && b.paneId === id) return a.type === 'pane' ? a.paneId : undefined
+  return siblingOf(a, id) ?? siblingOf(b, id)
 }
 
 /** 바깥 분할의 비율만 (셸 서랍 높이) */

@@ -136,3 +136,10 @@ test('에이전트 명령이 없으면 띠로 알리고 · ⌘J 로 셸은 그�
   await win.keyboard.press('Meta+j')
   await expect(terms()).toHaveCount(1)
 })
+
+test('기본 템플릿이 있으면 빈 화면 단추가 템플릿 이름으로 · 터미널 보조 단추는 없다 (26 리뷰)', async () => {
+  await launch({ settings: { defaultTemplateId: 'tpl-basic' } })
+  const empty = win.getByTestId('empty-view')
+  await expect(empty.getByTestId('empty-new-chat')).toContainText('템플릿 ‘기본’ 으로 시작')
+  await expect(empty.getByTestId('empty-new-terminal')).toHaveCount(0)
+})

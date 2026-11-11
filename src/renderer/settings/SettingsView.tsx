@@ -216,7 +216,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
             ]}
           />
         </Row>
-        <Row title="새 일감 시작" desc="새 일감을 만들면 처음 여는 칸. 셸은 대화 칸에서 ⌘J 로 꺼내요" keywords="대화 채팅 터미널 셸 claude codex 기본">
+        <Row title="새 일감 시작" desc="새 일감 대화상자에서 처음 골라 둘 칸. 셸은 대화 칸에서 ⌘J 로 꺼내요. 기본 템플릿이 있으면 템플릿대로, 명령줄 taskminal task new 는 터미널로" keywords="대화 채팅 터미널 셸 claude codex 기본">
           <Choices
             kind="card"
             label="새 일감 시작"

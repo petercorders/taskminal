@@ -27,6 +27,7 @@ import {
   tabLabel,
   taskToTemplate,
   shellToggle,
+  splitActivePaneChat,
 } from '../../src/shared/model'
 import type { AppState, NewTaskInput, Settings, Task, Template } from '../../src/shared/types'
 
@@ -708,6 +709,19 @@ describe('대화 중심 (26단계)', () => {
     const again = shellToggle(back, () => 'never')
     expect(again.tabs[0]!.activePaneId).toBe('sh')
     expect(Object.keys(again.panes)).toHaveLength(2)
+  })
+  test('shellToggle: 대화가 둘이면 누른(활성) 대화 아래로 · 셸에서 돌아가면 그 옆 대화로 · 셸은 그 대화의 폴더에서 (26 리뷰)', () => {
+    const one = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    const two = splitActivePaneChat(one, 'right', () => 'c2')
+    two.panes.c2 = { ...two.panes.c2!, cwd: '/Users/me/app/sub' }
+    expect(two.tabs[0]!.activePaneId).toBe('c2')
+    const opened = shellToggle(two, () => 'sh')
+    const tab = opened.tabs[0]!
+    expect(tab.activePaneId).toBe('sh')
+    // 오른쪽 대화(c2)만 나뉘어 그 아래에 셸
+    expect(tab.layout).toMatchObject({ type: 'split', dir: 'right', b: { type: 'split', dir: 'down', a: { paneId: 'c2' }, b: { paneId: 'sh' } } })
+    expect(opened.panes.sh!.cwd).toBe('/Users/me/app/sub')
+    expect(shellToggle(opened, () => 'never').tabs[0]!.activePaneId).toBe('c2')
   })
   test('shellToggle: 탭이 없으면 그대로 · 터미널만 있는 탭에서는 그대로', () => {
     const none = { ...flutterTask(), tabs: [], activeTabId: null, panes: {} }

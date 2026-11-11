@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (25단계 보관 · 원격 병합 — 단위 969 · e2e 222(221 통과 · 1 건너뜀), **계획한 단계(0~25) 모두 끝**. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
+마지막 갱신: 2026-11-12 (26단계 대화 중심 · 가독성 병합 — 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
 
 ## 1. 지금 어디까지
 
@@ -22,6 +22,7 @@
 | 23 변경 검토 | main 에 병합(브랜치 `stage-23-review`). pane 종류 '변경'(⇧⌘G · ⌘P): 파일별 diff · 줄 골라 ⌫ 되돌리기(⌘Z · '되돌린 것' 7일, add 한 파일은 인덱스도 함께) · 체크한 파일만 `commit --only` · 막을 때만 경고(main 에 바로 · 비밀값) · 커밋 전 검사 실패 마지막 20줄 · 커밋 취소 · 대화 도구 줄의 'diff 열기 →' 카드 · 보일 때만 폴더 감시. 전체 보기 '± 변경' 칩은 그 화면이 없어 안 함. 계획 · 결과 `docs/stages/23-review.md` |
 | 24 지휘와 이어받기 | main 에 병합(브랜치 `stage-24-cli-resume`). `taskminal` 명령(`resources/bin/taskminal` → `out/main/cli.js`, 소켓 `<userData>/cli.sock` 0600): 일감 · 탭 · pane 바꾸기 · `pane send/read/wait` · `chat new/send/wait/read` · `notify` · `task note`, 앱 메뉴 '명령줄 도구 설치…' 로만 PATH 링크. 오래 안 본 일감의 이어받기 요약 카드(⌥⌘R) · 일감 메모 칸(⌥⌘M). 계획 · 결과 `docs/stages/24-cli-resume.md` |
 | 25 보관 · 원격 | main 에 병합(브랜치 `stage-25-archive-remote`, 25a `6788a08` · 25b `167cc7f` + 리뷰 고침). 보관함 ⇧⌘E(⌥⌘A 보관 · 되살리기 · 최근 지운 것 30일) · 주간 정리 · SSH 원격 일감(새 일감 ⌥2 · ControlMaster · tmux 이어 붙기 · 다시 붙기 다섯 번 · 호스트 키 띠). 24단계 친 글자 모으기(2340b45) 리뷰 고침도 이 브랜치. 계획 · 결과 `docs/stages/25-archive-remote.md` |
+| 26 대화 중심 · 가독성 | main 에 병합(브랜치 `stage-26-chat-first`, 26a 메뉴 · 탭 ▾ · 26b·c 대화 중심 · 가독성 · 26d 리뷰 고침). 새 일감 기본 = Claude 대화(설정 › 일반 › 새 일감 시작) · ⌘J 셸 꺼내기 · 빈 화면 단추 · 사이드바 '대화 N · 셸 M' · 글자 12px 이상 · 대비 4.5 이상. 계획 · 결과 `docs/stages/26-chat-first.md` |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -182,6 +183,13 @@
 - ssh 알림은 '끝난 결과(키 바뀜 · 거절 · 인증) → 질문' 순서로 본다. 질문 뒤 출력은 새로 모은다.
 - ControlPath 는 macOS 소켓 경로 104바이트 안에 — 보통 `<userData>/ssh` 는 넘쳐 `/tmp/taskminal-<uid>` 로 간다(e2e 임시 폴더도 길다).
 - 원격 일감은 템플릿을 쓰지 않는다 · 대화(⇧⌘J) · 변경 검토는 막지 않았다(이 Mac 에서 원격 경로로 돈다 — 8절).
+
+### 26 대화 중심 · 가독성
+계획 · 결과 `docs/stages/26-chat-first.md`('참고: Orca' 표 · 가독성 전후 표). 구조: `NewTaskInput.start` · `Settings.newTaskStart` · `shellToggle`(`src/shared/model.ts`) · `paneCountLabel`(`src/renderer/sidebar-model.ts`) · `tests/e2e/readability.spec.ts`(화면마다 글자 크기 · WCAG 대비 · 줄 간격을 재고 `test-results/readability/` 에 남김). 짚어 둔 함정:
+- 단축키 표는 ⌘ 없는 키를 받지 않는다(⌃\` 대신 ⌘J). 글 입력칸에서는 ⌘ 키가 칸의 몫이라 앱이 안 받는다 — 대화 입력칸의 ⌘J 만 예외로 받는다.
+- `createTask` 는 `start` 가 없으면 셸 — CLI · 옛 호출 그대로. e2e seed 설정은 `newTaskStart: 'terminal'`(helpers) — 새 시험이 대화 시작을 보려면 설정으로 넘긴다.
+- 글자 크기를 바꾸면 터미널 맞춤이 늦어져 열린 팔레트의 포커스를 가져갈 수 있었다 → 팔레트는 `aria-modal`(뒤 칸의 포커스 효과가 건너뜀).
+- styles.css 의 글자 크기는 이제 12px 아래가 없다 — 새 화면도 readability e2e 기준(12 · 본문 14 · 대비 4.5 · 줄 간격 1.4)을 지킨다.
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).

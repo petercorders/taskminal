@@ -1339,6 +1339,16 @@ export function App() {
     onRequestTaken: (n: number) => setReviewReq((r) => (r?.req.n === n ? null : r)),
   })
 
+  // 빈 화면 단추 이름 — 기본 템플릿이 있으면 그것이 '시작' 보다 앞선다(대화상자가 템플릿을 고른 채 열린다, 26 리뷰)
+  const emptyTemplate = state.settings.templates.find((t) => t.id === state.settings.defaultTemplateId)
+  const emptyStartLabel = emptyTemplate
+    ? `템플릿 ‘${emptyTemplate.name}’ 으로`
+    : state.settings.newTaskStart === 'terminal'
+      ? '터미널로'
+      : state.settings.newTaskStart === 'chat-codex'
+        ? 'Codex 대화로'
+        : 'Claude 대화로'
+
   const chatProps = {
     permission: state.settings.chatPermission,
     onPermission: (p: ChatPermission) => dispatch({ type: 'settings/patch', patch: { chatPermission: p } }),
@@ -1348,8 +1358,9 @@ export function App() {
     onShell: (paneId: string) => {
       const taskId = findPaneTask(stateRef.current, paneId)
       if (!taskId) return
+      // 그 대화로 포커스한 뒤 ⌘J 와 같은 길로 — 안내 · 포커스 되돌리기가 갈라지지 않게 (26 리뷰)
       dispatch({ type: 'pane/focus', taskId, paneId })
-      dispatch({ type: 'shell/toggle', taskId, paneId: newId() })
+      runCommandRef.current('shell-toggle')
     },
     onOpenLogin: chatLogin,
     onRewound: (paneId: string, forkAt: string | null, sessionId?: string) => dispatch({ type: 'chat/rewound', paneId, forkAt, ...(sessionId ? { sessionId } : {}) }),
@@ -1954,9 +1965,9 @@ export function App() {
               <p className="hint">일감이 없습니다 — 대화로 시작하고, 셸이 필요하면 ⌘J 로 꺼내요</p>
               <div className="empty-actions">
                 <button type="button" className="button primary" onClick={() => setCreating({})} data-testid="empty-new-chat">
-                  새 일감 · {state.settings.newTaskStart === 'terminal' ? '터미널로' : state.settings.newTaskStart === 'chat-codex' ? 'Codex 대화로' : 'Claude 대화로'} 시작 <kbd>⌘N</kbd>
+                  새 일감 · {emptyStartLabel} 시작 <kbd>⌘N</kbd>
                 </button>
-                {state.settings.newTaskStart !== 'terminal' && (
+                {!emptyTemplate && state.settings.newTaskStart !== 'terminal' && (
                   <button type="button" className="button" onClick={() => setCreating({ start: 'terminal' })} data-testid="empty-new-terminal">
                     터미널로 시작
                   </button>
