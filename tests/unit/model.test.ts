@@ -25,6 +25,7 @@ import {
   splitActivePane,
   setPaneCwd,
   tabLabel,
+  tabLabels,
   taskToTemplate,
   shellToggle,
   splitActivePaneChat,
@@ -269,6 +270,20 @@ describe('closePane · closeTab', () => {
     const t = flutterTask()
     expect(closePane(t, 'zz')).toBe(t)
     expect(closeTab(t, 'zz')).toBe(t)
+  })
+})
+
+describe('탭 이름 (27단계)', () => {
+  test('대화가 있는 탭은 셸 · 변경으로 포커스가 가도 대화 이름', () => {
+    const chat = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    const opened = shellToggle(chat, () => 'sh')
+    expect(opened.tabs[0]!.activePaneId).toBe('sh')
+    expect(tabLabel(opened, opened.tabs[0]!)).toBe('Claude 대화')
+  })
+  test('tabLabels: 같은 이름이 겹치면 뒤의 것에 번호 · 이름을 붙인 탭은 그대로', () => {
+    const t = createTask(input(), defaultSettings(), ids(), 0)
+    const three = { ...t, tabs: [t.tabs[0]!, { ...t.tabs[0]!, id: 'b' }, { ...t.tabs[0]!, id: 'c', title: '서버' }, { ...t.tabs[0]!, id: 'd' }] }
+    expect(tabLabels(three)).toEqual(['app', 'app 2', '서버', 'app 3'])
   })
 })
 

@@ -1805,6 +1805,9 @@ export function App() {
               >
                 {(() => {
                   const { shown, more } = quickButtons(task, state.settings.quickCommands)
+                  // 27단계: 대화 탭에서 빈 '빠른 명령' 안내 띠는 셸 명령 안내라 자리만 차지한다 — 단추가 생기면 그때 보인다
+                  const tabNow = task.tabs.find((t) => t.id === task.activeTabId)
+                  if (shown.length === 0 && tabNow && paneIds(tabNow.layout).some((id) => task.panes[id]?.kind === 'chat')) return null
                   return (
                     <QuickBar
                       taskName={task.name}
@@ -2047,7 +2050,8 @@ export function App() {
           again={firstRun === 'again'}
           onCreate={(cwd) => {
             const name = cwd === runtime.home || cwd === '~' ? '홈' : cwd.replace(/\/+$/, '').split('/').pop() || '홈'
-            create({ name, cwd: cwdLike(cwd, '~', runtime.home), templateId: null, statusId: state.settings.statuses[0]?.id ?? '', groupId: null, color: null })
+            // 27단계: 첫 일감도 설정의 '새 일감 시작'(기본 Claude 대화)대로
+            create({ name, cwd: cwdLike(cwd, '~', runtime.home), templateId: null, statusId: state.settings.statuses[0]?.id ?? '', groupId: null, color: null, start: state.settings.newTaskStart })
           }}
           onDone={() => {
             if (firstRun === 'first') window.taskminal.firstRunDone()

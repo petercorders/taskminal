@@ -48,7 +48,7 @@ export const SHORTCUTS = [
   { command: 'chat-split', accel: '', label: '대화로 오른쪽 나누기' },
   { command: 'chat-new-codex', accel: '', label: '새 대화 (Codex)' },
   { command: 'chat-split-codex', accel: '', label: '대화(Codex)로 오른쪽 나누기' },
-  { command: 'chat-terminal', accel: 'Shift+Command+J', label: '대화를 터미널로 전환' },
+  { command: 'chat-terminal', accel: 'Shift+Command+J', label: '대화를 터미널 화면(TUI)으로' },
   // 26단계: 대화 중심 일감에서 셸을 꺼낸다 — 없으면 대화 아래에 · 있으면 그리로 · 셸에서 누르면 대화로
   { command: 'shell-toggle', accel: 'Command+J', label: '셸 꺼내기 · 대화로' },
   { command: 'sidebar-filter', accel: '', label: '사이드바에서 거르기' },

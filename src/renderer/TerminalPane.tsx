@@ -689,7 +689,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     host.dataset['renderer'] = 'dom'
     const retry = () => setGlTry((n) => n + 1)
     const fail = () => webgl.failures.set(paneId, (webgl.failures.get(paneId) ?? 0) + 1)
-    const block = webglBlock({ mode: runtime.renderer, visible, inUse: webgl.inUse, failures: webgl.failures.get(paneId) ?? 0 })
+    const block = webglBlock({ mode: runtime.renderer, visible, inUse: webgl.inUse, failures: webgl.failures.get(paneId) ?? 0, dpr: window.devicePixelRatio })
     if (block === 'cap') {
       webgl.waiting.add(retry) // 다른 pane 이 놓으면 다시
       return () => void webgl.waiting.delete(retry)
@@ -739,6 +739,13 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     }
     return release
   }, [paneId, visible, glTry])
+  // 창을 배율이 다른 화면으로 옮기면 다시 판단 (27단계 — 배율 1 이면 DOM)
+  useEffect(() => {
+    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+    const again = () => setGlTry((n) => n + 1)
+    mq.addEventListener('change', again)
+    return () => mq.removeEventListener('change', again)
+  }, [glTry])
 
   // 다시 보이면 포커스. 숨겨진 동안(display:none)은 fit 이 크기를 못 재 아무것도 안 하고,
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.

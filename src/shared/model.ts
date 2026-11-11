@@ -287,10 +287,24 @@ export function tabLabel(task: Task, tab: Tab): string {
   if (tab.title) return tab.title
   const active = task.panes[tab.activePaneId]
   if (active?.kind === 'chat') return `${AGENT_NAME[active.chat?.agent ?? 'claude']} 대화`
+  // 27단계: 대화가 있는 탭은 셸 · 변경 칸으로 포커스가 가도 대화 이름 그대로 — ⌘J 로 셸을 꺼낼 때마다 탭 이름이 폴더로 바뀌지 않게
+  const chat = paneIds(tab.layout).map((id) => task.panes[id]).find((p) => p?.kind === 'chat')
+  if (chat) return `${AGENT_NAME[chat.chat?.agent ?? 'claude']} 대화`
   if (active?.kind === 'review') return '변경'
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd
   return cwd.slice(cwd.lastIndexOf('/') + 1)
+}
+
+/** 탭 줄에 보일 이름들 — 같은 이름이 겹치면 뒤의 것에 ' 2' · ' 3' (27단계: 같은 폴더 탭 셋이 모두 같은 이름이었다) */
+export function tabLabels(task: Task): string[] {
+  const seen = new Map<string, number>()
+  return task.tabs.map((tab) => {
+    const base = tabLabel(task, tab)
+    const n = (seen.get(base) ?? 0) + 1
+    seen.set(base, n)
+    return n === 1 ? base : `${base} ${n}`
+  })
 }
 
 /** pane 을 활성으로: 그 pane 이 든 탭을 활성 탭으로, 그 탭의 활성 pane 으로. */

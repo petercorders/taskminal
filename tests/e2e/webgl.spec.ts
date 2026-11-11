@@ -53,3 +53,13 @@ test('WebGL 로 그려도 입력 · 출력이 된다 (화면 글은 canvas 라 �
     }
   }).toBe('WEBGL4')
 })
+
+test('기본 모드(환경 변수 없음)는 화면 배율을 본다 — 배율 2 미만이면 DOM(글자가 작고 띄엄띄엄 그려지지 않게, 27단계)', async () => {
+  await app.close()
+  app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData, TASKMINAL_RENDERER: '' } })
+  win = await firstWindow(app)
+  const dpr = await win.evaluate(() => window.devicePixelRatio)
+  await expect(host('pa')).toHaveAttribute('data-renderer', dpr < 2 ? 'dom' : 'webgl')
+  if (dpr < 2) await expect(host('pa').locator('.xterm-rows')).toBeAttached()
+  await win.screenshot({ path: `test-results/webgl-default-dpr${dpr}.png` })
+})

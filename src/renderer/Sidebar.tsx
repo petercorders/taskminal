@@ -321,7 +321,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
             ))}
         </div>
       )}
-      {!loading && sections.length === 0 && <p className="sidebar-empty">일감이 없습니다 — + 로 만듭니다</p>}
+      {!loading && sections.length === 0 && <p className="sidebar-empty">일감이 없어요 — ⌘N 이나 + 로 대화를 시작해요</p>}
       {/* 불러오기 전에는 기본 설정(흐름)으로 빈 칸이 번쩍이지 않게, 일감이 없으면 빈 안내만 */}
       {flow &&
         !loading &&

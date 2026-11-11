@@ -73,17 +73,17 @@ export function FirstRun({ home, onCreate, onDone, again = false }: Props) {
         </div>
         {page === 0 && again && (
           <>
-            <h2 id="first-run-title">일감 하나 = 폴더 하나 + 터미널 묶음</h2>
+            <h2 id="first-run-title">일감 하나 = 폴더 하나 + 대화 · 셸</h2>
             <p>
-              일감마다 탭 · 분할을 따로 기억하고, 껐다 켜도 그대로예요.
+              일감은 Claude 대화로 시작하고, 셸이 필요하면 ⌘J 로 대화 아래에 꺼내요. 껐다 켜도 그대로예요.
               <br />새 일감은 ⌘N · 사이드바의 + 로 만들어요.
             </p>
           </>
         )}
         {page === 0 && !again && (
           <>
-            <h2 id="first-run-title">일감 하나 = 폴더 하나 + 터미널 묶음</h2>
-            <p>일감마다 탭 · 분할을 따로 기억하고, 껐다 켜도 그대로예요.
+            <h2 id="first-run-title">일감 하나 = 폴더 하나 + 대화 · 셸</h2>
+            <p>일감은 Claude 대화로 시작하고, 셸이 필요하면 ⌘J 로 대화 아래에 꺼내요. 껐다 켜도 그대로예요.
               <br />
               어디서 시작할까요?
             </p>

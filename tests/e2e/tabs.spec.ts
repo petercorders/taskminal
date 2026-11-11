@@ -75,8 +75,8 @@ async function threeTabs(): Promise<{ ids: string[]; pids: number[] }> {
 
 test('탭 3개: 새 탭은 끝에 붙어 활성, 탭마다 다른 셸 · 오가도 자기 출력만', async () => {
   const { ids, pids } = await threeTabs()
-  // 새 탭의 셸은 지금 pane 폴더(/tmp)에서 뜨고, 탭 이름은 그 폴더 끝 이름
-  await expect(tab(2).getByRole('tab')).toHaveText('tmp')
+  // 새 탭의 셸은 지금 pane 폴더(/tmp)에서 뜨고, 탭 이름은 그 폴더 끝 이름 — 세 탭이 같은 폴더라 27단계부터 뒤의 것은 번호(tmp 3)
+  await expect(tab(2).getByRole('tab')).toHaveText('tmp 3')
   await runIn(ids[2]!, 'echo CWD_$(pwd)')
   await waitText(ids[2]!, /CWD_\/(private\/)?tmp/)
   expect(new Set(pids).size).toBe(3)

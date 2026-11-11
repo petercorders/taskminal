@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-12 (26단계 대화 중심 · 가독성 병합 — 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
+마지막 갱신: 2026-11-12 (27단계 UX 감사 · 다듬기 병합 — 배율 1 에서 DOM 렌더러 · 첫 실행 대화. 26단계: 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
 
 ## 1. 지금 어디까지
 
@@ -23,6 +23,7 @@
 | 24 지휘와 이어받기 | main 에 병합(브랜치 `stage-24-cli-resume`). `taskminal` 명령(`resources/bin/taskminal` → `out/main/cli.js`, 소켓 `<userData>/cli.sock` 0600): 일감 · 탭 · pane 바꾸기 · `pane send/read/wait` · `chat new/send/wait/read` · `notify` · `task note`, 앱 메뉴 '명령줄 도구 설치…' 로만 PATH 링크. 오래 안 본 일감의 이어받기 요약 카드(⌥⌘R) · 일감 메모 칸(⌥⌘M). 계획 · 결과 `docs/stages/24-cli-resume.md` |
 | 25 보관 · 원격 | main 에 병합(브랜치 `stage-25-archive-remote`, 25a `6788a08` · 25b `167cc7f` + 리뷰 고침). 보관함 ⇧⌘E(⌥⌘A 보관 · 되살리기 · 최근 지운 것 30일) · 주간 정리 · SSH 원격 일감(새 일감 ⌥2 · ControlMaster · tmux 이어 붙기 · 다시 붙기 다섯 번 · 호스트 키 띠). 24단계 친 글자 모으기(2340b45) 리뷰 고침도 이 브랜치. 계획 · 결과 `docs/stages/25-archive-remote.md` |
 | 26 대화 중심 · 가독성 | main 에 병합(브랜치 `stage-26-chat-first`, 26a 메뉴 · 탭 ▾ · 26b·c 대화 중심 · 가독성 · 26d 리뷰 고침). 새 일감 기본 = Claude 대화(설정 › 일반 › 새 일감 시작) · ⌘J 셸 꺼내기 · 빈 화면 단추 · 사이드바 '대화 N · 셸 M' · 글자 12px 이상 · 대비 4.5 이상. 계획 · 결과 `docs/stages/26-chat-first.md` |
+| 27 UX 감사 · 다듬기 | main 에 병합(브랜치 `stage-27-ux-polish`). 화면 30장 감사 · 8기준 72.5 → 84.4(두 번 상한). 배율 1 은 DOM 렌더러 · 첫 실행 대화로 · 대화 탭의 빠른 명령 띠 숨김 · 탭 이름 유지 · 번호 · 'TUI 로'. `docs/stages/27-ux-polish.md` |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -190,6 +191,12 @@
 - `createTask` 는 `start` 가 없으면 셸 — CLI · 옛 호출 그대로. e2e seed 설정은 `newTaskStart: 'terminal'`(helpers) — 새 시험이 대화 시작을 보려면 설정으로 넘긴다.
 - 글자 크기를 바꾸면 터미널 맞춤이 늦어져 열린 팔레트의 포커스를 가져갈 수 있었다 → 팔레트는 `aria-modal`(뒤 칸의 포커스 효과가 건너뜀).
 - styles.css 의 글자 크기는 이제 12px 아래가 없다 — 새 화면도 readability e2e 기준(12 · 본문 14 · 대비 4.5 · 줄 간격 1.4)을 지킨다.
+
+### 27 UX 감사 · 다듬기
+계획 · 결과 `docs/stages/27-ux-polish.md`(기준 8개 채점 72.5 → 84.4 · 찾은 것 표). 짚어 둔 함정:
+- **WebGL 은 화면 배율 2 미만에서 쓰지 않는다**(`webglBlock` 'lowdpi' — 배율 1 에서 글자가 작고 띄엄띄엄). e2e 는 DOM 렌더러라 이걸 못 본다 — 터미널 모양은 `TASKMINAL_RENDERER` 를 비우고 실제 화면으로 찍어 본다.
+- `TASKMINAL_RENDERER=webgl` 은 이제 'webgl-always'(배율 무시) — WebGL 시험용. 기본(값 없음)은 배율로 고른다.
+- 탭 이름은 대화가 있는 탭이면 대화 이름(⌘J 셸 · 변경 칸에 포커스가 가도), 겹치면 `tabLabels` 가 ' 2' · ' 3' 을 붙인다 — 이름으로 탭을 찾는 시험은 번호를 생각한다.
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).

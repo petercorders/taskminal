@@ -171,7 +171,7 @@ test.describe('첫 실행 안내', () => {
     await launch({ TASKMINAL_FIRST_RUN: '' })
     const guide = win.getByTestId('first-run')
     await expect(guide).toHaveAttribute('data-page', '1')
-    await expect(guide).toContainText('일감 하나 = 폴더 하나 + 터미널 묶음')
+    await expect(guide).toContainText('일감 하나 = 폴더 하나 + 대화 · 셸')
     await win.screenshot({ path: 'test-results/release-first-run-1.png' })
     await win.keyboard.press('Enter') // 이 폴더로 첫 일감 만들기
     await expect(guide).toHaveAttribute('data-page', '2')
@@ -183,8 +183,10 @@ test.describe('첫 실행 안내', () => {
     await win.keyboard.press('Enter') // 시작하기
     await expect(guide).toHaveCount(0)
     await expect(win.getByTestId('task-view').and(win.locator('[data-task-name="홈"]'))).toBeVisible()
-    const pane = win.locator('[data-testid^="pane-"]').first()
-    await pane.click()
+    // 27단계: 첫 일감도 대화로 시작(설정 기본) — ⌘J 로 꺼낸 셸이 홈 폴더
+    await expect(win.getByTestId('chat-pane')).toBeVisible()
+    await win.keyboard.press('Meta+j')
+    const pane = win.locator('[data-testid^="pane-"]').filter({ has: win.locator('.xterm') }).first()
     await win.keyboard.type('pwd')
     await win.keyboard.press('Enter')
     await expect(pane.locator('.xterm-rows')).toContainText(homedir())

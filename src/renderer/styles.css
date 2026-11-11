@@ -668,6 +668,10 @@ select {
   color: var(--muted);
   padding: 0;
 }
+/* 27단계: legend 는 flex 항목이 아니라 gap 이 안 먹는다 — 고른 색의 바깥 테두리(4px)가 '색' 글자에 닿지 않게 */
+.field > legend {
+  margin-bottom: 10px;
+}
 .field input,
 .field select {
   padding: 7px 9px;

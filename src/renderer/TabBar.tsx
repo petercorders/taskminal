@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { taskActivity, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
-import { tabLabel } from '../shared/model'
+import { tabLabels } from '../shared/model'
 import type { Id, SplitDir, Task, Template } from '../shared/types'
 import { TemplateMenu } from './TemplateMenu'
 import type { PortChip } from '../shared/ports'
@@ -63,11 +63,12 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
     buttons[(index + step + buttons.length) % buttons.length]?.focus()
   }
 
+  const labels = tabLabels(task)
   return (
     <div className="tab-bar" data-testid="tab-bar">
       <div ref={listRef} className="tab-list" role="tablist" aria-label={`${task.name} 탭`}>
         {task.tabs.map((tab, index) => {
-          const label = tabLabel(task, tab)
+          const label = labels[index]!
           const active = tab.id === task.activeTabId
           const act = taskActivity(paneIds(tab.layout).map((id) => activity[id]))
           return (

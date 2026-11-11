@@ -662,15 +662,18 @@ export function ChatPane(p: Props) {
         <button type="button" className="chat-switch" onClick={p.onShell} title="이 일감 폴더의 셸을 대화 아래에 꺼내요 (⌘J)" data-testid="chat-shell">
           셸 ⌘J
         </button>
-        <button type="button" className="chat-switch" onClick={p.onToTerminal} title="같은 세션을 터미널로 (⇧⌘J)">
-          터미널 ⇧⌘J
+        {/* 27단계: '셸' 과 '터미널' 이 같은 뜻으로 읽혀 — 이쪽은 이 대화를 터미널 화면(TUI)으로 바꾸는 것 */}
+        <button type="button" className="chat-switch" onClick={p.onToTerminal} title="이 대화를 같은 세션 그대로 터미널 화면(TUI)으로 바꿔요 (⇧⌘J)" data-testid="chat-to-tui">
+          TUI 로 ⇧⌘J
         </button>
       </header>
       <div className="chat-list" ref={listRef}>
         {loaded && events.length === 0 && (
           <div className="chat-empty" data-testid="chat-empty">
             <div className="chat-empty-title">{name} 와 대화를 시작해요</div>
-            <div className="dim">이 일감 폴더({p.cwd})에서 일해요. 예시를 눌러도 돼요.</div>
+            <div className="dim" title={p.cwd}>
+              이 일감 폴더(<code>{shortPath(p.cwd)}</code>)에서 일해요. 예시를 눌러도 돼요.
+            </div>
             <div className="chat-examples">
               {EXAMPLES.map((x, i) => (
                 <button key={x} type="button" onClick={() => send(x)}>
@@ -678,7 +681,7 @@ export function ChatPane(p: Props) {
                 </button>
               ))}
             </div>
-            <div className="dim small">⌘P › 새 대화 ({name}) 로도 열 수 있어요 · 터미널 단추로 같은 세션을 TUI 로 · ⌘V · 📎 로 그림을 붙여요</div>
+            <div className="dim small">⌘J 셸 · ⌘V 로 그림 붙이기 · ‘TUI 로’ 단추로 같은 대화를 터미널 화면에서</div>
           </div>
         )}
         {blocks.map(renderBlock)}
