@@ -181,6 +181,45 @@ test('지운 일감은 보관함 › 최근 지운 것에 남고 되살릴 수 �
   await expect(row('Charlie')).toBeVisible()
 })
 
+test('최근 지운 것도 찾기로 거르고 ↩ 는 거른 줄을 · 글 있는 찾기 칸의 ⌘⌫ 는 지우기가 아님 · 보관한 채 지운 일감은 보이게 되살림 (리뷰)', async () => {
+  seedState(userData, [
+    { id: 'a', name: 'A', paneId: 'pa' },
+    { id: 'b', name: 'Bravo', paneId: 'pb' },
+    { id: 'd', name: 'Delta', paneId: 'pd' },
+  ])
+  await launch()
+  await row('Delta').click()
+  await command('archive')
+  await expect(row('Delta')).toHaveCount(0)
+  await command('archive-open')
+  const panel = win.getByTestId('archive-panel')
+  await win.keyboard.type('Del')
+  await win.keyboard.press('Meta+Backspace')
+  await expect(win.getByRole('alertdialog')).toHaveCount(0)
+  await expect(panel.getByTestId('archive-row')).toHaveCount(1)
+  // 보관한 채 지우기
+  await panel.getByRole('button', { name: 'Delta 지우기' }).click()
+  await win.getByRole('alertdialog').getByRole('button', { name: '지우기' }).click()
+  await win.getByRole('button', { name: '알림 닫기' }).click()
+  await row('Bravo').hover()
+  await win.getByRole('button', { name: 'Bravo 지우기' }).click()
+  await win.getByRole('alertdialog').getByRole('button', { name: '지우기' }).click()
+  await win.getByRole('button', { name: '알림 닫기' }).click()
+  await expect.poll(() => savedState().tasks.length).toBe(1)
+
+  await command('archive-open')
+  await panel.getByTestId('archive-deleted-tab').click()
+  await expect(panel.getByTestId('deleted-row')).toHaveCount(2)
+  await panel.getByLabel('보관함에서 찾기').fill('Del')
+  await expect(panel.getByTestId('deleted-row')).toHaveCount(1)
+  await expect(panel.getByTestId('deleted-row')).toHaveAttribute('data-task-name', 'Delta')
+  await win.keyboard.press('Enter')
+  await expect(row('Delta')).toBeVisible()
+  await expect(win.locator('[data-testid="task-view"][data-task-name="Delta"]')).toHaveAttribute('aria-hidden', 'false')
+  await expect(row('Bravo')).toHaveCount(0)
+  await expect.poll(() => savedState().tasks.find((t: { id: string }) => t.id === 'd')?.archivedAt).toBeUndefined()
+})
+
 test('주간 정리: 이번 주 명령 기록 → 칸 · 표 · 실패 한 줄 · 마크다운으로 복사', async () => {
   seedState(userData, [
     { id: 'a', name: 'Alpha', paneId: 'pa' },

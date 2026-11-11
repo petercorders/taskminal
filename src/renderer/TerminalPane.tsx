@@ -12,7 +12,7 @@ import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
 import { cleanExit, isTerminalReply, splitForWrite } from '../shared/pty'
-import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, STABLE_MS, type RemoteState, type SshSignal } from '../shared/remote'
+import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, UP_CONFIRM_MS, type RemoteState, type SshSignal } from '../shared/remote'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
 import { safeToInsert, tailLines } from '../shared/history'
@@ -341,17 +341,39 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     const reportRemote = (st: RemoteState) => onRemoteRef.current?.(st)
     let sshOut = '' // 이번 연결 시도의 앞부분 출력 — ssh 의 알림(지문 · 키 바뀜 · 인증)을 찾는다
     let sshSeen: SshSignal['kind'] | null = null
-    let attempt = 0 // 이어진 실패 수(1부터) — 오래 붙어 있다 끊기면 처음부터
-    let spawnedAt = 0
+    let attempt = 0 // 이어진 실패 수(1부터) — 붙은 것을 확인한 뒤 끊기면 처음부터
     let spawning = false
     let retryTimer: ReturnType<typeof setTimeout> | undefined
+    // 붙었는지: ssh 프로세스가 떴다고 붙은 게 아니다(죽은 호스트는 75초쯤 매달렸다 255) — 출력이 오고 묻는 중이 아니며 UP_CONFIRM_MS 동안 살아 있어야
+    let connected = false
+    let gotOutput = false
+    let awaitingAnswer = false // 처음 보는 서버 질문에 답을 기다림 — 그동안은 붙었다고 하지 않는다
+    let upTimer: ReturnType<typeof setTimeout> | undefined
+    const confirmMs = Math.min(UP_CONFIRM_MS, runtime.sshRetryMs * 3)
+    const confirmUp = () => {
+      clearTimeout(upTimer)
+      upTimer = setTimeout(() => {
+        if (disposed || connected) return
+        if (!gotOutput || awaitingAnswer || sshSeen === 'key-changed' || sshSeen === 'auth' || sshSeen === 'refused') return confirmUp()
+        connected = true
+        reportRemote({ kind: 'up' })
+      }, confirmMs)
+    }
+    // ssh 알림은 붙기 전까지만 찾는다 — 붙은 뒤 원격 셸 안의 글(git 의 'Permission denied (' · tmux 가 다시 그린 화면)을 연결 실패로 읽지 않게
     const scanSsh = (data: string) => {
-      if (sshOut.length >= SIGNAL_SCAN_MAX) return
+      gotOutput = true
+      if (connected || sshOut.length >= SIGNAL_SCAN_MAX) return
+      if (awaitingAnswer) awaitingAnswer = false // 답(yes · no)이 되돌아왔다
       sshOut += data
       const sig = sshOutputSignal(sshOut)
       if (!sig || sig.kind === sshSeen) return
       sshSeen = sig.kind
-      if (sig.kind === 'new-host') reportRemote({ kind: 'new-host', fingerprint: sig.fingerprint })
+      if (sig.kind === 'new-host') {
+        // 질문 뒤 출력은 새로 본다 — 질문 글이 남아 있어도 그 뒤의 거절 · 인증 실패를 알아보게
+        awaitingAnswer = true
+        sshOut = ''
+        reportRemote({ kind: 'new-host', fingerprint: sig.fingerprint })
+      }
     }
 
     const offData = pty.onData((id, data) => {
@@ -368,12 +390,14 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       if (remote && exit.exitCode === 255 && !exit.signal) {
         live = false
         early = []
+        clearTimeout(upTimer)
+        if (connected) attempt = 0 // 붙어 있다 끊김 — 다섯 번을 처음부터
+        connected = false
         const stop = sshSeen === 'key-changed' || sshSeen === 'auth' || sshSeen === 'refused' ? sshSeen : null
         if (stop) {
           term.write(`\r\n\x1b[2m[연결하지 않았어요 — ${stop === 'key-changed' ? '서버 키가 바뀌었어요' : stop === 'auth' ? '키 인증이 거절됐어요' : '서버를 확인하지 않았어요'} · ⌘R 로 다시]\x1b[0m\r\n`)
           return reportRemote({ kind: 'down', why: stop })
         }
-        if (Date.now() - spawnedAt >= STABLE_MS) attempt = 0
         attempt++
         const wait = reconnectDelay(attempt, runtime.sshRetryMs)
         if (wait === null) {
@@ -440,12 +464,17 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       spawning = true
       sshOut = ''
       sshSeen = null
+      connected = false
+      gotOutput = false
+      awaitingAnswer = false
       pty.spawn(paneId, { cwd: cwdRef.current, cols: term.cols, rows: term.rows, shell: s.shell, integration: s.integration, ...(remote ? { remote } : {}) }).then(
         () => {
           spawning = false
-          spawnedAt = Date.now()
           if (!disposed) goLive()
-          if (remote && !disposed && sshSeen !== 'new-host') reportRemote({ kind: 'up' })
+          if (remote && !disposed) {
+            if (sshSeen !== 'new-host') reportRemote({ kind: 'connecting', attempt })
+            confirmUp()
+          }
           // 셸이 뜨기 전에 이 pane 이 사라졌으면(빠른 닫기 · 다시 그리기) 타이머를 걸지 않는다 — 정리 함수는 이미 돌았다
           if (disposed || !startRef.current.command) return
           startTimer = setTimeout(() => typed || sendStart(), s.integration ? START_FALLBACK_MS : 0)
@@ -495,9 +524,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         if (!r.attached) return restoreThenSpawn()
         restoredPanes.add(paneId)
         pty.resize(paneId, term.cols, term.rows)
-        spawnedAt = Date.now()
         goLive(false)
-        if (remote) reportRemote({ kind: 'up' })
+        if (remote) {
+          connected = true // 지킴이에 살아 있던 ssh — 이미 붙어 있던 연결
+          reportRemote({ kind: 'up' })
+        }
       },
       () => {
         if (!disposed) restoreThenSpawn()
@@ -594,6 +625,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       cancelAnimationFrame(frame)
       clearTimeout(startTimer)
       clearTimeout(retryTimer) // 다시 붙기 대기 중 닫힌 pane 에 spawn 하지 않는다
+      clearTimeout(upTimer)
       reconnectRef.current = () => {}
       if (remote) remotePanes.delete(paneId)
       input.dispose()

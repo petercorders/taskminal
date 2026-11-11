@@ -13,7 +13,16 @@ interface Props {
 
 /** 원격 일감 머리 띠 (25단계) — 처음 보는 서버 · 끊김 · 다시 붙지 못함 · 키 바뀜 · 인증 거절. 붙어 있으면 그리지 않는다 */
 export function RemoteBand({ host, state, onAnswer, onRetry, onCopyFix }: Props) {
-  if (state.kind === 'up') return null
+  if (state.kind === 'up' || (state.kind === 'connecting' && state.attempt === 0)) return null
+  if (state.kind === 'connecting') {
+    return (
+      <div className="remote-band warn" role="status" data-testid="remote-band" data-kind="connecting">
+        <span className="remote-band-text">
+          ‹{host}› 에 다시 붙는 중… ({state.attempt}/5) · 끊긴 동안 친 키는 버려요
+        </span>
+      </div>
+    )
+  }
   const retry = (label: string) => (
     <button type="button" className="button small" onClick={onRetry} data-testid="remote-retry">
       {label} <kbd>⌘R</kbd>

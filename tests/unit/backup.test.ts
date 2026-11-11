@@ -132,6 +132,12 @@ describe('일감 하나 되살리기', () => {
     expect(r.state.tasks[1]!.panes['p2']).toBeDefined() // 같은 id — 지킴이에 남은 셸이면 다시 붙는다
     expect(r.kill).toEqual([])
   })
+  it('보관한 채 지운 일감도 보이게 되살린다 — 열 일감이 보관함에 숨으면 화면이 빈다(25단계 리뷰)', () => {
+    const snap = state([task('a', ['p1']), { ...task('b', ['p2']), archivedAt: 5 }])
+    const r = restoreTask(state([task('a', ['p1'])]), snap, 'b', newId)!
+    expect(r.state.activeTaskId).toBe('b')
+    expect(r.state.tasks[1]!.archivedAt).toBeUndefined()
+  })
   it('지금 있으면 그 자리에서 바꾸고 사라질 pane 을 알린다', () => {
     const snap = state([task('a', ['p1'])])
     const cur = state([task('x', ['p0']), task('a', ['p1', 'p9'])])

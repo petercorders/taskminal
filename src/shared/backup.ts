@@ -240,11 +240,14 @@ export function restoreTask(cur: AppState, snap: AppState, taskId: Id, newId: Ne
   const usedTabs = new Set(others.flatMap((t) => t.tabs.map((tab) => tab.id)))
   const usedPanes = new Set(others.flatMap((t) => Object.keys(t.panes)))
   const fixed = bringRefs(cur.settings, freshIds(from, usedTabs, usedPanes, newId), snap.settings)
+  // 되살린 일감은 연다 — 보관한 채 지운 것이면 보관을 푼다(열 일감이 보관함에 숨으면 화면이 빈다, 25단계)
+  const back = { ...fixed.task }
+  delete back.archivedAt
   const tasks = [...others]
-  tasks.splice(at >= 0 ? at : Math.min(snap.tasks.indexOf(from), others.length), 0, fixed.task)
-  const keep = new Set(Object.keys(fixed.task.panes))
+  tasks.splice(at >= 0 ? at : Math.min(snap.tasks.indexOf(from), others.length), 0, back)
+  const keep = new Set(Object.keys(back.panes))
   const kill = at >= 0 ? Object.keys(cur.tasks[at]!.panes).filter((id) => !keep.has(id)) : []
-  return { state: { ...cur, settings: fixed.settings, tasks, activeTaskId: fixed.task.id }, kill }
+  return { state: { ...cur, settings: fixed.settings, tasks, activeTaskId: back.id }, kill }
 }
 
 /** 이 시점으로 모두 — 설정까지 백업 그대로. 지금만 있는 pane 의 셸은 끝낸다 */

@@ -56,7 +56,9 @@ export function ArchivePanel({ state, onRestore, onRemove, onRestoreDeleted, onC
   useEffect(() => searchRef.current?.focus(), [tab])
   useEffect(() => setSel(0), [query, tab])
 
-  const rows = tab === 'archive' ? list : (deleted ?? []).filter((d) => !query.trim() || d.task.name.toLowerCase().includes(query.trim().toLowerCase()))
+  // 최근 지운 것도 찾기 칸으로 거른다 — 그린 줄 · ↑↓ · ↩ 가 같은 목록을 본다(25단계 리뷰: ↩ 가 거르기 전 목록에서 골랐다)
+  const shownDeleted = (deleted ?? []).filter((d) => !query.trim() || d.task.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const rows = tab === 'archive' ? list : shownDeleted
   const pickIds = (): Id[] => (checked.size > 0 ? [...checked] : list[sel] ? [list[sel]!.id] : [])
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -70,14 +72,15 @@ export function ArchivePanel({ state, onRestore, onRemove, onRestoreDeleted, onC
         const ids = pickIds()
         if (ids.length) onRestore(ids)
       } else {
-        const d = (deleted ?? [])[sel]
+        const d = shownDeleted[sel]
         if (d) onRestoreDeleted(d)
       }
     } else if (e.key === ' ' && tab === 'archive' && e.target !== searchRef.current) {
       e.preventDefault()
       const t = list[sel]
       if (t) setChecked((c) => (c.has(t.id) ? new Set([...c].filter((x) => x !== t.id)) : new Set([...c, t.id])))
-    } else if (e.key === 'Backspace' && e.metaKey && tab === 'archive') {
+    } else if (e.key === 'Backspace' && e.metaKey && tab === 'archive' && (e.target !== searchRef.current || query === '')) {
+      // 글이 있는 찾기 칸의 ⌘⌫ 는 글 지우기(macOS) — 일감 지우기로 가로채지 않는다(빈 칸이면 지울 글이 없으니 일감)
       e.preventDefault()
       const t = list[sel]
       if (t) onRemove(t)
@@ -130,7 +133,7 @@ export function ArchivePanel({ state, onRestore, onRemove, onRestoreDeleted, onC
               </li>
             ))}
           {tab === 'deleted' &&
-            (deleted ?? []).map((d, i) => (
+            shownDeleted.map((d, i) => (
               <li key={d.task.id} className="archive-row" role="option" aria-selected={i === sel} data-testid="deleted-row" data-task-name={d.task.name} onMouseDown={() => setSel(i)}>
                 <span />
                 <span>
@@ -151,6 +154,7 @@ export function ArchivePanel({ state, onRestore, onRemove, onRestoreDeleted, onC
         )}
         {tab === 'deleted' && deleted === null && <p className="archive-empty">읽는 중…</p>}
         {tab === 'deleted' && deleted?.length === 0 && <p className="archive-empty">30일 안에 지운 일감이 없어요.</p>}
+        {tab === 'deleted' && !!deleted?.length && shownDeleted.length === 0 && <p className="archive-empty">‘{query.trim()}’ 와 맞는 지운 일감이 없어요.</p>}
         <p className="archive-hint">
           {tab === 'archive'
             ? `↑↓ 고르기 · Space 체크 · ↩ 되살리기${checked.size ? ` (${checked.size}개)` : ''} · ⌘⌫ 지우기 · / 찾기 — 되살리면 탭 · 분할 · 폴더 그대로 새 셸이 떠요`

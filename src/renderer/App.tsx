@@ -48,7 +48,7 @@ import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
 import { dirtyPanes, integratedPanes, osc7Panes, remotePanes, restoredWithText, runtime } from './runtime'
 import { RemoteBand } from './RemoteBand'
-import type { RemoteState } from '../shared/remote'
+import { keygenFixCommand, type RemoteState } from '../shared/remote'
 import { PopupMenu, type PopupItem } from './PopupMenu'
 import { draftOf, QuickBar, QuickConfirm, QuickEditor, type QuickDraft } from './quick-ui'
 import { usePorts } from './ports-state'
@@ -1379,7 +1379,7 @@ export function App() {
   /** 일감의 띠에 보일 pane 하나 — 처음 보는 서버 > 못 붙음 > 다시 붙는 중 > 붙음 */
   const taskRemote = (task: Task): { paneId: string; state: RemoteState } | null => {
     if (!task.host) return null
-    const rank = { 'new-host': 3, down: 2, retry: 1, up: 0 } as const
+    const rank = { 'new-host': 3, down: 2, retry: 1, connecting: 1, up: 0 } as const
     let best: { paneId: string; state: RemoteState } | null = null
     for (const id of Object.keys(task.panes)) {
       const st = remoteStates[id]
@@ -1834,7 +1834,8 @@ export function App() {
                         onAnswer={(yes) => {
                           // ssh 자신의 질문에 답한다 — known_hosts 는 ssh 가 쓴다(앱은 쓰지 않음)
                           window.taskminal.pty.write(r.paneId, yes ? 'yes\r' : 'no\r')
-                          setRemoteStates((prev) => ({ ...prev, [r.paneId]: { kind: 'up' } }))
+                          // 답한 뒤 붙었는지는 TerminalPane 이 출력을 보고 알린다(up) · 거절이면 refused
+                          setRemoteStates((prev) => ({ ...prev, [r.paneId]: { kind: 'connecting', attempt: 0 } }))
                           refocus()
                         }}
                         onRetry={() => {
@@ -1842,7 +1843,7 @@ export function App() {
                           refocus()
                         }}
                         onCopyFix={() =>
-                          void navigator.clipboard.writeText(`ssh-keygen -R ${host}`).then(
+                          void navigator.clipboard.writeText(keygenFixCommand(host)).then(
                             () => showToast({ text: '복사했어요 — 터미널에서 붙여 넣어 옛 키를 지운 뒤 다시 시도하세요.' }),
                             () => {},
                           )

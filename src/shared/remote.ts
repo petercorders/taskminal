@@ -1,8 +1,11 @@
 // SSH 원격 일감 (25단계) — 로컬 pty 에서 ssh 를 띄운다. 앱은 비밀번호 · 키를 갖지 않고, 사용자의 ssh 설정 · agent · known_hosts 를 그대로 쓴다.
 
-/** ~/.ssh/config 의 Host 이름 · user@host · IP · [IPv6] · host:port. 옵션 주입(- 로 시작) · 셸 글자 · 공백은 거절 */
+/**
+ * ~/.ssh/config 의 Host 이름 · user@host · IP · IPv6(괄호 없이). 옵션 주입(- 로 시작) · 셸 글자 · 공백은 거절.
+ * host:port · [IPv6] 는 ssh 명령줄이 읽지 못한다(포트는 ~/.ssh/config 의 Port) — 콜론이 하나뿐이면 거절
+ */
 export function isSshHost(v: string): boolean {
-  return v.length > 0 && v.length <= 255 && !v.startsWith('-') && /^[A-Za-z0-9._@:[\]%-]+$/.test(v)
+  return v.length > 0 && v.length <= 255 && !v.startsWith('-') && /^[A-Za-z0-9._@:%-]+$/.test(v) && !/^[^:]*:[^:]*$/.test(v)
 }
 /** 원격 작업 폴더 — 줄바꿈 · NUL 만 거절(따옴표는 remoteCommand 가 처리) */
 export function isRemotePath(v: string): boolean {
@@ -22,11 +25,26 @@ function quotePath(p: string): string {
   return q(p)
 }
 
-/** 원격에서 돌 명령 — POSIX sh 만 쓴다(Synology ash 등). tmux 가 있으면 같은 세션에, 없으면 로그인 셸 */
+/**
+ * 원격에서 돌 명령 — POSIX sh 만 쓴다(Synology ash 등). tmux 가 있으면 같은 세션에, 없으면 로그인 셸.
+ * ssh 는 이 글을 원격 사용자의 로그인 셸(fish · csh 일 수 있다)로 돌리므로 `/bin/sh -c '<명령>'` 으로 감싼다
+ */
 export function remoteCommand(cwd: string, paneId: string, tmux: boolean): string {
   const cd = `cd ${quotePath(cwd)} 2>/dev/null || echo "taskminal: 폴더가 없어 홈에서 열어요 — ${cwd.replace(/["$`\\]/g, '')}";`
   const t = tmux ? ` command -v tmux >/dev/null 2>&1 && exec tmux new-session -A -s ${tmuxSession(paneId)};` : ''
-  return `${cd}${t} exec "\${SHELL:-/bin/sh}" -l`
+  return `exec /bin/sh -c ${q(`${cd}${t} exec "\${SHELL:-/bin/sh}" -l`)}`
+}
+
+/** macOS 유닉스 소켓 경로 한도(sun_path, NUL 포함) */
+const SUN_PATH_MAX = 104
+/** ControlPath 폴더가 한도에 드나 — ssh 가 `<폴더>/<%C 40자>` 에 마스터를 만들 때 `.<16자>` 임시 꼬리를 붙인다(넘치면 연결 뒤 255 로 끝남) */
+export function controlPathFits(dir: string): boolean {
+  return new TextEncoder().encode(dir).length + 1 + 40 + 17 + 1 <= SUN_PATH_MAX
+}
+
+/** 키 바뀜 띠의 '명령 복사' — known_hosts 는 실제 HostName(22 가 아니면 [host]:port)으로 적히므로 ssh -G 로 풀어서 지운다 */
+export function keygenFixCommand(host: string): string {
+  return `ssh-keygen -R "$(ssh -G ${q(host)} | awk '$1=="hostname"{h=$2} $1=="port"{p=$2} END{print (p==22 ? h : "[" h "]:" p)}')"`
 }
 
 export interface SshSpec {
@@ -34,16 +52,14 @@ export interface SshSpec {
   cwd: string
   paneId: string
   tmux: boolean
-  /** <userData>/ssh — ControlPath 소켓 폴더(0700) */
-  controlDir: string
+  /** ControlPath 소켓 폴더(0700, controlPathFits) — null 이면 연결을 나누지 않는다 */
+  controlDir: string | null
 }
 /** ssh 인자 — 호스트당 연결 하나(ControlMaster), 끊김은 ServerAlive 로 알아챈다. 호스트 앞 -- 로 옵션 주입을 막는다 */
 export function sshArgs(s: SshSpec): string[] {
   return [
     '-t',
-    '-o', 'ControlMaster=auto',
-    '-o', `ControlPath=${s.controlDir}/%C`,
-    '-o', 'ControlPersist=600',
+    ...(s.controlDir ? ['-o', 'ControlMaster=auto', '-o', `ControlPath=${s.controlDir}/%C`, '-o', 'ControlPersist=600'] : []),
     '-o', 'ServerAliveInterval=15',
     '-o', 'ServerAliveCountMax=3',
     '--',
@@ -84,12 +100,14 @@ export function sshOutputSignal(text: string): SshSignal | null {
 /** 원격 pane 의 연결 상태 — 일감 머리 띠 · 사이드바 점이 쓴다 */
 export type RemoteState =
   | { kind: 'up' }
+  /** ssh 는 떴지만 아직 붙었는지 모름 — 출력이 오고 UP_CONFIRM_MS 동안 살아 있으면 up. attempt 0 = 첫 연결(띠 없음) */
+  | { kind: 'connecting'; attempt: number }
   | { kind: 'new-host'; fingerprint: string }
   | { kind: 'retry'; attempt: number; inMs: number }
   | { kind: 'down'; why: 'gave-up' | 'key-changed' | 'auth' | 'refused' }
 
-/** 이만큼 붙어 있다 끊기면 새 끊김으로 보고 다섯 번을 처음부터 센다 */
-export const STABLE_MS = 15_000
+/** ssh 가 출력을 낸 뒤 이만큼 살아 있으면 붙은 것으로 본다(그 뒤 끊기면 다섯 번을 처음부터) — 시험은 걸음 단위의 3배로 줄인다 */
+export const UP_CONFIRM_MS = 3000
 /** 연결 시도마다 ssh 알림을 찾는 출력 길이 — 그 뒤(원격 셸 안의 글)는 보지 않는다 */
 export const SIGNAL_SCAN_MAX = 16 * 1024
 

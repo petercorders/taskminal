@@ -82,7 +82,7 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
     if (remote) {
       const h = host.trim()
       const dir = remoteDir.trim() || '~'
-      if (!isSshHost(h)) return setError('호스트를 확인하세요 — ~/.ssh/config 의 Host 이름이나 user@host')
+      if (!isSshHost(h)) return setError('호스트를 확인하세요 — ~/.ssh/config 의 Host 이름이나 user@host (포트는 ~/.ssh/config 의 Port 로)')
       if (!isRemotePath(dir)) return setError('원격 폴더를 확인하세요')
       submitted.current = true
       return onCreate({ name: name.trim() || h, cwd: dir, templateId: null, statusId, groupId: groupId || null, color, host: h, remoteTmux: tmux })

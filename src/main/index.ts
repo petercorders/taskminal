@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { autoUpdater, type ProgressInfo } from 'electron-updater'
 import { createHash, randomUUID } from 'node:crypto'
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir, hostname, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -16,7 +16,7 @@ import { isAccel, isAppCommand } from '../shared/keymap'
 import { MAX_LINK, webUrl } from '../shared/links'
 import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
-import { isRemotePath, isSshHost, parseSshConfigHosts, sshArgs } from '../shared/remote'
+import { controlPathFits, isRemotePath, isSshHost, parseSshConfigHosts, sshArgs } from '../shared/remote'
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onCliInstall, onQuitAll } from './menu'
 import { CliServer } from './cli-server'
@@ -290,11 +290,22 @@ const sshFile = (): string => {
   const v = process.env['TASKMINAL_SSH']
   return v && v.startsWith('/') ? v : '/usr/bin/ssh'
 }
-// ControlMaster 소켓 폴더 — 나만 읽고 쓰게(0700). 소켓 이름은 ssh 가 %C(해시)로 짧게 만든다
-const sshControlDir = (): string => {
-  const dir = join(app.getPath('userData'), 'ssh')
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
-  return dir
+// ControlMaster 소켓 폴더 — 나만 읽고 쓰는(0700 · 내 것 · 링크 아님) 폴더. macOS 소켓 경로 한도(104바이트)에 들어가야 한다:
+// 보통 '~/Library/Application Support/Taskminal/ssh' 는 넘치므로(25단계 리뷰) /tmp/taskminal-<uid> 로. 둘 다 안 되면 연결을 나누지 않는다
+const ownPrivateDir = (dir: string): boolean => {
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const st = lstatSync(dir)
+    return st.isDirectory() && !st.isSymbolicLink() && st.uid === process.getuid?.() && (st.mode & 0o077) === 0
+  } catch {
+    return false
+  }
+}
+const sshControlDir = (): string | null => {
+  for (const dir of [join(app.getPath('userData'), 'ssh'), `/tmp/taskminal-${process.getuid?.() ?? 'u'}`]) {
+    if (controlPathFits(dir) && ownPrivateDir(dir)) return dir
+  }
+  return null
 }
 // 15e: 터미널 그리기 — 시험(e2e)은 DOM 의 글을 읽으므로 playwright 설정이 dom 을 넣는다
 const renderer: RendererMode = process.env['TASKMINAL_RENDERER'] === 'dom' ? 'dom' : 'webgl'
