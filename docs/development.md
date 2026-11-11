@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (17단계 데이터 안전 병합 — 단위 477 · e2e 131, 다음은 18단계 출시 기본기)
+마지막 갱신: 2026-11-11 (18단계 출시 기본기 병합 — 단위 525 · e2e 139, 다음은 19단계 기록과 찾기. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -14,7 +14,8 @@
 | 13~15 e2e | 2026-11-11 브랜치 `stage-15-e2e-fix`(e2e 고침 3커밋) 로 전체 검사 통과(e2e 115개) → main ff 병합 `73c70cd` |
 | 16 셸 지킴이 | main 에 병합(브랜치 `stage-16-persist`). 단위 383 · e2e 123 통과 · .app 에서 지킴이 확인. 계획 · 결과 `docs/stages/16-persist.md` |
 | 17 데이터 안전 | main 에 병합(브랜치 `stage-17-safety`). 백업 · 되돌리기 · 손상 복구 · 내보내기/가져오기 · `redact()` · 화면 가림. 계획 · 결과 `docs/stages/17-safety.md` |
-| 18~25 1차 출시 | 18 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 18 출시 기본기 | main 에 병합(브랜치 `stage-18-release`). 자동 업데이트(GitHub Releases) · 오류 기록 · 지난번 꺼짐 · 첫 실행 안내 · `npm run release`(서명 · 공증 — Developer ID 인증서 · 공증 프로필 `taskminal-notary` 를 사용자가 만든 뒤). 계획 · 결과 `docs/stages/18-release.md` |
+| 19~25 1차 출시 | 19 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -95,6 +96,16 @@
 - 되돌리기 뒤 다시 마운트된 TerminalPane 이 설정 창 포커스를 빼앗았다 → `aria-modal` 이 열려 있으면 포커스를 가져가지 않는다.
 - 단축키를 키 표에 더하면 앱 메뉴(`src/main/menu.ts`)에도 넣는다 — `keys.spec` 메뉴 대조 시험이 잡는다.
 
+### 18 출시 기본기
+계획 · 결과 `docs/stages/18-release.md`. 구조: `src/shared/update.ts`(버전 비교 · 요약 · 오류 글 · 막힌 자리) · `src/main/updater.ts`(Updater — 엔진을 감싼 상태, 시험은 가짜 엔진) · `src/shared/errlog.ts` + `src/main/errlog.ts`(오류 기록) · `src/renderer/update-ui.tsx` · `settings/AboutSection.tsx` · `FirstRun.tsx` · `scripts/release.mjs`(배포 빌드). 짚어 둔 함정:
+- 업데이트 받는 곳은 GitHub Releases `petercorders/taskminal`(사용자 결정, NAS 대신). 게시 · push 는 사용자 확인 뒤.
+- `app-update.yml` 은 electron-builder 가 macOS 에서 dmg · zip 대상일 때만 넣는다 — `npm run package`(dir) 결과물엔 없고, 그런 빌드는 업데이트를 '확인하지 않음' 으로 둔다. 검사는 `check-package --release`.
+- e2e 업데이트는 `TASKMINAL_UPDATE_FEED=<로컬 http>` + `TASKMINAL_UPDATE_FIRST_MS` — 실제 electron-updater 가 받고, 받은 파일은 `<userData>/caches`. 서명 없는 개발 앱은 Squirrel 설치가 실패하는 길만 볼 수 있다.
+- crashReporter 는 임시 userData(e2e)에서 켜지 않는다 — crashpad_handler 가 stdio 를 물고 남아 `app.close()` 가 끝나지 않는다(기존 e2e 가 모두 멈췄다).
+- 사이드바는 상태를 읽는 중에도 그려진다 · 그 사이 온 명령(메뉴 · app:command)은 버린다 → e2e 는 `task-view` · `empty-view` · `first-run` 중 하나를 기다린 뒤 명령을 보낸다.
+- 첫 실행 안내는 state.json 이 없고 `<userData>/first-run-seen` 이 없을 때만 — e2e 는 `TASKMINAL_FIRST_RUN=seen` 이 기본(playwright 설정), 안내를 보는 시험만 지운다.
+- renderer 에 여는 API 를 늘리면 `window.spec` 의 허용 목록도 고친다(보안 기본값 시험).
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -102,6 +113,7 @@
 
 - Playwright `expect.poll` 은 콜백이 throw 하면 다시 시도하지 않는다 → `?.` 로 undefined 를 돌려준다.
 - Playwright 는 페이지 포커스를 흉내 내 `document.hasFocus()` 를 못 낮춘다 · 합성 키는 네이티브 메뉴 단축키를 부르지 않는다.
+- 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인.
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
 - e2e `win.evaluate` 안에서는 `window` 대신 `globalThis`(tsconfig.node 에 DOM 이 없다).
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
