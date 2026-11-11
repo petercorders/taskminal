@@ -1101,6 +1101,7 @@ export function App() {
     onAskChat: (text: string) => askChat(taskId, text),
     onInsertTerminal: (command: string) => insertTerminal(taskId, command),
     onToast: showToast,
+    onRequestTaken: (n: number) => setReviewReq((r) => (r?.req.n === n ? null : r)),
   })
 
   const chatProps = {
@@ -1117,6 +1118,7 @@ export function App() {
       if (taskId) openReview(taskId, 'diff', path)
     },
     draft: chatDraft,
+    onDraftTaken: (n: number) => setChatDraft((d) => (d?.n === n ? null : d)),
   }
 
   const closePane = (paneId: string, confirmed = false) => {

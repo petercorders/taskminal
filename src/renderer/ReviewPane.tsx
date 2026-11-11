@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import {
   MANY_FILES,
+  resolveReviewPath,
   commitWarnings,
   fileSig,
   filterFiles,
@@ -39,6 +40,8 @@ interface Props {
   onAskChat(text: string): void
   onInsertTerminal(command: string): void
   onToast(t: Omit<ToastSpec, 'id'>): void
+  /** 요청을 받았다 — App 이 지워 두어야 pane 이 다시 그려질 때 같은 요청을 또 받지 않는다(리뷰) */
+  onRequestTaken(n: number): void
 }
 
 type CommitView =
@@ -159,6 +162,15 @@ export function ReviewPane(p: Props) {
     if (!files.length) return setCur(null)
     if (!cur || !files.some((f) => f.path === cur)) setCur(files[0]!.path)
   }, [files, cur])
+  // 'diff 열기' 로 온 파일 — 경로는 대화 폴더 기준이라 읽은 뒤 저장소 뿌리 기준으로 맞춘다(위의 '첫 파일로' 뒤에 와야 이긴다)
+  const wantFile = useRef<string | null>(null)
+  useEffect(() => {
+    const want = wantFile.current
+    if (!want || !ok) return
+    wantFile.current = null
+    const at = resolveReviewPath(files, ok.root, p.dir, want)
+    if (at) setCur(at)
+  }, [ok, files, focusTick]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setSel(new Set())
     setCursor(null)
@@ -190,8 +202,10 @@ export function ReviewPane(p: Props) {
     setMode(p.request.mode)
     if (p.request.file) {
       setQuery('')
-      setCur(p.request.file)
+      wantFile.current = p.request.file
+      setFocusTick((n) => n + 1)
     }
+    p.onRequestTaken(p.request.n)
     focusWant.current = p.request.mode === 'commit' ? 'msg' : 'root'
     setFocusTick((n) => n + 1)
   }, [p.request?.n]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -276,7 +290,7 @@ export function ReviewPane(p: Props) {
     setCommit({ s: 'running', started: Date.now() })
     let r: CommitResult
     try {
-      r = await api.commit(ok.root, checkedFiles.map((f) => f.path), message)
+      r = await api.commit(ok.root, checkedFiles.map((f) => f.path), message, checkedFiles.map(fileSig))
     } catch {
       r = { ok: false, reason: 'unknown', tail: '' }
     }

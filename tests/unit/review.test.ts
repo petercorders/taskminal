@@ -7,6 +7,7 @@ import {
   folderGroups,
   foldReason,
   liveReverted,
+  resolveReviewPath,
   parseDiff,
   parseStatus,
   untrackedDiff,
@@ -207,6 +208,16 @@ describe('commitWarnings', () => {
     expect(commitWarnings({ branch: 'feat', worktree: false, files: [] })).toEqual([])
     const removed = parseDiff('diff --git a/k b/k\n--- a/k\n+++ b/k\n@@ -1 +1 @@\n-sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789\n+ok\n')
     expect(commitWarnings({ branch: 'feat', worktree: false, files: removed })).toEqual([])
+  })
+})
+
+describe('resolveReviewPath — 대화 폴더 기준 → 저장소 뿌리 기준', () => {
+  const files = [{ path: 'packages/app/src/x.ts' }, { path: 'README.md' }]
+  it('일감 폴더가 하위 폴더면 앞에 붙인다 · 뿌리면 그대로 · 없으면 null', () => {
+    expect(resolveReviewPath(files, '/r', '/r/packages/app', 'src/x.ts')).toBe('packages/app/src/x.ts')
+    expect(resolveReviewPath(files, '/r', '/r/', 'README.md')).toBe('README.md')
+    expect(resolveReviewPath(files, '/r', '/r/packages/app', 'nope.ts')).toBe(null)
+    expect(resolveReviewPath(files, '/r', '/rx/packages/app', 'src/x.ts')).toBe(null)
   })
 })
 

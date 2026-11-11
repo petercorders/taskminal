@@ -186,7 +186,8 @@ export interface ReviewApi {
   restore(id: string): Promise<import('../shared/review').RestoreResult>
   reverted(root: string): Promise<import('../shared/review').RevertedView[]>
   clearReverted(): Promise<void>
-  commit(dir: string, paths: string[], message: string): Promise<import('../shared/review').CommitResult>
+  /** sigs = 보고 있던 각 파일의 표지(fileSig) — 그 사이 바뀌었으면 'changed' */
+  commit(dir: string, paths: string[], message: string, sigs: string[]): Promise<import('../shared/review').CommitResult>
   undoCommit(dir: string, hash: string): Promise<import('../shared/review').UndoResult>
   /** 보이는 동안만 폴더 감시 — null 이면 끔 */
   watch(paneId: string, root: string | null): void

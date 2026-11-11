@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { commitFiles, loadReview, makeRunGit, restoreReverted, revertFile, revertLines, RevertStore, safeRel, undoCommit, type ReviewOk } from '../../src/main/review-git'
+import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit, type ReviewOk, type RunGit } from '../../src/main/review-git'
 import { fileSig, lineKey, watchIgnored } from '../../src/shared/review'
 
 const run = makeRunGit()
@@ -36,6 +36,11 @@ async function ok(dir = repo): Promise<ReviewOk> {
   const r = await loadReview(run, dir)
   if (r.state !== 'ok') throw new Error(`상태 ${r.state}`)
   return r
+}
+/** 지금 보이는 diff 의 표지로 커밋 — 화면이 하는 그대로 */
+async function commitNow(paths: string[], msg: string) {
+  const fs = (await ok()).files
+  return commitFiles(run, repo, paths, msg, paths.map((p) => { const f = fs.find((x) => x.path === p); return f ? fileSig(f) : '' }))
 }
 
 describe('loadReview', () => {
@@ -146,6 +151,88 @@ describe('줄 되돌리기 · 되살리기', () => {
   })
 })
 
+describe('인덱스 · 시간 초과 · 링크 (23단계 리뷰)', () => {
+  it('git add 한 파일은 인덱스도 함께 되돌리고 되살린다', async () => {
+    write('x.txt', 'a\nB\nc\nd\ne\nf\ng\n')
+    git('add', 'x.txt')
+    const f = (await ok()).files[0]!
+    const r = await revertLines(run, store, repo, 'x.txt', fileSig(f), [lineKey(0, 1), lineKey(0, 2)])
+    if (!r.ok) throw new Error(r.reason)
+    expect(read('x.txt')).toBe('a\nb\nc\nd\ne\nf\ng\n')
+    expect(git('diff', '--cached', '--name-only')).toBe('') // 인덱스에 남아 다음 커밋에 들어가지 않는다
+    expect(await restoreReverted(run, store, r.id)).toBe('ok')
+    expect(git('diff', '--cached', '--name-only')).toBe('x.txt')
+  })
+  it('git add 한 새 파일 지우기 — 인덱스에서도 빠진다', async () => {
+    write('n.txt', 'one\n')
+    git('add', 'n.txt')
+    const n = (await ok()).files.find((f) => f.path === 'n.txt')!
+    expect(await revertFile(run, store, repo, 'n.txt', fileSig(n))).toMatchObject({ ok: true })
+    expect(existsSync(join(repo, 'n.txt'))).toBe(false)
+    expect(git('ls-files')).not.toContain('n.txt')
+  })
+  it('일부만 add 한 파일은 되돌리지 않는다 — 이유를 알린다', async () => {
+    write('x.txt', 'a\nB\nc\nd\ne\nf\ng\n')
+    git('add', 'x.txt')
+    write('x.txt', 'a\nB\nc\nd\ne\nf\nG\n')
+    const f = (await ok()).files[0]!
+    const r = await revertLines(run, store, repo, 'x.txt', fileSig(f), [lineKey(0, 1), lineKey(0, 2)])
+    expect(r).toMatchObject({ ok: false, reason: 'nothing' })
+    expect(read('x.txt')).toBe('a\nB\nc\nd\ne\nf\nG\n')
+  })
+  it('적용이 시간 초과로 끝나도 실제로 됐으면 되살릴 수 있게 남긴다', async () => {
+    write('x.txt', 'a\nB\nc\nd\ne\nf\ng\n')
+    const slow: RunGit = async (args, o) => {
+      const r = await run(args, o)
+      return args[0] === 'apply' && args.includes('-R') && !args.includes('--check') ? { ...r, code: -1, timedOut: true } : r
+    }
+    const f = (await ok()).files[0]!
+    const r = await revertLines(slow, store, repo, 'x.txt', fileSig(f), [lineKey(0, 1), lineKey(0, 2)])
+    expect(r).toMatchObject({ ok: true })
+    expect(store.list(repo, Date.now() + 120_000).length).toBe(1) // 1분 정리에 지워지지 않는다
+  })
+  it('새 파일 링크는 따라가지 않는다 — 폴더 링크에도 읽기가 깨지지 않고 저장소 밖 글을 보이지 않는다', async () => {
+    mkdirSync(join(base, 'outside'))
+    writeFileSync(join(base, 'outside', 'secret'), 'SECRET\n')
+    symlinkSync(join(base, 'outside'), join(repo, 'dirlink'))
+    symlinkSync(join(base, 'outside', 'secret'), join(repo, 'filelink'))
+    const files = (await ok()).files
+    for (const p of ['dirlink', 'filelink']) expect(files.find((f) => f.path === p)).toMatchObject({ binary: true, hunks: [] })
+  })
+  it('커밋 — 본 뒤 내용이 바뀐 파일은 커밋하지 않는다', async () => {
+    write('x.txt', 'X\n')
+    const sig = fileSig((await ok()).files[0]!)
+    write('x.txt', 'X2\n')
+    expect(await commitFiles(run, repo, ['x.txt'], 'm', [sig])).toMatchObject({ ok: false, reason: 'changed' })
+    expect(git('log', '-1', '--format=%s')).toBe('init')
+  })
+  it('편집기로 열기 — 저장소 뿌리 · 보통 파일일 때만', async () => {
+    expect(await openTarget(run, repo, 'x.txt')).toBe(join(repo, 'x.txt'))
+    expect(await openTarget(run, base, 'repo/x.txt')).toBe(null) // 저장소 아님
+    mkdirSync(join(repo, 'sub'))
+    writeFileSync(join(repo, 'sub', 'y'), 'y')
+    expect(await openTarget(run, join(repo, 'sub'), 'y')).toBe(null) // 뿌리 아님
+    symlinkSync('/etc/hosts', join(repo, 'l'))
+    expect(await openTarget(run, repo, 'l')).toBe(null)
+  })
+  it('갈래(linked worktree)의 git add 도 듣는다', async () => {
+    const wt = join(base, 'wt')
+    git('worktree', 'add', '-q', '-b', 'b1', wt)
+    const w = new ReviewWatch()
+    let n = 0
+    w.set('k', wt, () => n++)
+    const g = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: wt, encoding: 'utf8' }).trim()
+    w.addGitDir('k', wt, g)
+    await new Promise((r) => setTimeout(r, 300))
+    n = 0
+    execFileSync('git', ['update-index', '--refresh'], { cwd: wt })
+    writeFileSync(join(g, 'index.touch'), '') // 다른 이름은 무시
+    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'e'], { cwd: wt })
+    await expect.poll(() => n, { timeout: 3000 }).toBeGreaterThan(0)
+    w.stop('k')
+  })
+})
+
 describe('safeRel — 편집기로 열기는 이것만 보고 연다', () => {
   it('저장소 안 상대 경로만', () => {
     for (const ok of ['x.txt', 'src/a b/한글.ts', '.env']) expect(safeRel(ok)).toBe(true)
@@ -182,7 +269,7 @@ describe('커밋', () => {
     write('keep.txt', 'K\n')
     write('new.txt', 'N\n')
     git('add', 'keep.txt')
-    const r = await commitFiles(run, repo, ['x.txt', 'new.txt'], '고침: 둘만\n\n본문')
+    const r = await commitNow(['x.txt', 'new.txt'], '고침: 둘만\n\n본문')
     expect(r).toMatchObject({ ok: true, subject: '고침: 둘만' })
     expect(git('show', '--name-only', '--format=', 'HEAD').split('\n').sort()).toEqual(['new.txt', 'x.txt'])
     expect(git('diff', '--cached', '--name-only')).toBe('keep.txt')
@@ -190,7 +277,7 @@ describe('커밋', () => {
   })
   it('지운 파일도 커밋', async () => {
     rmSync(join(repo, 'keep.txt'))
-    expect(await commitFiles(run, repo, ['keep.txt'], 'rm')).toMatchObject({ ok: true })
+    expect(await commitNow(['keep.txt'], 'rm')).toMatchObject({ ok: true })
     expect(git('ls-files')).toBe('x.txt')
   })
   it('커밋 전 검사가 실패하면 마지막 20줄 · 아무것도 바꾸지 않음(새 파일도 인덱스에서 뺌)', async () => {
@@ -199,7 +286,7 @@ describe('커밋', () => {
     chmodSync(hook, 0o755)
     write('new.txt', 'N\n')
     const before = git('rev-parse', 'HEAD')
-    const r = await commitFiles(run, repo, ['new.txt'], 'm')
+    const r = await commitNow(['new.txt'], 'm')
     expect(r).toMatchObject({ ok: false, reason: 'hook' })
     if (r.ok) return
     const lines = r.tail.split('\n')
@@ -209,14 +296,14 @@ describe('커밋', () => {
     expect(git('status', '--porcelain')).toBe('?? new.txt')
   })
   it('바뀐 목록에 없는 경로 · 빈 메시지는 거절', async () => {
-    expect(await commitFiles(run, repo, ['keep.txt'], 'm')).toMatchObject({ ok: false, reason: 'changed' })
+    expect(await commitNow(['keep.txt'], 'm')).toMatchObject({ ok: false, reason: 'changed' })
     write('x.txt', 'X\n')
-    expect(await commitFiles(run, repo, ['x.txt'], '  ')).toMatchObject({ ok: false, reason: 'empty' })
-    expect(await commitFiles(run, repo, ['*'], 'm')).toMatchObject({ ok: false, reason: 'changed' })
+    expect(await commitNow(['x.txt'], '  ')).toMatchObject({ ok: false, reason: 'empty' })
+    expect(await commitNow(['*'], 'm')).toMatchObject({ ok: false, reason: 'changed' })
   })
   it('커밋 취소 — HEAD 가 그 커밋일 때만 · 원격에 있으면 거절', async () => {
     write('x.txt', 'X\n')
-    const r = await commitFiles(run, repo, ['x.txt'], 'm')
+    const r = await commitNow(['x.txt'], 'm')
     if (!r.ok) throw new Error(r.reason)
     expect(await undoCommit(run, repo, 'deadbeef')).toBe('moved')
     git('update-ref', 'refs/remotes/origin/main', r.hash)

@@ -317,6 +317,21 @@ export function commitWarnings(p: { branch: string | null; worktree: boolean; fi
   return out
 }
 
+/**
+ * 대화 도구 줄의 경로(대화 폴더 기준) → 변경 pane 의 경로(저장소 뿌리 기준). 일감 폴더가 저장소 하위 폴더면
+ * 앞에 그 하위 폴더를 붙인다(리뷰: packages/app 에서 고친 src/x.ts). 목록에 없으면 null.
+ */
+export function resolveReviewPath(files: readonly { path: string }[], root: string, dir: string, path: string): string | null {
+  const has = (p: string) => files.some((f) => f.path === p)
+  const r = root.replace(/\/+$/, '')
+  const d = dir.replace(/\/+$/, '')
+  if (d.startsWith(`${r}/`)) {
+    const sub = `${d.slice(r.length + 1)}/${path}`
+    if (has(sub)) return sub
+  }
+  return has(path) ? path : null
+}
+
 export const REVERT_KEEP_MS = 7 * 86_400_000
 
 /** 되돌린 것 목록 — 7일 안 · 적용된 것만, 새것부터 */

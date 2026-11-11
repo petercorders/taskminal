@@ -46,6 +46,8 @@ interface Props {
   onOpenDiff(path: string): void
   /** 변경 pane 의 '대화에 묻기' 가 넣는 글 — n 이 바뀔 때마다 입력칸 끝에 붙인다 */
   draft: { text: string; n: number } | null
+  /** 글을 받았다 — App 이 지워 두어야 다시 그려질 때 같은 글을 또 붙이지 않는다(리뷰) */
+  onDraftTaken(n: number): void
 }
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
@@ -125,6 +127,7 @@ export function ChatPane(p: Props) {
     if (!p.draft) return
     const add = p.draft.text
     setText((t) => (t ? `${t.replace(/\s+$/, '')}\n${add}` : add))
+    p.onDraftTaken(p.draft.n)
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [p.draft?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   const listRef = useRef<HTMLDivElement>(null)

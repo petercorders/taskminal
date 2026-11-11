@@ -73,7 +73,7 @@ export const IPC = {
   reviewRestore: 'review:restore', // invoke(id) → 'ok' | 'changed' | 'gone' | 'unknown'
   reviewReverted: 'review:reverted', // invoke(root) → RevertedView[] (7일 · 그 저장소 것)
   reviewClearReverted: 'review:clear-reverted', // invoke — 설정 › 개인정보 '되돌린 것 비우기'
-  reviewCommit: 'review:commit', // invoke(dir, path[], message) → CommitResult
+  reviewCommit: 'review:commit', // invoke(dir, path[], message, sig[]) → CommitResult — 본 diff 그대로일 때만
   reviewUndoCommit: 'review:undo-commit', // invoke(dir, hash) → 'ok' | 'moved' | 'remote' | 'root' | 'failed'
   reviewWatch: 'review:watch', // send(paneId, root|null) — 보이는 동안만 폴더 감시
   reviewChanged: 'review:changed', // main → renderer: (paneId) 폴더가 바뀜(0.5초 모음)

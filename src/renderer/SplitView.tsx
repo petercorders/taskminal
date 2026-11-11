@@ -55,6 +55,7 @@ interface Props {
     onOpenDiff(paneId: Id, path: string): void
     /** '대화에 묻기' 로 넣을 글 — pane 마다 한 번(n) */
     draft: { paneId: Id; text: string; n: number } | null
+    onDraftTaken(n: number): void
   }
   /** 변경 pane (23단계) */
   review: {
@@ -63,6 +64,7 @@ interface Props {
     onAskChat(text: string): void
     onInsertTerminal(command: string): void
     onToast(t: Omit<ToastSpec, 'id'>): void
+    onRequestTaken(n: number): void
   }
 }
 
@@ -180,6 +182,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onActivity={(ev) => onActivity(pane.id, ev)}
                 onOpenDiff={(path) => chat.onOpenDiff(pane.id, path)}
                 draft={chat.draft?.paneId === pane.id ? chat.draft : null}
+                onDraftTaken={chat.onDraftTaken}
               />
             )}
             {pane?.kind === 'review' && (
@@ -194,6 +197,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onAskChat={review.onAskChat}
                 onInsertTerminal={review.onInsertTerminal}
                 onToast={review.onToast}
+                onRequestTaken={review.onRequestTaken}
               />
             )}
             {pane && !pane.kind && (

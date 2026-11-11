@@ -28,7 +28,7 @@ import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
-import { commitFiles, loadReview, makeRunGit, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
+import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
 import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
 import { execFile as execFileChild, spawn as spawnChild } from 'node:child_process'
 import { ChatManager } from './chat/chat-manager'
@@ -690,10 +690,10 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     reverts().clear()
   })
-  ipcMain.handle(IPC.reviewCommit, async (event, dir: unknown, paths: unknown, message: unknown): Promise<CommitResult> => {
+  ipcMain.handle(IPC.reviewCommit, async (event, dir: unknown, paths: unknown, message: unknown, sigs: unknown): Promise<CommitResult> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    if (!okDir(dir) || !okStrs(paths, 20_000) || typeof message !== 'string' || message.length > 100_000) return { ok: false, reason: 'changed', tail: '' }
-    return commitFiles(runGit, dir, paths, message)
+    if (!okDir(dir) || !okStrs(paths, 20_000) || !okStrs(sigs, 20_000) || typeof message !== 'string' || message.length > 100_000) return { ok: false, reason: 'changed', tail: '' }
+    return commitFiles(runGit, dir, paths, message, sigs)
   })
   ipcMain.handle(IPC.reviewUndoCommit, async (event, dir: unknown, hash: unknown): Promise<UndoResult> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -703,14 +703,22 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(IPC.reviewWatch, (event, paneId: unknown, root: unknown) => {
     if (!fromOurWindow(event) || !isPaneId(paneId)) return
     const wc = event.sender
-    reviewWatch.set(`${wc.id}:${paneId}`, okDir(root) ? root : null, () => {
+    const key = `${wc.id}:${paneId}`
+    const dir = okDir(root) ? root : null
+    reviewWatch.set(key, dir, () => {
       if (!wc.isDestroyed()) wc.send(IPC.reviewChanged, paneId)
     })
+    if (dir)
+      void runGit(['rev-parse', '--absolute-git-dir'], { cwd: dir }).then((g) => {
+        if (g.code === 0) reviewWatch.addGitDir(key, dir, g.stdout.trim())
+      })
   })
   ipcMain.on(IPC.reviewOpenFile, (event, root: unknown, path: unknown) => {
     if (!fromOurWindow(event) || !okDir(root) || typeof path !== 'string' || !safeRel(path)) return
-    // shell.openPath 는 .command · .app 을 실행한다 — 기본 글 편집기로만 연다
-    execFileChild('/usr/bin/open', ['-t', join(root, path)], () => {})
+    // shell.openPath 는 .command · .app 을 실행한다 — 기본 글 편집기로만 연다. root 가 저장소 뿌리인지 main 이 다시 본다
+    void openTarget(runGit, root, path).then((full) => {
+      if (full) execFileChild('/usr/bin/open', ['-t', full], () => {})
+    })
   })
 
   // ─── 21단계: 대화 ───
