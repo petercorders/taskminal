@@ -47,7 +47,7 @@ plan-check: 서버 없음 — 앱은 로컬 claude 프로세스(stdin/stdout)와
 ### 설계
 | 파일 | 내용 |
 |---|---|
-| `src/shared/chat.ts` (순수) | `ChatEvent` 공통 모양(user · text · tool_start · tool_end · permission · question · answered · turn_end · error · usage · session · stopped) · `claudeLineToEvents(obj, ctx)` 변환 · `parseClaudeLine` · `chatPermissionArgs` · `foldBlocks(events)`(화면 블록: 턴별 도구 묶음 · 대기 카드) · `chatStatus(events)` · `isDangerousTool(tool, input, cwd)` · `redactEvent(ev, opts)` |
+| `src/shared/chat.ts` (순수) | `ChatEvent` 공통 모양(user · session · text · tool · tool_end · permission · question · answered · turn_end(사용량 % 포함) · error · stopped) · `claudeLineToEvents(obj, cwd)` 변환(줄 나누기 · JSON 읽기는 어댑터) · `chatPermissionArgs` · `foldBlocks(events)`(화면 블록: 턴별 도구 묶음 · 대기 카드) · `chatStatus(events)` · `isDangerousTool(tool, input, cwd)` · `redactEvent(ev, opts)` |
 | `src/main/chat/claude-adapter.ts` | 프로세스 하나 감싸기: 띄우기 · 줄 나누기 · `send(text)` · `answer(requestId, decision)` · `interrupt()` · `kill()`. `spawn` 을 주입해 단위 시험 |
 | `src/main/chat/chat-manager.ts` | paneId → 어댑터. 보내기 때 없으면 띄운다(lazy, sessionId 있으면 `--resume`). 이벤트를 가려서(redact) 창으로 · 저장소로. 창 닫힘 · 앱 끝 · pane 지움에 kill |
 | `src/main/chat/chat-store.ts` | `<userData>/chat/<paneId>.jsonl` (0600, 폴더 0700) — 가린 이벤트만 한 줄씩. 읽기(재시작 뒤 화면) · 지우기(pane 지움 · 알림 끝 onEnd) · 크기 상한(2MB 넘으면 앞을 잘라 냄) |
@@ -123,3 +123,42 @@ e2e (`tests/fixtures/fake-claude.mjs` — fixture 대본을 따라 줄을 내보
 - 터미널 → 대화 전환(반대 방향) — 터미널 claude 의 세션 id 를 알 길이 없다(24 의 OSC 로)
 - 사이드바 줄의 '마지막 한 줄(출력)' · 몇 분 전 — pane 출력 마지막 줄을 모으는 길이 아직 없다. 3단 대신 2단 + 안 본 점
 - 대화 프로세스를 셸 지킴이처럼 앱 밖에 살려 두기 — 앱이 끝나면 끝나고 `--resume` 으로 잇는다
+
+## 6. 결과 (2026-11-11)
+커밋: 21a `094a184` · 21b `f34df31` (리뷰 · 문서 커밋은 development.md 1절)
+
+스파이크에서 미확인이던 것
+- `control_request set_permission_mode {mode}` 는 떠 있는 프로세스에 듣는다 → ⑨ 의 '다음 보내기부터' 칩은 만들지 않았다. e2e '떠 있는 대화에서 허락 방식을 바꾸면 set_permission_mode'.
+- 한도 거절(`rate_limit_event` 의 거절 모양)은 재현하지 못했다 — status 가 'allowed' 로 시작하지 않으면 한도로 본다(미확인).
+
+계획과 다르게 한 것
+- 허락 도구: 보드의 앱 MCP 도구 대신 `--permission-prompt-tool stdio`(stream-json 안의 `can_use_tool` control_request) — 스파이크에서 이 모드가 같은 정보를 주고 MCP 서버가 필요 없다.
+- Esc 거절의 이유는 입력창에 쓴 글(비면 기본 문장) — 따로 이유 칸을 열지 않았다.
+- 터미널 전환의 TUI 명령은 앱 환경 `TASKMINAL_CLAUDE_TUI`(기본 `claude`) → e2e 는 가짜 스크립트. 로그인 셸이 실제 `~/.local/bin/claude` 를 먼저 찾아 PATH 로는 가짜를 못 끼웠다.
+- 대화 pane 의 탭 이름은 'Claude 대화'. 대화는 ⇧⌘F(전체 찾기) · 명령 기록에 들어가지 않는다.
+- 사이드바 줄의 '몇 분 전' · 마지막 한 줄: '하지 않는 것' 에 두었으나 활동 신호(셸 통합)의 마지막 명령 · 끝난 시각으로 만들었다 — 출력 마지막 줄이 아니라 **마지막 명령**(실패 빨강 · 입력 기다림 노랑).
+- 메뉴 '일감 거르기' → '사이드바에서 거르기': ⌘P 의 ⇥ 범위 시험에서 명령 이름이 일감보다 앞에 나와 이름을 바꿨다.
+- 마지막 상태(완료) 칸이 처음에 접히는 것은 기본 설정 `sidebarClosed: ['done']`(기본 상태 id) — 상태를 바꾼 사용자는 처음에 펴져 있다.
+- ↑↓ 로 사이드바 줄 사이 이동 · 거르기 칸 ↓ 를 더했다(UX 표 '키보드만으로' 를 올리려고).
+- 리뷰 전 고친 것: 묶음 보기의 거르기 Enter 가 이름만 보던 것(화면은 폴더 · 묶음까지 거름) — e2e 가 옛 코드에서 실패하는 것을 확인.
+- 기존 e2e(sidebar · settings · activity) 중 묶음 보기를 보는 것은 묶음 보기로 띄운다. 흐름 보기 e2e 는 `tests/e2e/sidebar-flow.spec.ts`(계획은 sidebar.spec 에 더함).
+
+UX 점수표(보드 10기준, e2e 스크린샷 `test-results/sidebar-flow.png` · `sidebar-flow-need.png` 로 다시 매김)
+
+| 기준 | 보드 제안 | 만든 것 |
+|---|---|---|
+| 할 일이 먼저 보인다 | 9 | 9 — 노란 상자 · ⇧⌘A |
+| 흐름(상태)이 한눈에 | 9 | 9 — 칸 · 개수 · 비례 막대 |
+| 상태를 그 자리에서 옮긴다 | 8 | 7 — 끌어 놓기 · 우클릭, ⌥⌘↑/↓ 는 '다음 · 이전 일감' 이라 없음 |
+| 터미널이 무엇을 하는지 | 9 | 8 — 아이콘 · 마지막 명령 · 몇 분 전 (출력 줄은 아님) |
+| 찾기 · 거르기 | 8 | 8 |
+| 키보드만으로 | 8 | 8 — / · ↑↓ · Enter · ⇧⌘A · ⌘1~9 |
+| 일감이 많아도 | 8 | 8 — 완료 접힘 · 칸 접기 |
+| 본 것 · 안 본 것 | 8 | 8 — 점 · 굵은 이름 · 고르면 제 칸 |
+| 전체 보기와 같은 말 · 색 | 9 | 8 — 막대는 같은 말, 전체 보기 화면이 아직 없음 |
+| AI 사용량이 늘 보인다 | 8 | 0 — 이 단계 밖(design-gaps 5) |
+| 합 | 84 | **73** (사용량을 뺀 9기준 73/90 = 81%) |
+
+80 아래 이유는 사용량 막대(별도 단계)다. 그 밖에 80% 아래인 기준은 '상태 옮기기' 7 — 키를 정하는 것은 사용자 확인으로 남긴다.
+
+변이 확인: 10개 모두 잡음(답은 한 번만 · 옛 세대 exit · 창/디스크 가림 · `--resume` 인자 · 폴더 밖 경로 위험 · 완료 칸 제외 · 모르는 상태 첫 칸 · 보고 있는 일감 · 보기 설정 검증).
