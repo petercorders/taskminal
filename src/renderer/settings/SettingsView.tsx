@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
 import { accelFromEvent, accelLabel, FONT_MAX, FONT_MIN, keyConflicts, type AppCommand, type Shortcut } from '../../shared/keymap'
-import { ACCENTS, DIM, FONT_FAMILIES, LINE_HEIGHT, LONG_AFTER_CHOICES, NOTIFY_KINDS, SCROLLBACK, settingsMatch } from '../../shared/settings'
+import { ACCENTS, DIM, FONT_FAMILIES, LINE_HEIGHT, LONG_AFTER_CHOICES, NOTIFY_KINDS, RESUME_AFTER_CHOICES, SCROLLBACK, settingsMatch } from '../../shared/settings'
 import type { AppState, NotifyKind } from '../../shared/types'
 import type { Action, SettingsPatch } from '../store'
 import { fontStack } from '../term-settings'
@@ -255,6 +255,23 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
           control={<Switch label="셸까지 모두 끝낼 때 실행 중이면 묻기" checked={s.confirmQuit} onChange={(v) => patch({ confirmQuit: v })} />}
         />
         <Row title="Dock 아이콘에 확인 필요 수 표시" desc="입력 기다림 · 실패한 일감 수" control={<Switch label="Dock 아이콘에 확인 필요 수 표시" checked={s.dockBadge} onChange={(v) => patch({ dockBadge: v })} />} />
+        <Row
+          title="이어받기 요약"
+          desc="오래 안 본 일감을 열면 그 사이 확인 필요 · 실패 · 끝난 명령 · 에이전트 말을 카드로 모아 보여 줘요 (⌥⌘R 다시 보기)"
+          keywords="요약 카드 resume 메모 돌아옴"
+          control={
+            <span className="setting-controls">
+              <Switch label="이어받기 요약" checked={s.resumeCard} onChange={(v) => patch({ resumeCard: v })} />
+              <select aria-label="이어받기 요약을 띄울 안 본 시간" className="setting-select" disabled={!s.resumeCard} value={s.resumeAfterMin} onChange={(e) => patch({ resumeAfterMin: Number(e.target.value) })}>
+                {RESUME_AFTER_CHOICES.map((m) => (
+                  <option key={m} value={m}>
+                    {m < 60 ? `${m}분` : `${m / 60}시간`} 넘게 안 봤을 때
+                  </option>
+                ))}
+              </select>
+            </span>
+          }
+        />
       </>
     ),
     look: (

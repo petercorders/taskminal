@@ -33,6 +33,9 @@ import { maskActivity, textMasker } from './activity-mask'
 import { adjacentTask, stepStatus, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
 import { handleCliUi, type CliEffect } from './cli-bridge'
+import { resumeCard, shouldShowResume, type Fact, type ResumeCard as ResumeCardData } from '../shared/resume'
+import { ResumeCard } from './ResumeCard'
+import { NotesPanel } from './NotesPanel'
 import type { UiRequest } from '../shared/cli'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TemplateNameDialog } from './TemplateNameDialog'
@@ -104,6 +107,7 @@ function collectScrollback(): Record<string, string> {
 /** 스크롤 주기 저장 — 렌더러 충돌 · 강제 종료 때 잃는 것을 이만큼으로 줄인다 */
 const SCROLLBACK_SAVE_MS = 30_000
 const BRANCH_POLL_MS = 5_000 // 셸에서 git switch 한 것을 따라가는 주기 (파일 몇 개 읽기)
+const VIEWED_EVERY_MS = 5 * 60_000 // 보는 동안 일감의 '본 때' 를 남기는 주기 (24단계 이어받기)
 
 const newId = () => crypto.randomUUID()
 
@@ -383,6 +387,8 @@ export function App() {
         for (const w of summary.waiting) away(w.paneId, { type: 'notify', text: w.message ?? '' })
         const label = (paneId: string) => st.tasks.find((t) => t.id === findPaneTask(st, paneId))?.name ?? paneId
         setStartup({ resumed: summary.resumed, awayMs: summary.awayMs, waiting: summary.waiting.map((w) => ({ label: label(w.paneId), ...(w.message ? { message: w.message } : {}) })), fresh: false })
+        // 꺼져 있던 동안의 확인 필요가 막 들어왔다 — 처음 읽힐 때의 요약 카드가 그것을 못 봤으면 다시 본다(24단계)
+        if (summary.failed.length + summary.waiting.length > 0 && document.hasFocus()) evalResumeRef.current('late')
       },
       () => {},
     )
@@ -486,6 +492,53 @@ export function App() {
     }
   }, [scrollReady])
 
+  // ─── 24단계: 이어받기 요약 · 메모 ───
+  // 카드는 연 순간의 사실을 떠 둔다(snapshot) — 곧이어 아래 'viewed' 가 확인 필요를 끄므로, 이 효과가 먼저 돌아야 한다(선언 순서 = 실행 순서)
+  const [resume, setResume] = useState<{ taskId: string; card: ResumeCardData; tip: boolean } | null>(null)
+  const resumeSnap = useRef<Record<string, ResumeCardData>>({})
+  const [notesOpen, setNotesOpen] = useState<{ taskId: string; signal: number } | null>(null)
+  // 대화 pane 의 마지막 턴 글(가린 것) · 끝난 시각 — 런타임 값. 아래 chat.onEvent 가 채운다
+  const chatTurns = useRef(new Map<string, { buf: string[]; doneAt?: number; text?: string }>())
+  // 아래쪽에서 만드는 값(명령 기록 · 화면 가리기)을 이 효과가 읽게
+  const resumeInputs = useRef<{ history: readonly HistoryEntry[]; mask: ((s: string) => string) | null }>({ history: [], mask: null })
+  const evalResume = (why: 'select' | 'late') => {
+    const s = stateRef.current
+    const task = s.tasks.find((t) => t.id === s.activeTaskId)
+    if (!task || (why === 'late' && resume?.taskId === task.id)) return
+    const now = Date.now()
+    if (!shouldShowResume(task, now, s.settings.resumeAfterMin * 60_000, s.settings.resumeCard)) return
+    const since = task.lastViewedAt!
+    const chats = Object.keys(task.panes).flatMap((paneId) => {
+      const c = chatTurns.current.get(paneId)
+      return c?.doneAt !== undefined && c.doneAt > since && c.text ? [{ paneId, text: c.text }] : []
+    })
+    const { history: hist, mask } = resumeInputs.current
+    const card = resumeCard({ task, now, since, activity: activityRef.current, history: hist, chats, ...(mask ? { mask } : {}) })
+    if (!card.fresh) return
+    resumeSnap.current[task.id] = card
+    setResume({ taskId: task.id, card, tip: !s.settings.resumeTipSeen })
+    if (!s.settings.resumeTipSeen) dispatch({ type: 'settings/patch', patch: { resumeTipSeen: true } })
+  }
+  const evalResumeRef = useRef(evalResume)
+  evalResumeRef.current = evalResume
+  // 고를 때 · 창에 돌아올 때 · 처음 읽힐 때만 — 주기로 돌지 않는다. 다른 일감으로 가면 떠 있던 카드는 내린다
+  useEffect(() => {
+    if (!loadedOnce) return
+    setResume((r) => (r && r.taskId !== state.activeTaskId ? null : r))
+    if (windowFocused) evalResumeRef.current('select')
+  }, [state.activeTaskId, windowFocused, loadedOnce])
+  // 본 때(lastViewedAt): 일감을 떠날 때 · 창이 뒤로 갈 때(정리 함수) · 보는 동안 5분마다. 안 보일 때는 쓰지 않는다
+  useEffect(() => {
+    const id = state.activeTaskId
+    if (!loadedOnce || !id || !windowFocused) return
+    const mark = () => dispatch({ type: 'task/viewed', taskId: id, at: Date.now() })
+    const timer = setInterval(mark, VIEWED_EVERY_MS)
+    return () => {
+      clearInterval(timer)
+      mark()
+    }
+  }, [state.activeTaskId, windowFocused, loadedOnce])
+
   // 보는 pane 이 바뀌면(일감 · 탭 · pane 이동, 창으로 돌아옴) 그 pane 의 확인 필요를 끈다
   useEffect(() => {
     if (viewedPane) updateActivityRef.current(viewedPane, { type: 'viewed' })
@@ -576,6 +629,7 @@ export function App() {
     [startup, screenMask],
   )
   const history = useHistory(load.phase === 'ready')
+  resumeInputs.current = { history: history.entries, mask: screenMask }
   const onCommandDone = (paneId: string, done: CommandDone) => {
     const s = stateRef.current
     const taskId = findPaneTask(s, paneId)
@@ -824,6 +878,33 @@ export function App() {
     dispatch({ type: 'pane/focus', taskId, paneId })
     refocus()
   }
+  // 이어받기 요약 카드: ↩ 그리로 — 줄은 pane id 로 들고, 누르는 순간 그 pane 이 아직 있는지 다시 찾는다(없으면 일감만 본다)
+  const resumeGo = (taskId: string, f: Fact) => {
+    setResume(null)
+    switch (f.go.to) {
+      case 'pane':
+        if (findPaneTask(stateRef.current, f.go.paneId) === taskId) return gotoPane(f.go.paneId)
+        showToast({ text: '그 터미널은 이제 없어요.', ms: 3000 })
+        return refocus()
+      case 'review':
+        return openReview(taskId, 'diff')
+      case 'notes':
+        return setNotesOpen({ taskId, signal: Date.now() })
+      case 'history':
+        return setHistoryOpen({ signal: Date.now() })
+    }
+  }
+  const resumeReopen = (taskId: string) => {
+    const card = resumeSnap.current[taskId]
+    if (!card || stateRef.current.activeTaskId !== taskId) return false
+    setResume({ taskId, card, tip: false })
+    return true
+  }
+  const resumeClose = (taskId: string) => {
+    setResume(null)
+    refocus()
+    showToast({ text: '요약을 닫았어요', ms: 3000, action: { label: '다시 보기', run: () => void resumeReopen(taskId) } })
+  }
   const hidePort = (port: number) => {
     const s = stateRef.current
     if (s.settings.hiddenPorts.includes(port)) return
@@ -1007,6 +1088,16 @@ export function App() {
         if (typeof paneId !== 'string' || typeof ev !== 'object' || ev === null) return
         const e = ev as { t?: unknown; id?: unknown; text?: unknown }
         if (e.t === 'session' && typeof e.id === 'string') dispatch({ type: 'chat/session', paneId, sessionId: e.id })
+        // 이어받기 요약의 '에이전트 말' — 턴마다 글을 모아 두고 턴이 끝나면 그 시각과 함께 남긴다(main 이 가린 뒤 보낸다)
+        const turns = chatTurns.current
+        const c = turns.get(paneId) ?? { buf: [] }
+        if (e.t === 'user') c.buf = []
+        else if (e.t === 'text' && typeof e.text === 'string') c.buf.push(e.text)
+        else if (e.t === 'turn_end') {
+          c.doneAt = Date.now()
+          c.text = c.buf.join('\n').trim()
+        } else return
+        turns.set(paneId, c)
       }),
     [],
   )
@@ -1291,6 +1382,15 @@ export function App() {
       case 'sidebar-filter':
         setFilterSignal((n) => n + 1)
         return
+      case 'resume-show':
+        if (!resumeReopen(task.id)) showToast({ text: '이 일감에 다시 볼 요약이 없어요.', sub: `${state.settings.resumeAfterMin}분 넘게 안 본 일감을 열면 생겨요.`, ms: 4000 })
+        return
+      case 'notes':
+        if (notesOpen?.taskId === task.id) {
+          setNotesOpen(null)
+          return refocus()
+        }
+        return setNotesOpen({ taskId: task.id, signal: Date.now() })
       case 'review':
       case 'review-commit':
       case 'review-reverted':
@@ -1575,7 +1675,24 @@ export function App() {
                   onSaveTemplate={(tabId) => openSaveTemplate(task, tabId)}
                   historyOpen={historyOpen !== null}
                   onHistory={() => runCommand('history')}
+                  notes={{
+                    open: notesOpen?.taskId === task.id,
+                    todo: (task.notes ?? []).filter((n) => !n.done).length,
+                    onToggle: () => runCommand('notes'),
+                    onResume: resumeSnap.current[task.id] && resume?.taskId !== task.id ? () => runCommand('resume-show') : null,
+                  }}
                 />
+                {taskActive && resume?.taskId === task.id && (
+                  <ResumeCard
+                    key={resume.card.awayMs}
+                    card={resume.card}
+                    tip={resume.tip ? `${state.settings.resumeAfterMin}분 넘게 안 본 일감이라 그 사이 일을 모았어요` : null}
+                    focusSignal={focusSignal}
+                    onGo={(f) => resumeGo(task.id, f)}
+                    onHistory={() => resumeGo(task.id, { kind: 'done', text: '', go: { to: 'history' }, button: '' })}
+                    onClose={() => resumeClose(task.id)}
+                  />
+                )}
                 {/* 겹침 알림은 탭 줄 바로 아래 — 아래 알림(Toast)이 화면 아래를 덮는다 */}
                 {portClash && portClash.taskId === task.id && (
                   <PortConflictBar
@@ -1661,6 +1778,19 @@ export function App() {
             </div>
           )}
         </main>
+        {activeTask && notesOpen?.taskId === activeTask.id && (
+          <NotesPanel
+            task={activeTask}
+            signal={notesOpen.signal}
+            onAdd={(text) => dispatch({ type: 'note/add', taskId: activeTask.id, note: { id: newId(), text, at: Date.now() } })}
+            onToggle={(noteId) => dispatch({ type: 'note/toggle', taskId: activeTask.id, id: noteId })}
+            onRemove={(noteId) => dispatch({ type: 'note/remove', taskId: activeTask.id, id: noteId })}
+            onClose={() => {
+              setNotesOpen(null)
+              refocus()
+            }}
+          />
+        )}
         {historyOpen && (
           <HistoryPanel
             view={history}

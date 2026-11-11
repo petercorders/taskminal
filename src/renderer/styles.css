@@ -256,6 +256,8 @@ select {
 }
 
 .task-view {
+  /* 이어받기 요약 카드(24단계)가 이 칸 위에 덮어 뜬다 */
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1951,9 +1953,21 @@ input[type='checkbox'] {
   font-size: 11px;
   white-space: nowrap;
 }
-.tab-action.history.on {
+.tab-action.history.on,
+.tab-action.notes.on {
   color: var(--accent);
   background: var(--accent-soft);
+}
+/* 24단계 '✎ 메모 · 할 일 n' · '↺ 요약' — 기록 단추처럼 정수 폭 (할 일이 있으면 넓게) */
+.tab-action.notes,
+.tab-action.resume {
+  width: 56px;
+  padding: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.tab-action.notes.has-todo {
+  width: 96px;
 }
 .palette-item[data-kind='history'] .palette-label {
   font-family: Menlo, monospace;
@@ -3699,4 +3713,182 @@ input[type='checkbox'] {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono, ui-monospace, 'SF Mono', Menlo, monospace);
+}
+
+/* ─── 24단계: 이어받기 요약 카드 · 메모 칸 ─── */
+.resume-card {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* 터미널의 가린 칸(z 7) · 기록 칸(z 8) 위 */
+  z-index: 20;
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100% - 96px);
+  overflow: auto;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: 0 10px 30px #0006;
+  outline: none;
+}
+.resume-card:focus-visible {
+  border-color: var(--accent);
+}
+.resume-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resume-head strong {
+  font-size: 13px;
+}
+.resume-away {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+.resume-tip {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.resume-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.resume-fact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.resume-fact.sel {
+  background: var(--accent-soft);
+}
+.resume-fact.top {
+  margin-bottom: 4px;
+  border: 1px solid var(--line);
+}
+.resume-fact.top.attention {
+  border-color: var(--waiting);
+}
+.resume-mark {
+  width: 16px;
+  flex: none;
+  text-align: center;
+  color: var(--muted);
+}
+.resume-fact.attention .resume-mark {
+  color: var(--waiting);
+}
+.resume-fact.failed .resume-mark {
+  color: var(--failed);
+}
+.resume-fact.running .resume-mark {
+  color: var(--running);
+}
+.resume-fact.done .resume-mark {
+  color: var(--done);
+}
+.resume-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.resume-main,
+.resume-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.resume-main {
+  font-size: 13px;
+}
+.resume-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+.resume-more {
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.resume-keys {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+.notes-panel {
+  position: relative;
+  z-index: 8;
+  width: 300px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 12px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+.notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.notes-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.notes-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.note label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.note.done .note-text {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.note-by {
+  flex: none;
+  color: var(--accent);
+  font-size: 11px;
+}
+.notes-input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
 }

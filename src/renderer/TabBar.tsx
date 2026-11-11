@@ -28,6 +28,8 @@ interface Props {
   /** 명령 기록 칸 (19단계 ⌘Y) — 열려 있으면 눌린 모양 */
   historyOpen: boolean
   onHistory(): void
+  /** 메모 · 할 일 칸 (24단계 ⌥⌘M) — 남은 할 일 수 · 열려 있으면 눌린 모양. 요약 카드를 다시 볼 수 있으면 '↺ 요약' */
+  notes?: { open: boolean; todo: number; onToggle(): void; onResume: (() => void) | null }
   /** 포트 칩 (20단계) — 탭의 pane 들이 듣는 포트 · 조사 실패면 보이는 탭에 한 번 */
   ports?: { of(tabId: Id): PortChip[]; failed: boolean; onOpen(c: PortChip): void; onMenu(c: PortChip, x: number, y: number): void }
 }
@@ -37,7 +39,7 @@ export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, historyOpen, onHistory, ports }: Props) {
+export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, historyOpen, onHistory, ports, notes }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -185,6 +187,16 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
         <button type="button" className={`tab-action history${historyOpen ? ' on' : ''}`} aria-pressed={historyOpen} title="명령 기록 (⌘Y)" data-testid="history-button" onClick={onHistory}>
           🕘 기록
         </button>
+        {notes?.onResume && (
+          <button type="button" className="tab-action resume" title="이어받기 요약 다시 보기 (⌥⌘R)" data-testid="resume-button" onClick={notes.onResume}>
+            ↺ 요약
+          </button>
+        )}
+        {notes && (
+          <button type="button" className={`tab-action notes${notes.todo > 0 ? ' has-todo' : ''}${notes.open ? ' on' : ''}`} aria-pressed={notes.open} title="메모 · 할 일 (⌥⌘M)" data-testid="notes-button" onClick={notes.onToggle}>
+            ✎ 메모{notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}
+          </button>
+        )}
       </div>
     </div>
   )

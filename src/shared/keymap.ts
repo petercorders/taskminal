@@ -57,6 +57,9 @@ export const SHORTCUTS = [
   // 흐름 보기 상태 옮기기(작은 고침 2026-11-11) — 지금 일감을 이전 · 다음 상태 칸으로. ⌥⌘↑↓ 는 다음 · 이전 일감이라 ⌃⌘
   { command: 'status-next', accel: 'Control+Command+Right', label: '다음 상태로' },
   { command: 'status-prev', accel: 'Control+Command+Left', label: '이전 상태로' },
+  // 이어받기(24단계)
+  { command: 'resume-show', accel: 'Alt+Command+R', label: '이어받기 요약 다시 보기' },
+  { command: 'notes', accel: 'Alt+Command+M', label: '이 일감 메모 열기' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

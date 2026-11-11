@@ -94,6 +94,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('font-reset'),
         { type: 'separator' },
         item('history'),
+        item('resume-show'),
+        item('notes'),
         { type: 'separator' },
         item('chat-terminal'),
         item('review'),
