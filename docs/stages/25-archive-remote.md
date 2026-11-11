@@ -64,7 +64,7 @@ plan-check: 서버 없음 — 로컬 상태 파일 · 지킴이 셸 · ssh 프�
 - `remote.ts`: `isSshHost` · `sshArgs`(옵션 · `--` · 원격 명령의 따옴표 · tmux 켬/끔) · `parseSshConfigHosts`(와일드카드 · 여러 이름 · 주석) · `sshOutputSignal`(처음 보는 서버 + 지문 · 키 바뀜 · 인증 거절) · `reconnectDelay`.
 - 모델: normalizeState 가 archivedAt · host · remoteTmux 를 읽고 이상한 값은 버림.
 
-e2e (`archive.spec.ts`, `remote.spec.ts`, 가짜 ssh = `tests/e2e/fixtures/fake-ssh`):
+e2e (`archive.spec.ts`, `remote.spec.ts`, 가짜 ssh = `remote.spec.ts` 안의 스크립트를 시험마다 임시 폴더에 씀 — 계획의 fixtures 파일 대신):
 1. 보관 → 그 일감 셸 pid 사라짐 · 사이드바에서 빠짐 · 보관함에 보임 → 되살리기 → 탭 · 메모 그대로, 새 셸이 떠 명령이 돈다.
 2. 돌고 있는 명령(`sleep 600`)이 있으면 확인 창 · 취소면 그대로 · 끄고 보관.
 3. 알림 ⌘Z 되돌리기 → 사이드바로 돌아옴.
@@ -95,5 +95,34 @@ e2e (`archive.spec.ts`, `remote.spec.ts`, 가짜 ssh = `tests/e2e/fixtures/fake-
 - 25b: ssh 알림에 `refused`(Host key verification failed)를 더했다 — 지문 질문에 '취소'(no) 한 뒤 다시 붙으면 같은 질문이 끝없이 돈다(e2e 가 찾음). 알아보는 순서도 '끝난 결과(키 바뀜 · 거절 · 인증) → 질문' 으로 바꿨다 — 한 시도의 출력에 질문이 남아 있어 뒤의 거절을 못 봤다.
 - 25b: 호스트 칸의 ↑↓ 목록은 자체 목록 대신 `<datalist>`(Chromium 의 ↑↓ 제안). 시험은 option 값만 본다 — 제안 창을 ↑↓ 로 고르는 것은 미확인.
 - 25b: 원격 일감은 템플릿을 쓰지 않는다(셸 하나) — 템플릿의 대화 · 검토 칸은 이 Mac 에서 도는 것이라 원격 폴더와 맞지 않는다. 대화상자에서 원격이면 템플릿 칸을 숨긴다. 이미 있는 원격 일감에서 ⇧⌘J(대화) · 변경 검토를 여는 것은 막지 않았다 — 원격 폴더 경로로 이 Mac 에서 돈다(알려진 한계, development.md '1차 출시까지 남은 것').
-- 25b: 다시 붙기 기다림은 시험을 위해 한 걸음 단위를 `TASKMINAL_SSH_RETRY_MS` 로 줄일 수 있게 했다(기본 1초). 15초 넘게 붙어 있다 끊기면 다섯 번을 처음부터 센다(`STABLE_MS`).
-- 25b: ssh 알림은 연결 시도마다 앞 16KB 출력에서만 찾는다(`SIGNAL_SCAN_MAX`) — 원격 셸 안의 'Permission denied (' 같은 글을 연결 실패로 읽지 않게.
+- 25b: 다시 붙기 기다림은 시험을 위해 한 걸음 단위를 `TASKMINAL_SSH_RETRY_MS` 로 줄일 수 있게 했다(기본 1초). 다섯 번을 처음부터 세는 것은 '붙은 것을 확인한 뒤 끊김' 만 — 붙음 = ssh 출력이 오고 묻는 중이 아니며 `UP_CONFIRM_MS`(3초) 동안 살아 있음(리뷰 뒤. 처음엔 'spawn 뒤 15초' 였는데 죽은 호스트에 75초 매달리면 끝없이 다시 붙었다).
+- 25b: ssh 알림은 연결 시도마다 붙음을 확인하기 전까지 · 앞 16KB 출력에서만 찾는다(`SIGNAL_SCAN_MAX`) — 원격 셸 안의 'Permission denied (' 같은 글을 연결 실패로 읽지 않게.
+
+## 8. 리뷰 (`/code-review medium main...stage-25-archive-remote`) — 10건 모두 고침
+
+| 찾은 것 | 고침 | 시험 |
+|---|---|---|
+| ControlPath `<userData>/ssh/%C` 가 macOS 소켓 경로 한도(104바이트)를 넘김 — 보통 사용자 경로 58 + `/` + %C 40 + 임시 꼬리 17 + NUL = 117. ssh 는 `path "%s" too long for Unix domain socket` 을 낸다(이 Mac 의 ssh 문자열에서 확인) | `controlPathFits` — 맞으면 `<userData>/ssh`, 아니면 `/tmp/taskminal-<uid>`(내 것 · 0700 · 링크 아님을 확인), 둘 다 안 되면 연결 나누기 없이 | 단위(경계 104 · 바이트로 셈) · e2e(인자의 폴더 · 0700). 실제 ssh 로 마스터 소켓을 만드는 것은 미확인(원격 접속 금지) |
+| 다시 붙기 횟수가 'spawn 뒤 15초' 로 처음부터 — 매달리는 연결은 끝없이 | 붙음 확인 뒤 끊긴 때만 처음부터 | e2e 'hang' + 변이 |
+| 붙은 뒤 원격 셸의 'Permission denied (' 가 인증 거절로 읽혀 다시 붙지 않음 | 붙음 확인 뒤에는 ssh 알림을 찾지 않음 | e2e + 변이 |
+| 최근 지운 것: 찾기 칸이 목록을 안 거르고 ↩ 는 거르기 전 목록에서 고름 | 그린 줄 · ↑↓ · ↩ 가 같은 거른 목록 | e2e |
+| 찾기 칸의 ⌘⌫(줄 지우기)가 일감 지우기로 | 글이 있는 찾기 칸에서는 지우기 아님(빈 칸이면 일감) | e2e |
+| 보관한 채 지운 일감을 되살리면 보관된 채 열려 화면이 빔 | `restoreTask` 가 `archivedAt` 을 지움(17단계 되살리기도 같은 길) | 단위 · e2e |
+| 키 바뀜 '명령 복사' 가 별칭 · user@host 로 `ssh-keygen -R` — known_hosts 는 실제 HostName([host]:port) | `ssh-keygen -R "$(ssh -G '<host>' \| awk …)"` (`keygenFixCommand`) | 단위(awk 를 가짜 `ssh -G` 출력으로 실행) · e2e |
+| spawn 이 끝나자마자 'up' — 다시 붙는 중에 점이 초록 | 새 상태 `connecting`(사이드바 노랑 · 다시 붙는 중이면 띠) → 확인 뒤 up | e2e |
+| 원격 명령이 POSIX 문법인데 ssh 는 로그인 셸(fish · csh)로 돌림 | `exec /bin/sh -c '<명령>'` 으로 감쌈 | 단위 · e2e(이 Mac 의 sh 로 풀어 봄). fish · csh 원격은 미확인 |
+| host:port · [IPv6] 를 받지만 ssh 명령줄은 못 읽음 | 콜론 하나 · 괄호 거절, 오류 글에 '포트는 ~/.ssh/config 의 Port' | 단위 · e2e |
+
+리뷰가 덧붙인 작은 것 중 하지 않음: 최근 지운 것 탭이 일감이 더해지거나 빠질 때마다 30일 백업을 다시 읽음(탭이 열린 동안만) · 주간 정리의 앞 주가 서머타임 경계에서 1시간 어긋날 수 있음(지금 시간대의 차이를 모든 주에 씀 — 한국은 서머타임 없음) · 처음 보는 서버 띠는 pane 하나씩 답함(여러 pane 이 함께 물으면 차례로 띠가 다음 pane 으로).
+
+### 24단계 2340b45 리뷰 (`/code-review medium 2340b45^..2340b45`) — 7건 중 5건 고침 (커밋 `de5724b`)
+고침: 터미널 질의 답(커서 위치 · 장치 속성 · 색)을 친 키로 모으던 것(`isTerminalReply`, 단위) · 붙기 전 친 글 뒤에 시작 명령이 붙던 것(첫 프롬프트 건너뜀) · 64KB 상한을 넘긴 뒤 가운데가 빈 입력 · 셸을 못 띄운 뒤에도 모으던 것 · 지킴이에 다시 붙은 셸(vim · 암호 묻기일 수 있음)에 모아 둔 키를 보내던 것(버림 — 24단계 전 동작).
+하지 않음: main `PtyManager.write` 에서 주인이 정해질 때까지 모으기(리뷰의 구조 제안 — 고치는 곳이 하나로 모이지만 지킴이 · 창 수명과 얽혀 이번 범위 밖) · 경합의 재현 시험(정해진 재현 방법이 없음 — 24단계처럼 전체 검사로 본다).
+
+## 9. 전체 검사
+
+| 판 | 결과 | 고침 |
+|---|---|---|
+| 1 (리뷰 고침 전) | 실패 — `tests/unit/menu.test.ts` '키 없는 메뉴 항목' 에 새 메뉴 `weekly` 가 없음 | 기대 목록에 `weekly` 더함 (`0c0a1d8`) |
+| 2 (리뷰 고침 뒤) | 실패 2건 · 다시 돌려도 같음 — `keys.spec:268` 키 없는 메뉴 목록 · `window.spec:39` preload API 목록(새 `sshHosts`). 둘 다 고정 목록 시험이고 불안정 아님 | 두 목록에 더함 (`5ed8095`, 혼자 돌려 통과) |
+| 3 | **통과(종료 0)** — typecheck · 경계 · 단위 969 · e2e 221 통과 + 1 건너뜀(`packaged.spec`, 패키지 실행 전용) | — |

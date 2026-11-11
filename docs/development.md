@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (24단계 지휘와 이어받기 병합 — 단위 929 · e2e 206, 다음은 25단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (25단계 보관 · 원격 병합 — 단위 969 · e2e 222(221 통과 · 1 건너뜀), **계획한 단계(0~25) 모두 끝**. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
 
 ## 1. 지금 어디까지
 
@@ -21,7 +21,8 @@
 | 22 대화 2 — Codex · 확장 | main 에 병합(브랜치 `stage-22-chat-codex`). Codex app-server 대화(가짜 codex 로 e2e · 같은 카드로 승인 · 로그인 없음 띠 · `thread/resume`) · 그림(📎 · ⌘V · 끌어 놓기) · 되감기 · 여기서 새 대화로 나누기(둘 다 앞 턴 끝에서 갈라진 새 세션, 파일은 그대로) · 대기열 · ⌘↩ 지금 보내기 · 여러 개 고르기. Codex 승인 · 질문 · 항목 줄은 로그인한 codex 로 **미확인**. 계획 · 결과 `docs/stages/22-chat-codex.md` |
 | 23 변경 검토 | main 에 병합(브랜치 `stage-23-review`). pane 종류 '변경'(⇧⌘G · ⌘P): 파일별 diff · 줄 골라 ⌫ 되돌리기(⌘Z · '되돌린 것' 7일, add 한 파일은 인덱스도 함께) · 체크한 파일만 `commit --only` · 막을 때만 경고(main 에 바로 · 비밀값) · 커밋 전 검사 실패 마지막 20줄 · 커밋 취소 · 대화 도구 줄의 'diff 열기 →' 카드 · 보일 때만 폴더 감시. 전체 보기 '± 변경' 칩은 그 화면이 없어 안 함. 계획 · 결과 `docs/stages/23-review.md` |
 | 24 지휘와 이어받기 | main 에 병합(브랜치 `stage-24-cli-resume`). `taskminal` 명령(`resources/bin/taskminal` → `out/main/cli.js`, 소켓 `<userData>/cli.sock` 0600): 일감 · 탭 · pane 바꾸기 · `pane send/read/wait` · `chat new/send/wait/read` · `notify` · `task note`, 앱 메뉴 '명령줄 도구 설치…' 로만 PATH 링크. 오래 안 본 일감의 이어받기 요약 카드(⌥⌘R) · 일감 메모 칸(⌥⌘M). 계획 · 결과 `docs/stages/24-cli-resume.md` |
-| 25 1차 출시 | 다음 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 25 보관 · 원격 | main 에 병합(브랜치 `stage-25-archive-remote`, 25a `6788a08` · 25b `167cc7f` + 리뷰 고침). 보관함 ⇧⌘E(⌥⌘A 보관 · 되살리기 · 최근 지운 것 30일) · 주간 정리 · SSH 원격 일감(새 일감 ⌥2 · ControlMaster · tmux 이어 붙기 · 다시 붙기 다섯 번 · 호스트 키 띠). 24단계 친 글자 모으기(2340b45) 리뷰 고침도 이 브랜치. 계획 · 결과 `docs/stages/25-archive-remote.md` |
+| 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -172,6 +173,16 @@
 - 명령이 만든 탭 · pane 은 사용자가 보던 탭 · pane 으로 되돌린다(`keepFocus`) — 치던 키가 다른 pane 으로 가지 않게.
 - 커밋을 둘로 나눌 때 한 파일에 두 기능이 섞이면 hunk 대신 그 커밋용 파일을 만들어 `git update-index --cacheinfo` 로 올리고, `git checkout-index -a --prefix=<임시>` + node_modules 링크로 그 트리를 따로 컴파일했다.
 
+### 25 보관 · 원격
+계획 · 결과 `docs/stages/25-archive-remote.md`(0절 스파이크 = 일감별 AI 토큰 원천 없음 · Finder 실행의 `SSH_AUTH_SOCK` 은 launchd 소켓 · Synology 미확인). 구조: `src/shared/archive.ts`(보관 · 되살리기 · 제안 · 찾기 · 최근 지운 것) · `src/shared/weekly.ts`(월요일 시작 주 · 요약 · 마크다운) · `src/shared/remote.ts`(호스트 검사 · ssh 인자 · 원격 명령 · ssh 알림 · 다시 붙기 걸음 · 소켓 경로 한도) · `ArchivePanel.tsx` · `WeeklyPanel.tsx` · `RemoteBand.tsx` · `TerminalPane` 의 원격 다시 붙기. 짚어 둔 함정:
+- 보관 일감은 `viewState`(App)로 화면 · 사이드바 · ⌘P · 다음 일감에서 뺀다 — `state.tasks` 를 직접 도는 새 코드는 보관 일감을 함께 본다.
+- '지움' 백업은 지우기 직전 모습이 시작 · 자동 백업과 같으면 따로 생기지 않는다 → 최근 지운 것은 이유를 가리지 않고 모든 백업에서 찾는다.
+- CLI `task remove` 는 열린 대화상자를 모두 닫는다(`remove()` → `closeDialogs`) — 확인 창이 떠 있는 시험은 그걸 기대한다.
+- 원격 시험은 가짜 ssh(`TASKMINAL_SSH` 절대 경로 · `TASKMINAL_SSH_CONFIG` · `TASKMINAL_SSH_RETRY_MS`)로 — pane 환경에서 `TASKMINAL_*` 가 빠지므로 가짜는 자기 옆 `mode` 파일을 읽는다. 원격 셸에서 `exit 255` 를 치면 끊김이 된다.
+- ssh 알림은 '끝난 결과(키 바뀜 · 거절 · 인증) → 질문' 순서로 본다. 질문 뒤 출력은 새로 모은다.
+- ControlPath 는 macOS 소켓 경로 104바이트 안에 — 보통 `<userData>/ssh` 는 넘쳐 `/tmp/taskminal-<uid>` 로 간다(e2e 임시 폴더도 길다).
+- 원격 일감은 템플릿을 쓰지 않는다 · 대화(⇧⌘J) · 변경 검토는 막지 않았다(이 Mac 에서 원격 경로로 돈다 — 8절).
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -188,3 +199,29 @@
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
 - python 등으로 파일을 고치면 편집 훅(tsc)이 돌지 않는다 → 고친 뒤 `npm run typecheck`.
 - 열린 대화상자 · `then` 이 가리키는 대상이 그 사이 사라질 수 있다 — 저장할 내용은 연 순간에 떠 두고, 지울 대상은 id 로 다시 찾는다(12단계 리뷰).
+
+## 8. 1차 출시까지 남은 것 (25단계 끝에 모음)
+
+0~25단계 기능은 모두 `main` 에 있다. 아래는 **사용자 손이 필요한 것 · 실제 환경에서만 확인되는 것** 이다. 하나씩 끝나면 이 절에서 지운다.
+
+### 사용자 준비물 → 출시
+1. **Developer ID 서명 · 공증** — 키체인에 'Developer ID Application' 인증서(Xcode › Settings › Accounts › Manage Certificates) + 공증 프로필 `taskminal-notary`(`xcrun notarytool store-credentials taskminal-notary --apple-id … --team-id …`, 비밀번호는 앱 전용 암호를 사용자가 직접). 그 뒤 `npm run release` — 서명 · 공증 · `spctl -a` · 배포본 검사(`scripts/check-package.mjs`)까지 한 번에. 둘 중 하나라도 없으면 release 가 무엇이 없는지 말하고 멈춘다(`scripts/release-config.mjs`).
+2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). 저장소 push · 릴리스 만들기는 메인 세션(사용자 확인) 몫.
+3. **/Applications 설치 · Finder 더블클릭 실행** — 개발 앱이 아니라 서명된 .app 으로(14 · 18단계 미확인). 확인할 것: 셸 · 한글 · 최소 환경 PATH(`which node`) · 셸 지킴이 · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지(18단계 verify 중 실제 설치 성공).
+4. **명령줄 도구 설치** — 앱 메뉴 '명령줄 도구 설치…' 가 `/usr/local/bin/taskminal` 링크를 만든다. 쓸 수 없는 폴더면 직접 칠 `sudo mkdir … && sudo ln -sf …` 명령을 돌려준다(`src/main/cli-install.ts`) — 서명된 .app 에서 실제 설치는 미확인(24단계).
+
+### 미확인 (실제 환경 · 계정이 있어야 함)
+| 무엇 | 왜 못 봤나 | 확인 방법 |
+|---|---|---|
+| Synology(NAS) 의 tmux · 기본 셸 · ControlMaster | 실제 NAS 접속 금지(25단계 지시) | 원격 일감 하나 → `tm-<pane>` 세션에 붙는지 · tmux 가 없으면 로그인 셸로 뜨는지 · 끊었다 다시 붙기 |
+| Finder 로 띄운 앱의 ssh-agent | 스파이크로 `launchctl getenv SSH_AUTH_SOCK` 가 launchd 소켓을 돌려줌을 봄 — 실제 원격 접속은 안 함 | 서명된 앱을 Finder 로 열고 원격 일감 연결(키 인증) |
+| 새 일감 호스트 칸의 ↑↓ 제안(`<datalist>`) | 시험은 option 값만 봄 | ~/.ssh/config 가 있는 Mac 에서 ↑↓ 로 고르기 |
+| 원격 일감에서 대화(⇧⌘J) · 변경 검토 | 막지 않음 — 이 Mac 에서 원격 경로로 돈다(25단계 알려진 한계) | 필요하면 원격 일감에서 두 메뉴를 끄는 작은 단계 |
+| 한글 입력기를 켠 채 ⌥1~9 · ⌥1/⌥2(새 일감) | Playwright 합성 키는 IME 상태를 흉내 못 함(20 · 25단계) | 한글 입력기 켜고 직접 눌러 보기 |
+| 실제 claude 대화 · 실제 codex 승인 · 질문 · 한도 줄 | 가짜 claude · codex 로만 e2e(21 · 22단계) | 로그인한 claude · codex 로 대화 하나씩 |
+| 커밋 서명(gpg · ssh 서명)이 창 없이 물을 때 | 실패 길만 시험(23단계) | 서명 설정된 저장소에서 변경 검토 › 커밋 |
+| 다른 사용자가 CLI 소켓에 접근 | 같은 사용자 0600 · 폴더 0700 만 확인(24단계) | 다른 계정에서 `taskminal task list` 가 거절되는지 |
+| 주간 정리의 일감별 AI 토큰 | 원천 없음(대화 `turn_end` 에 토큰 수 없음 · 터미널 claude 는 앱이 모름, 25단계 스파이크) — 칸을 뺐다 | 원천이 생기면 다시 계획 |
+
+### 알려진 불안정
+7절. 24단계 고침(붙기 전 친 키를 모아 보냄) 뒤 25단계까지의 전체 검사 결과는 25단계 결과 절(`docs/stages/25-archive-remote.md`)에 적는다.
