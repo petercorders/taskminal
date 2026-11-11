@@ -11,7 +11,7 @@ import { groupHits, SecretMasker, type MaskHit, type MaskSettings } from './secr
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
-import { cleanExit, splitForWrite } from '../shared/pty'
+import { cleanExit, isTerminalReply, splitForWrite } from '../shared/pty'
 import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, STABLE_MS, type RemoteState, type SshSignal } from '../shared/remote'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
@@ -232,6 +232,8 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     // 신호 없이 기다리는 동안 사용자가 이미 치기 시작했으면 친 글 뒤에 붙이지 않는다 — 남겨 두고 다음 프롬프트 신호 · 다음 실행에.
     let startTimer: ReturnType<typeof setTimeout> | undefined
     let typed = false
+    // 셸이 붙기 전에 친 키를 보냈다 — 첫 프롬프트 신호에서는 시작 명령을 그 글 뒤에 붙이지 않고 다음 프롬프트로 미룬다(2340b45 리뷰)
+    let skipPromptStart = false
     let disposed = false
     // 셸 지킴이에 다시 붙었는지 답을 받기 전에는 보내지 않는다 — 되돌려 받은 화면 · 프롬프트 신호가 시작 명령을 부르지 않게 (16단계)
     let startBlocked = true
@@ -300,7 +302,10 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         if (ev.type === 'prompt' || ev.type === 'start' || ev.type === 'end') integratedPanes.add(paneId)
         record(ev)
       }
-      if (ev?.type === 'prompt') sendStart()
+      if (ev?.type === 'prompt') {
+        if (skipPromptStart) skipPromptStart = false
+        else sendStart()
+      }
       return true
     }
     const oscs = [
@@ -402,17 +407,28 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     const send = (data: string) => {
       for (const part of splitForWrite(data)) pty.write(paneId, part)
     }
-    const goLive = () => {
+    /** 셸이 붙었다. flush = 모아 둔 키를 보낸다(새로 띄운 셸) · false = 버린다(다시 붙은 셸 — 그 안에서 뭐가 돌고 있는지 사용자가 아직 못 봤다) */
+    const goLive = (flush = true) => {
       live = true
       const queued = early
       early = []
+      earlyLen = 0
+      if (!flush || queued.length === 0) return
+      skipPromptStart = true
       for (const d of queued) send(d)
+    }
+    /** 다시는 모으지 않는다 — 상한을 넘김(가운데가 빈 입력을 보내지 않게) · 셸을 못 띄움 */
+    const stopEarly = () => {
+      early = []
+      earlyLen = EARLY_INPUT_MAX + 1
     }
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
       if (live) return send(data)
       if (remote && (attempt > 0 || sshSeen)) return // 원격이 끊긴 동안 친 키는 버린다(띠가 알린다) — 모아 두는 것은 첫 연결만
-      if (earlyLen + data.length > EARLY_INPUT_MAX) return // 셸이 끝내 안 뜨면 끝없이 쌓지 않는다
+      // 되돌려 받은 화면 · 되살린 출력의 질의에 xterm 이 낸 답은 사용자가 친 키가 아니다
+      if (isTerminalReply(data)) return
+      if (earlyLen + data.length > EARLY_INPUT_MAX) return stopEarly() // 셸이 끝내 안 뜨면 끝없이 쌓지 않는다
       early.push(data)
       earlyLen += data.length
     })
@@ -436,7 +452,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         },
         (error: unknown) => {
           spawning = false
-          early = []
+          stopEarly()
           term.write(`\x1b[31m셸을 띄우지 못했습니다: ${String(error)}\x1b[0m\r\n`)
           if (remote && !disposed) reportRemote({ kind: 'down', why: 'gave-up' })
         },
@@ -480,7 +496,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         restoredPanes.add(paneId)
         pty.resize(paneId, term.cols, term.rows)
         spawnedAt = Date.now()
-        goLive()
+        goLive(false)
         if (remote) reportRemote({ kind: 'up' })
       },
       () => {

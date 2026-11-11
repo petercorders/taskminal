@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanExit, isPaneId, MAX_WRITE, OutputBatcher, shellEnv, splitForWrite, validSize, validWrite } from '../../src/shared/pty'
+import { cleanExit, isPaneId, isTerminalReply, MAX_WRITE, OutputBatcher, shellEnv, splitForWrite, validSize, validWrite } from '../../src/shared/pty'
 
 describe('isPaneId', () => {
   it('영숫자 · _ · - 1~64자만 받는다', () => {
@@ -184,5 +184,16 @@ describe('cleanExit', () => {
     expect(cleanExit({ exitCode: 0, signal: null })).toBe(true)
     expect(cleanExit({ exitCode: 1, signal: null })).toBe(false)
     expect(cleanExit({ exitCode: 0, signal: 9 })).toBe(false)
+  })
+})
+
+describe('isTerminalReply', () => {
+  it('xterm 이 질의에 스스로 낸 답(커서 위치 · 장치 속성 · 상태 · 색 질의)은 답이다', () => {
+    for (const d of ['\x1b[12;1R', '\x1b[?1;2c', '\x1b[>0;276;0c', '\x1b[0n', '\x1b]11;rgb:0d0d/0f0f/1212\x07', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\', '\x1bP!|00000000\x1b\\', '\x1b[?2004;1$y'])
+      expect(isTerminalReply(d), JSON.stringify(d)).toBe(true)
+  })
+  it('사용자가 친 키(글자 · 화살표 · 기능 키 · 붙여넣기)는 답이 아니다', () => {
+    for (const d of ['l', 'ls\r', '\x1b[A', '\x1b[15~', '\x1bOP', '\x1b[200~echo hi\x1b[201~', '\x03', '한글'])
+      expect(isTerminalReply(d), JSON.stringify(d)).toBe(false)
   })
 })

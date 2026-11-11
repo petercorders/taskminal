@@ -50,6 +50,14 @@ export class OutputBatcher {
 }
 
 /** 큰 붙여넣기를 MAX_WRITE 이하 조각으로 나눈다. 서로게이트 쌍(이모지 등)은 가르지 않는다. */
+/**
+ * xterm 이 터미널 질의에 스스로 낸 답인가 — 커서 위치(CSI … R) · 장치 속성(CSI ? / > … c) · 상태(CSI … n) · 모드(CSI ? … $y) ·
+ * OSC 색 질의 답 · DCS. 셸이 붙기 전에는 이런 답을 사용자가 친 키로 모아 두지 않는다(되돌려 받은 화면 · 되살린 출력의 질의가 만든다).
+ */
+export function isTerminalReply(data: string): boolean {
+  return /^\x1b\[[?>]?[\d;]*(?:R|c|n|\$y)$/.test(data) || /^\x1b\][\s\S]*(?:\x07|\x1b\\)$/.test(data) || /^\x1bP[\s\S]*\x1b\\$/.test(data)
+}
+
 export function splitForWrite(data: string, max = MAX_WRITE): string[] {
   const parts: string[] = []
   let i = 0
