@@ -8,8 +8,13 @@ import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
 import { keepIfSame, taskDirs, type Branches } from '../shared/git'
 import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTemplate, templateIdCount } from '../shared/model'
-import type { LoadedState } from '../shared/ipc'
-import type { NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
+import type { BackupMark, LoadedState } from '../shared/ipc'
+import type { AppState, NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
+import { restoreTask, type Restored } from '../shared/backup'
+import { SECRET_TOGGLES, type SecretToggleId } from '../shared/redact'
+import type { MaskSettings } from './secret-mask'
+import { Toast, type ToastSpec } from './Toast'
+import { dateClock } from './settings/BackupSection'
 import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
@@ -18,7 +23,7 @@ import { adjacentTask, nextAttention } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TemplateNameDialog } from './TemplateNameDialog'
-import { SettingsView } from './settings/SettingsView'
+import { SettingsView, type SettingsJump } from './settings/SettingsView'
 import { SplitView } from './SplitView'
 import { termSettings } from './term-settings'
 import { dirtyPanes, osc7Panes, restoredWithText, runtime } from './runtime'
@@ -26,10 +31,11 @@ import { HostBanners, useHostView, type StartupNotes } from './host-ui'
 import { summarizeResume } from '../shared/ptyhost'
 import { terminals } from './terminals'
 
-type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice'] } | { phase: 'failed'; error: string }
+type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice']; recoveredAt?: number | undefined } | { phase: 'failed'; error: string }
 
 const NOTICE: Record<NonNullable<LoadedState['notice']>, string> = {
   corrupt: '저장 파일이 손상돼 옆에 백업(state.json.….bak)해 두고 새로 시작했습니다.',
+  recovered: '저장 파일이 손상돼 마지막 백업으로 되살렸어요. 손상된 파일은 옆에(state.json.….bak) 남겨 뒀어요.',
   repaired: '저장 파일의 일부를 읽지 못해 원본을 백업(state.json.….bak)해 두고 읽을 수 있는 부분만 열었습니다.',
   newer: '더 새 버전의 Taskminal 이 만든 저장 파일이라 읽기 전용으로 열었습니다 — 바꾼 내용은 저장되지 않습니다.',
 }
@@ -125,7 +131,13 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // 설정을 열 때 보일 칸 (⌘P '셸 지킴이 보기' 등) — 닫으면 지운다
-  const [settingsSection, setSettingsSection] = useState<'host' | null>(null)
+  const [settingsSection, setSettingsSection] = useState<SettingsJump | null>(null)
+  // 17단계: 아래 알림(지운 일감 되돌리기 · 비밀값 아님 되돌리기) · 백업 실패 줄
+  const [toast, setToast] = useState<ToastSpec | null>(null)
+  const toastRef = useRef(toast)
+  toastRef.current = toast
+  const showToast = (t: Omit<ToastSpec, 'id'>) => setToast({ ...t, id: Date.now() + Math.random() })
+  const [backupError, setBackupError] = useState<string | null>(null)
   // 셸 지킴이 (16단계): 상태 · 처음 읽힐 때 정한 줄 · 확인 창
   const hostView = useHostView()
   const [startup, setStartup] = useState<StartupNotes | null>(null)
@@ -153,6 +165,7 @@ export function App() {
   const loadedRef = useRef<LoadedState['state'] | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
+  useEffect(() => window.taskminal.backup.onError(setBackupError), [])
 
   useEffect(() => {
     let alive = true
@@ -164,7 +177,7 @@ export function App() {
         const state = startup === 'restore' ? loaded.state : { ...loaded.state, activeTaskId: null }
         loadedRef.current = state
         dispatch({ type: 'loaded', state })
-        setLoad({ phase: 'ready', readOnly: loaded.readOnly, notice: loaded.notice })
+        setLoad({ phase: 'ready', readOnly: loaded.readOnly, notice: loaded.notice, recoveredAt: loaded.recoveredAt })
         if (startup === 'blank') setCreating({})
       },
       (error: unknown) => {
@@ -443,6 +456,16 @@ export function App() {
     [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.accent, settings.shell, settings.shellIntegration, settings.restoreScrollback, theme],
   )
   const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
+  // 화면에서 비밀값 가리기 (17단계) — 이 칸들이 바뀔 때만 새 객체(바뀌면 모든 pane 이 처음부터 다시 훑는다)
+  const maskSettings = useMemo<MaskSettings>(
+    () => ({
+      enabled: settings.maskScreen,
+      toggles: new Set<SecretToggleId>(SECRET_TOGGLES.map((t) => t.id).filter((id) => !settings.maskKindsOff.includes(id))),
+      allow: new Set(settings.secretAllow.map((a) => a.hash)),
+      custom: settings.secretCustom,
+    }),
+    [settings.maskScreen, settings.maskKindsOff, settings.secretAllow, settings.secretCustom],
+  )
 
   const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })
   const addTemplateTab = (taskId: string, templateId: string) => {
@@ -492,10 +515,57 @@ export function App() {
   }
 
   const remove = (task: Task) => {
+    // 지우기 전 모습 — 아래 알림의 [되돌리기 ⌘Z] 가 이것으로 되살린다(25단계 '최근 지운 것' 전까지). 디스크엔 main 이 '지움' 백업을 만든다
+    const before = stateRef.current
     // 그 일감의 셸을 모두 끝내고 목록에서 뺀다 (화면에서 빠지는 것만으로는 셸이 끝나지 않는다).
     for (const paneId of Object.keys(task.panes)) window.taskminal.pty.kill(paneId)
     dispatch({ type: 'task/remove', id: task.id })
     closeDialogs()
+    showToast({
+      text: `‘${task.name}’ 일감을 지웠어요.`,
+      sub: '되돌리면 탭 · 폴더가 돌아오고 셸은 새로 열려요.',
+      action: {
+        label: '되돌리기',
+        run: () => {
+          const r = restoreTask(stateRef.current, before, task.id, newId)
+          if (!r) return
+          for (const id of r.kill) window.taskminal.pty.kill(id)
+          dispatch({ type: 'state/replace', state: r.state })
+          refocus()
+        },
+      },
+    })
+  }
+
+  /** 백업 · 가져오기로 상태를 바꾼다 — 먼저 main 이 지금 모습을 백업(되돌리기 전 · 가져오기 전). 그게 실패하면 바꾸지 않는다 */
+  const applyRestore = async (make: (cur: AppState) => Restored | null, mark: BackupMark): Promise<string | null> => {
+    try {
+      await window.taskminal.backup.mark(mark)
+    } catch (e) {
+      const why = e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)
+      return `지금 모습을 백업하지 못해 바꾸지 않았어요 (${why})`
+    }
+    // 백업하는 동안 바뀐 것까지 — 지금 상태로 다시 만든다
+    const r = make(stateRef.current)
+    if (!r) return '되살릴 일감이 백업에 없어요'
+    for (const id of r.kill) window.taskminal.pty.kill(id)
+    dispatch({ type: 'state/replace', state: r.state })
+    return null
+  }
+
+  /** 가린 칸 메뉴 '비밀값 아님' — 이 값만(해시) 화면 · 디스크에서 다시 가리지 않는다 */
+  const allowSecret = (paneId: string, hit: { hash: string; kind: string }) => {
+    const s = stateRef.current
+    const where = s.tasks.find((t) => t.id === findPaneTask(s, paneId))?.name ?? ''
+    dispatch({ type: 'settings/patch', patch: { secretAllow: [...s.settings.secretAllow.filter((a) => a.hash !== hit.hash), { hash: hit.hash, kind: hit.kind, where, at: Date.now() }] } })
+    showToast({
+      text: '이 값을 이제 가리지 않아요.',
+      sub: '디스크에도 원문으로 남아요.',
+      action: {
+        label: '되돌리기',
+        run: () => dispatch({ type: 'settings/patch', patch: { secretAllow: stateRef.current.settings.secretAllow.filter((a) => a.hash !== hit.hash) } }),
+      },
+    })
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
@@ -532,6 +602,18 @@ export function App() {
       case 'host-orphans':
         setSettingsSection('host')
         return setSettingsOpen(true)
+      case 'backup-restore':
+        setSettingsSection('backup')
+        return setSettingsOpen(true)
+      case 'privacy':
+        setSettingsSection('privacy')
+        return setSettingsOpen(true)
+      case 'mask-toggle': {
+        const on = !state.settings.maskScreen
+        dispatch({ type: 'settings/patch', patch: { maskScreen: on } })
+        showToast({ text: on ? '화면에서 비밀값을 가려요.' : '화면에서 비밀값을 가리지 않아요.', sub: '디스크에는 늘 가려서 써요.' })
+        return refocus()
+      }
       case 'quit-all':
         return window.taskminal.host.action('quit-all')
       case 'font-bigger':
@@ -590,6 +672,11 @@ export function App() {
         // 보고 있는 pane 에 막대 — 이미 열려 있으면 입력칸으로 (15d)
         setFinding((f) => ({ paneId: tab.activePaneId, signal: f.signal + 1 }))
         return
+      case 'mask-next':
+      case 'mask-prev':
+        // 가린 칸으로 포커스 — 그동안 키는 셸로 가지 않는다(칸이 버튼). 없으면 그대로
+        terminals.get(tab.activePaneId)?.maskFocus(command === 'mask-next' ? 1 : -1)
+        return
     }
   }
   // 팔레트에서 고른 것을 실행한다 — 팔레트는 먼저 닫는다
@@ -637,6 +724,14 @@ export function App() {
       // 글을 고치는 칸(탭 이름 · 대화상자)에서는 ⌘ 키가 그 칸의 편집 몫 — ⌘W 가 뒤의 셸을 끝내지 않게. xterm 의 입력칸은 제외.
       const t = e.target
       if (t instanceof HTMLInputElement || (t instanceof HTMLTextAreaElement && !t.classList.contains('xterm-helper-textarea'))) return
+      // 아래 알림의 되돌리기 — 알림이 떠 있을 때만 ⌘Z 를 앱이 받는다(17단계)
+      const undo = toastRef.current?.action
+      if (undo && e.metaKey && e.code === 'KeyZ' && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+        e.preventDefault()
+        undo.run()
+        setToast(null)
+        return
+      }
       const command = commandForKey(e, shortcutsRef.current)
       if (!command) return
       e.preventDefault()
@@ -659,7 +754,9 @@ export function App() {
       : saveError
         ? `상태를 저장하지 못했습니다 (${saveError}) — 다음에 바뀔 때 다시 시도합니다.`
         : load.phase === 'ready' && load.notice
-          ? NOTICE[load.notice]
+          ? load.notice === 'recovered' && load.recoveredAt
+            ? `저장 파일이 손상돼 ${dateClock(load.recoveredAt)} 백업으로 되살렸어요. 손상된 파일은 옆에(state.json.….bak) 남겨 뒀어요.`
+            : NOTICE[load.notice]
           : null
 
   return (
@@ -667,6 +764,14 @@ export function App() {
       {message && (
         <p className="notice" role="status" data-testid="state-notice">
           {message}
+        </p>
+      )}
+      {backupError && (
+        <p className="notice" role="status" data-testid="backup-error">
+          백업을 만들지 못했어요 ({backupError}) — 상태는 계속 저장돼요.
+          <button type="button" className="link" onClick={() => setBackupError(null)}>
+            닫기
+          </button>
         </p>
       )}
       <HostBanners
@@ -751,6 +856,8 @@ export function App() {
                           onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd: cwdLike(cwd, task.cwd, runtime.home) })}
                           onDragEnd={refocus}
                           find={findProps}
+                          mask={maskSettings}
+                          onAllow={allowSecret}
                         />
                       )}
                     </div>
@@ -787,6 +894,7 @@ export function App() {
           newId={newId}
           initialSection={settingsSection ?? undefined}
           busy={busyTotal}
+          onRestore={applyRestore}
           onClose={() => {
             setSettingsOpen(false)
             setSettingsSection(null)
@@ -794,6 +902,7 @@ export function App() {
           }}
         />
       )}
+      {toast && <Toast toast={toast} onDone={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
       {paletteOpen && <Palette state={state} shortcuts={shortcuts} onRun={runPaletteItem} onClose={closeDialogs} />}
       {savingTemplate && (

@@ -47,6 +47,25 @@ describe('StateFile', () => {
     expect(readdirSync(dir).filter((f) => f.endsWith('.bak'))).toHaveLength(1)
   })
 
+  it('손상 파일이면 마지막 정상 백업으로 시작하고(17단계) 바로 저장한다', () => {
+    writeFileSync(statePath(), '{nope')
+    const good = { ...emptyState(), activeTaskId: null }
+    good.settings.fontSize = 19
+    const r = new StateFile(dir, newId, () => ({ state: good, at: 1234 })).load()
+    expect(r).toMatchObject({ readOnly: false, notice: 'recovered', recoveredAt: 1234 })
+    expect(r.state.settings.fontSize).toBe(19)
+    expect(readdirSync(dir).filter((f) => f.endsWith('.bak'))).toHaveLength(1)
+    expect(JSON.parse(readFileSync(statePath(), 'utf8')).settings.fontSize).toBe(19)
+  })
+
+  it('백업 읽기가 던져도 빈 상태로 시작한다', () => {
+    writeFileSync(statePath(), '{nope')
+    const r = new StateFile(dir, newId, () => {
+      throw new Error('EACCES')
+    }).load()
+    expect(r).toMatchObject({ notice: 'corrupt', state: emptyState() })
+  })
+
   it('더 새 버전 파일은 읽기 전용 — save 해도 바이트 그대로', () => {
     const original = '{"version":2,"tasks":[{"id":"t","newField":true}],"future":1}'
     writeFileSync(statePath(), original)

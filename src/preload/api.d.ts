@@ -1,5 +1,6 @@
 // renderer 가 보는 preload API 타입 (window.taskminal). 구현은 preload/index.ts.
-import type { AppInfo, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
+import type { BackupInfo } from '../shared/backup'
+import type { AppInfo, BackupMark, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, RedactStatus, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { AppState } from '../shared/types'
 
@@ -36,6 +37,29 @@ export interface StateApi {
   save(state: AppState): void
   /** 저장 실패(디스크 가득 · 권한) 알림. 구독 해제 함수를 돌려준다. */
   onError(listener: (message: string) => void): () => void
+  /** 저장 창 → 가린 상태 JSON 을 쓴다(17단계). 저장한 경로 · 취소면 null */
+  exportTo(): Promise<string | null>
+  /** 열기 창 → 검증한 상태. 취소면 null · 못 읽으면 예외 */
+  importFrom(): Promise<{ name: string; state: AppState } | null>
+}
+
+/** 상태 백업 (17단계) */
+export interface BackupApi {
+  /** 새 것부터 */
+  list(): Promise<BackupInfo[]>
+  /** 검증한 상태 — 못 쓰는 백업이면 예외 */
+  read(name: string): Promise<AppState>
+  /** 되돌리기 · 가져오기 직전에 지금 모습을 백업한다 — 실패면 예외(되돌리지 않는다) */
+  mark(what: BackupMark): Promise<boolean>
+  /** 백업 실패 글(null = 다시 됨) */
+  onError(listener: (message: string | null) => void): () => void
+}
+
+/** 이미 남은 스크롤 파일 정리 (17단계) */
+export interface RedactApi {
+  status(): Promise<RedactStatus>
+  onStatus(listener: (status: RedactStatus) => void): () => void
+  fix(action: 'retry' | 'delete', name: string): void
 }
 
 /** 셸 지킴이 (16단계) — 앱 밖에서 셸을 갖고 있는 프로세스 */
@@ -76,6 +100,8 @@ export interface TaskminalApi {
   scrollback: ScrollbackApi
   state: StateApi
   host: HostApi
+  backup: BackupApi
+  redact: RedactApi
 }
 
 declare global {

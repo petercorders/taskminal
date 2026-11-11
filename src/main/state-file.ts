@@ -14,8 +14,15 @@ export class StateFile {
   constructor(
     private readonly dir: string,
     private readonly newId: NewId,
+    /** 손상된 파일 대신 쓸 마지막 정상 백업 (17단계) — 없으면 빈 상태 */
+    private readonly recover: () => { state: AppState; at: number } | null = () => null,
   ) {
     this.path = join(dir, 'state.json')
+  }
+
+  /** 읽은 뒤 쓸 수 있는 파일인가 (읽기 전용 · 읽기 전이면 false) — 백업도 이때만 */
+  get canWrite(): boolean {
+    return this.writable
   }
 
   load(): LoadedState {
@@ -34,12 +41,18 @@ export class StateFile {
         this.writable = false
         return { state: emptyState(), readOnly: true, notice: 'newer' }
       case 'corrupt': {
-        // 원본은 지우지 않고 옆으로 옮긴다. 기본값을 바로 써서 다음 실행이 또 백업하지 않게.
+        // 원본은 지우지 않고 옆으로 옮긴다. 마지막 정상 백업(없으면 기본값)을 바로 써서 다음 실행이 또 옮기지 않게.
         renameSync(this.path, `${this.path}.${stamp()}.bak`)
         this.writable = true
-        const state = emptyState()
+        let found: { state: AppState; at: number } | null = null
+        try {
+          found = this.recover()
+        } catch {
+          // 백업을 못 읽으면 빈 상태 — 손상 파일은 이미 옆에 있다
+        }
+        const state = found?.state ?? emptyState()
         this.trySave(state) // 실패해도 다음 저장이 다시 쓴다
-        return { state, readOnly: false, notice: 'corrupt' }
+        return found ? { state, readOnly: false, notice: 'recovered', recoveredAt: found.at } : { state, readOnly: false, notice: 'corrupt' }
       }
       case 'ok':
         // 검증이 무언가를 버렸으면 다음 저장이 그것을 지우므로, 원본을 먼저 복사해 둔다.

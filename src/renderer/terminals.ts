@@ -2,6 +2,8 @@
 // TerminalPane 이 마운트 · 해제 때 넣고 뺀다.
 export interface TerminalHandle {
   clear(): void
+  /** ⌥⌘→ · ⌥⌘← 다음 · 이전 가린 칸으로 (17단계) — 가린 칸이 없으면 false */
+  maskFocus(step: 1 | -1): boolean
   /** 스크롤 저장용 글 (색 · 줄 포함) */
   serialize(): string
   /** 스크롤 버퍼에서 찾기 글자가 든 줄 (대소문자 무시) — 최근 줄부터 limit 개 */

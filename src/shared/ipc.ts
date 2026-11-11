@@ -32,7 +32,33 @@ export const IPC = {
   hostTail: 'host:tail', // invoke(paneId) → 마지막 20줄
   hostKill: 'host:kill', // send(paneId[]) — 주인 없는 셸 끝내기
   hostAction: 'host:action', // send(HostAction)
+  // 17단계 데이터 안전
+  backupList: 'backup:list', // invoke → BackupInfo[]
+  backupRead: 'backup:read', // invoke(이름) → AppState (검증한 것)
+  backupMark: 'backup:mark', // invoke('restore' | 'import') → 지금 모습을 백업한 뒤 돌아온다 (실패면 예외)
+  backupError: 'backup:error', // main → renderer: 백업 실패 글 | null(다시 됨)
+  stateExport: 'state:export', // invoke → 저장한 경로 | null(취소)
+  stateImport: 'state:import', // invoke → { name, state } | null(취소) · 못 읽으면 예외
+  redactStatus: 'redact:status', // invoke → RedactStatus / main → renderer: 바뀔 때마다
+  redactFix: 'redact:fix', // send('retry' | 'delete', 파일 이름)
 } as const
+
+/** 이미 남은 스크롤 파일 정리(17단계) 상태 */
+export interface RedactStatus {
+  state: 'idle' | 'running' | 'done'
+  done: number
+  total: number
+  /** 가린 비밀값 수 */
+  masked: number
+  /** 못 읽은 파일 이름(<paneId>.txt) */
+  failed: string[]
+  finishedAt?: number
+}
+
+export const BACKUP_MARKS = ['restore', 'import'] as const
+export type BackupMark = (typeof BACKUP_MARKS)[number]
+export const isBackupMark = (v: unknown): v is BackupMark => typeof v === 'string' && (BACKUP_MARKS as readonly string[]).includes(v)
+export const isRedactFix = (v: unknown): v is 'retry' | 'delete' => v === 'retry' || v === 'delete'
 
 /** 셸 지킴이에 렌더러가 부탁하는 일 */
 export const HOST_ACTIONS = ['reconnect', 'restart', 'quit-all', 'replace-old', 'open-log'] as const
@@ -114,6 +140,11 @@ export interface LoadedState {
   state: AppState
   /** 더 새 버전 앱이 만든 파일 — 이 앱은 그 파일을 절대 쓰지 않는다 */
   readOnly: boolean
-  /** corrupt: JSON 이 아니라 옮겨 둠 · repaired: 검증이 일부를 버려 원본을 복사해 둠 · newer: 모르는 형식이라 읽기 전용 */
-  notice: null | 'corrupt' | 'repaired' | 'newer'
+  /**
+   * corrupt: JSON 이 아니라 옮겨 둠(백업 없음 → 빈 상태) · recovered: 옮겨 두고 마지막 정상 백업으로 시작 ·
+   * repaired: 검증이 일부를 버려 원본을 복사해 둠 · newer: 모르는 형식이라 읽기 전용
+   */
+  notice: null | 'corrupt' | 'recovered' | 'repaired' | 'newer'
+  /** recovered: 되살린 백업의 시각 */
+  recoveredAt?: number
 }

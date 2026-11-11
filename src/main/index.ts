@@ -1,22 +1,25 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
-import { join } from 'node:path'
-import { IPC, isHostAction, type AppInfo } from '../shared/ipc'
+import { basename, join } from 'node:path'
+import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
+import { IPC, isBackupMark, isHostAction, isRedactFix, type AppInfo, type RedactStatus } from '../shared/ipc'
 import { normalizeState } from '../shared/model'
-import { Debouncer } from '../shared/persist'
+import { Debouncer, readStateText } from '../shared/persist'
+import { redact, type SecretOptions } from '../shared/redact'
 import { isAccel, isAppCommand } from '../shared/keymap'
 import { MAX_LINK, webUrl } from '../shared/links'
 import type { RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
-import type { AppState } from '../shared/types'
+import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onQuitAll } from './menu'
 import { lsofCwds } from './cwd-probe'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import type { WorktreeResult } from '../shared/worktree'
 import { createHostControl, type HostControl } from './host-control'
+import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { StateFile } from './state-file'
 
@@ -59,9 +62,39 @@ let asking = false // 안내 · 확인 창이 떠 있다 — 두 번째 창을 �
 const setBadge = (n: number) => app.dock?.setBadge(n > 0 ? String(n) : '')
 
 const MAX_STATE_BYTES = 5 * 1024 * 1024
-// 스크롤 저장 — userData 가 정해진 뒤(ready 이후 첫 요청) 만든다
+// 비밀값 가리기 옵션(17단계) — main 이 마지막으로 받은 상태의 설정에서. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
+let secretOpts: SecretOptions = {}
+const optsFrom = (s: Settings): SecretOptions => ({ allow: new Set(s.secretAllow.map((a) => a.hash)), custom: s.secretCustom })
+// 스크롤 저장 — userData 가 정해진 뒤(ready 이후 첫 요청) 만든다. 디스크로 가기 전 가린다
 let scrollbackStore: ScrollbackStore | null = null
-const scrollback = () => (scrollbackStore ??= new ScrollbackStore(join(app.getPath('userData'), 'scrollback')))
+const scrollback = () => (scrollbackStore ??= new ScrollbackStore(join(app.getPath('userData'), 'scrollback'), () => secretOpts))
+// 스크롤 쓰기 · 이미 남은 파일 정리를 한 줄로 — 주기 저장(비동기)이 도는 중에 다음 일이 와도 차례로
+let saving: Promise<unknown> = Promise.resolve()
+const redactMarker = () => join(app.getPath('userData'), 'scrollback-redacted-v1')
+let redactStarted = false
+const sendRedact = (s: RedactStatus) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.redactStatus, s)
+}
+// 상태 백업(17단계) — userData 가 정해진 뒤 만든다
+let backupStore: BackupStore | null = null
+const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
+let lastWritten: AppState | null = null // 디스크에 있는 상태 — 다음 상태와 비교해 백업 이유를 정한다
+let lastSettingsBackup = 0
+let changedSinceAuto = false
+let backupFailing = false
+/** 백업 실패는 상태 저장을 막지 않는다 — 노란 줄로 알리고, 다음에 되면 줄을 지운다 */
+function backupNow(reason: BackupReason, force = false): string | null | Error {
+  const r = backups().snapshot(reason, Date.now(), force)
+  if (r instanceof Error) {
+    console.error('백업을 만들지 못함', r)
+    backupFailing = true
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.backupError, r.message)
+  } else if (backupFailing) {
+    backupFailing = false
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.backupError, null)
+  }
+  return r
+}
 const MAX_LIVE_PANES = 2000
 const MAX_BRANCH_DIRS = 200 // 사이드바 일감 폴더 (15c)
 const cwdPollMs = ((): number => {
@@ -74,8 +107,22 @@ let stateFile: StateFile | null = null // userData 경로가 정해진 뒤(ready
 // 디바운스가 main 에 있어서 창 닫기 · 새로 고침 · 렌더러 충돌 뒤에도 이미 받은 값은 타이머가 쓴다.
 const stateWriter = new Debouncer<AppState>(
   (state) => {
+    // 쓰기 직전: 디스크의 지금 모습(바뀌기 전)을 백업할지 — 일감 · 탭이 사라짐 · 설정이 바뀜(10분에 한 번까지)
+    if (stateFile?.canWrite) {
+      const reason = backupReasonFor(lastWritten, state)
+      if (reason === 'delete' || (reason === 'settings' && Date.now() - lastSettingsBackup >= SETTINGS_BACKUP_GAP_MS)) {
+        if (reason === 'settings') lastSettingsBackup = Date.now()
+        backupNow(reason)
+      }
+    }
     const error = stateFile?.trySave(state) ?? null
-    if (!error) return
+    if (!error) {
+      if (stateFile?.canWrite) {
+        lastWritten = state
+        changedSinceAuto = true
+      }
+      return
+    }
     // 디스크 가득 · 권한: main 을 죽이지 않고 알린다. 다음 변경이 전체 상태를 다시 보내므로 그때 다시 시도된다.
     console.error('상태를 저장하지 못함', error)
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.stateError, error.message)
@@ -237,9 +284,23 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.stateLoad, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     stateWriter.flush() // 새로 고침 직전에 받은 값을 먼저 쓰고 읽는다
-    const file = new StateFile(app.getPath('userData'), randomUUID)
+    // 손상이면 마지막 정상 백업으로 (17단계)
+    const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
     stateFile = file
+    if (file.canWrite) {
+      lastWritten = loaded.state
+      secretOpts = optsFrom(loaded.state.settings)
+      // 시작 백업 — 앱 버전이 바뀌었으면 '버전 올리기 전'(90일 보존). 같은 내용이면 만들지 않는다(새로 고침마다 쌓이지 않게)
+      const prev = backups().lastVersion()
+      backupNow(prev !== null && prev !== app.getVersion() ? 'version' : 'start')
+      backups().writeVersion(app.getVersion())
+      // 이미 남은 스크롤 파일을 한 번 가린다 — 스크롤 저장과 한 줄로
+      if (!redactStarted) {
+        redactStarted = true
+        saving = saving.then(() => scrollback().redactExisting(redactMarker(), sendRedact)).catch((e: unknown) => console.error('스크롤 정리 실패', e))
+      }
+    }
     return loaded
   })
   // renderer 를 믿지 않는다: 크기 상한 · normalizeState 로 다시 검증한 값만 쓴다.
@@ -252,7 +313,64 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     if (bytes > MAX_STATE_BYTES) return
-    stateWriter.push(normalizeState(raw, randomUUID))
+    const state = normalizeState(raw, randomUUID)
+    if (stateFile?.canWrite) secretOpts = optsFrom(state.settings)
+    stateWriter.push(state)
+  })
+
+  // ─── 17단계: 백업 · 되돌리기 · 내보내기/가져오기 ───
+  ipcMain.handle(IPC.backupList, (event): BackupInfo[] => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return backups().list()
+  })
+  ipcMain.handle(IPC.backupRead, (event, name: unknown): AppState => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const r = backups().read(name, randomUUID)
+    if (r instanceof Error) throw r
+    return r
+  })
+  // 되돌리기 · 가져오기 직전 — 받아 둔 상태를 먼저 쓰고 지금 모습을 백업한다. 실패면 예외(renderer 는 되돌리지 않는다)
+  ipcMain.handle(IPC.backupMark, (event, what: unknown): boolean => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isBackupMark(what)) throw new Error('잘못된 요청')
+    stateWriter.flush()
+    if (!stateFile?.canWrite) throw new Error('이 실행에서는 상태를 저장하지 않아요')
+    const r = backupNow(what, true)
+    if (r instanceof Error) throw r
+    return true
+  })
+  ipcMain.handle(IPC.stateExport, async (event): Promise<string | null> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    stateWriter.flush()
+    const state = lastWritten
+    if (!state) throw new Error('내보낼 상태가 없어요')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const day = new Date().toISOString().slice(0, 10)
+    const options = { title: '상태 내보내기', defaultPath: join(app.getPath('documents'), `taskminal-${day}.json`), filters: [{ name: 'JSON', extensions: ['json'] }] }
+    const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (r.canceled || !r.filePath) return null
+    writeFileSync(r.filePath, exportText(state), { mode: 0o600 }) // 출력 · 스크롤은 넣지 않고, 명령 속 키도 가린 글
+    return r.filePath
+  })
+  ipcMain.handle(IPC.stateImport, async (event): Promise<{ name: string; state: AppState } | null> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = { title: '상태 가져오기', properties: ['openFile'] as Array<'openFile'>, filters: [{ name: 'JSON', extensions: ['json'] }] }
+    const r = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    const path = r.canceled ? undefined : r.filePaths[0]
+    if (!path) return null
+    if (statSync(path).size > MAX_STATE_BYTES) throw new Error('파일이 너무 커요 (5MB 까지)')
+    const read = readStateText(readFileSync(path, 'utf8'), randomUUID)
+    if (read.kind !== 'ok') throw new Error(read.kind === 'newer' ? '더 새 버전 앱이 만든 파일이에요' : 'Taskminal 상태 파일이 아니에요')
+    return { name: basename(path), state: read.state }
+  })
+  ipcMain.handle(IPC.redactStatus, (event): RedactStatus => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return scrollback().redactStatus
+  })
+  ipcMain.on(IPC.redactFix, (event, action: unknown, name: unknown) => {
+    if (!fromOurWindow(event) || !isRedactFix(action) || typeof name !== 'string') return
+    saving = saving.then(() => scrollback().fixRedact(action, name, redactMarker(), sendRedact)).catch((e: unknown) => console.error('스크롤 정리 실패', e))
   })
 
   // 스크롤 저장 — renderer 를 믿지 않는다: paneId 검사 · pane 당 바이트 상한은 ScrollbackStore, live 수 상한은 여기
@@ -266,8 +384,6 @@ if (!app.requestSingleInstanceLock()) {
     const r = (raw ?? {}) as Record<string, unknown>
     return Array.isArray(r['live']) && r['live'].length <= MAX_LIVE_PANES ? { live: r['live'], panes: r['panes'] } : null
   }
-  // 저장이 겹치지 않게 한 줄로 — 주기 저장(비동기)이 도는 중에 다음 저장이 와도 차례로
-  let saving: Promise<unknown> = Promise.resolve()
   ipcMain.on(IPC.scrollbackSave, (event, raw: unknown) => {
     const req = fromOurWindow(event) ? liveOf(raw) : null
     if (req) saving = saving.then(() => scrollback().save(req.live, req.panes)).then(logError, logError)
@@ -315,7 +431,7 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.handle(IPC.hostTail, async (event, paneId: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return isPaneId(paneId) ? control().tail(paneId) : ''
+    return isPaneId(paneId) ? redact(await control().tail(paneId), secretOpts) : '' // 화면에 보이는 글 — 비밀값을 가려서
   })
   ipcMain.on(IPC.hostKill, (event, paneIds: unknown) => {
     if (!fromOurWindow(event) || !Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return
@@ -403,6 +519,12 @@ if (!app.requestSingleInstanceLock()) {
     }
     installAppMenu()
     hostControl = createHostControl(zshIntegrationDir, allowedShells)
+    // 바뀐 게 있으면 한 시간마다 '자동' 백업 — 하루 하나 보존 규칙과 함께 '그날의 마지막' 이 남는다
+    setInterval(() => {
+      if (!changedSinceAuto || !stateFile?.canWrite) return
+      changedSinceAuto = false
+      backupNow('auto')
+    }, AUTO_BACKUP_MS).unref()
     mainWindow = createWindow()
     // macOS: Dock 아이콘을 누르면 창을 다시 만든다.
     app.on('activate', () => {

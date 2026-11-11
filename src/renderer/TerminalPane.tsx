@@ -7,6 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef, useState } from 'react'
+import { groupHits, SecretMasker, type MaskHit, type MaskSettings } from './secret-mask'
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
@@ -38,7 +39,19 @@ interface Props {
   onStartSent?(): void
   /** 셸이 OSC 7 로 알려 준 지금 폴더 (셸 안의 cd) */
   onCwd?(cwd: string): void
+  /** 화면에서 비밀값 가리기 (17단계) */
+  mask?: MaskSettings | undefined
+  /** 칸 메뉴 '비밀값 아님' — 그 값(해시)을 다시 가리지 않기 */
+  onAllow?(hit: { hash: string; kind: string }): void
 }
+
+/** 가린 칸 안내를 이미 본 pane — 이번 실행에서 pane 마다 한 번 */
+const maskNoticed = new Set<string>()
+/** 새 출력 뒤 훑기까지 — 출력이 몰려도 한 번 */
+const MASK_SCAN_MS = 200
+/** 칩 '모두 30초 보기' */
+const REVEAL_ALL_MS = 30_000
+const NO_MASK: MaskSettings = { enabled: false, toggles: new Set(), allow: new Set(), custom: [] }
 
 /** 셸 통합이 꺼져 있거나 첫 프롬프트 신호가 오지 않을 때 시작 명령을 보내는 시각 */
 export const START_FALLBACK_MS = 4000
@@ -79,7 +92,7 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd }: Props) {
+export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd, mask = NO_MASK, onAllow }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
@@ -97,6 +110,17 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
   const onCwdRef = useRef(onCwd)
   onCwdRef.current = onCwd
   const refitRef = useRef<() => void>(() => {})
+  // 화면 가리기 (17단계)
+  const maskRef = useRef(mask)
+  maskRef.current = mask
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
+  const maskerRef = useRef<SecretMasker | null>(null)
+  const scanPending = useRef(false)
+  const [hits, setHits] = useState<readonly MaskHit[]>([])
+  const [maskMenu, setMaskMenu] = useState<{ hit: MaskHit; x: number; y: number } | null>(null)
+  const [maskList, setMaskList] = useState(false)
+  const [maskNotice, setMaskNotice] = useState(false)
 
   useEffect(() => {
     const host = hostRef.current!
@@ -125,6 +149,51 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     term.loadAddon(serializer)
     term.unicode.activeVersion = '11'
     term.open(host)
+
+    // 화면 가리기: 새 출력이 온 줄만 훑는다. 숨은 pane 은 보일 때(아래 effect) — 안 보일 때 돌지 않게
+    const masker = new SecretMasker(
+      term,
+      maskRef.current,
+      (list) => {
+        setHits([...list])
+        if (list.length > 0 && !maskNoticed.has(paneId) && visibleRef.current) {
+          maskNoticed.add(paneId)
+          setMaskNotice(true)
+        }
+      },
+      (hit, el) => {
+        const slot = host.parentElement
+        const r = el.getBoundingClientRect()
+        const base = slot?.getBoundingClientRect() ?? { left: 0, top: 0 }
+        setMaskMenu({ hit, x: r.left - base.left, y: r.bottom - base.top + 2 })
+      },
+    )
+    maskerRef.current = masker
+    let scanTimer: ReturnType<typeof setTimeout> | undefined
+    const scanSoon = () => {
+      if (!maskRef.current.enabled) return
+      clearTimeout(scanTimer)
+      scanTimer = setTimeout(() => {
+        if (visibleRef.current) masker.scan()
+        else scanPending.current = true
+      }, MASK_SCAN_MS)
+    }
+    const masking = [
+      term.onWriteParsed(scanSoon),
+      // 대체 화면(vim · less)으로 오가면 마커가 다른 버퍼라 처음부터
+      term.buffer.onBufferChange(() => masker.rescanAll()),
+    ]
+    // ⌘C · 메뉴의 복사: 선택 안의 가린 값은 ‹가림:종류› 로 (Warp 와 같음) — xterm 의 복사보다 먼저(capture)
+    const onCopy = (e: ClipboardEvent) => {
+      if (!maskRef.current.enabled || !term.hasSelection()) return
+      const raw = term.getSelection()
+      const masked = masker.maskText(raw)
+      if (masked === raw) return
+      e.clipboardData?.setData('text/plain', masked)
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }
+    host.addEventListener('copy', onCopy, true)
 
     // 시작 명령: 첫 프롬프트(셸 통합의 OSC 133;A — 사용자 .zshrc 를 다 읽은 뒤)에 한 번. 신호가 없으면 START_FALLBACK_MS 뒤에
     // (셸은 그 전에 온 입력도 줄 버퍼에 두었다 읽는다). 셸을 못 띄웠으면 보내지 않고 남겨 둔다.
@@ -192,7 +261,7 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     // 큰 붙여넣기는 main 의 입력 상한(1MB) 이하로 나눠 보낸다 — 넘으면 main 이 통째로 버린다.
     // 선택하면 바로 복사 (설정) — 끄면 ⌘C
     const selection = term.onSelectionChange(() => {
-      if (settingsRef.current.copyOnSelect && !findingPanes.has(paneId) && term.hasSelection()) void navigator.clipboard.writeText(term.getSelection()).catch(() => {})
+      if (settingsRef.current.copyOnSelect && !findingPanes.has(paneId) && term.hasSelection()) void navigator.clipboard.writeText(masker.maskText(term.getSelection())).catch(() => {})
     })
     // 키를 친 것만 센다 — onData 는 터미널 질의에 xterm 이 스스로 내는 답에도 불린다
     const keys = term.onKey(() => (typed = true))
@@ -267,7 +336,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     termRef.current = term
     refitRef.current = refit
     terminals.set(paneId, {
-      clear: () => term.clear(),
+      clear: () => {
+        term.clear()
+        masker.rescanAll()
+      },
+      maskFocus: (step) => masker.focusNext(step),
       // 전체 화면 프로그램(vim · less · Claude)의 화면 · 커서 모드는 빼고 일반 화면만
       serialize: () => serializer.serialize({ scrollback: saveLines(settingsRef.current.scrollback), excludeAltBuffer: true, excludeModes: true }),
       search: (query, limit) => {
@@ -310,6 +383,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
 
     return () => {
       disposed = true
+      clearTimeout(scanTimer)
+      for (const d of masking) d.dispose()
+      host.removeEventListener('copy', onCopy, true)
+      masker.dispose()
+      maskerRef.current = null
       observer.disconnect()
       cancelAnimationFrame(frame)
       clearTimeout(startTimer)
@@ -422,8 +500,105 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
   // 다시 보일 때 ResizeObserver 가 0 → 실제 크기 변화를 보고 맞춘다.
   useEffect(() => {
     // 찾기 막대 입력칸을 눌러 이 pane 이 활성이 된 경우엔 입력칸에 둔다 (15d 리뷰)
+    // 설정 같은 대화상자가 열려 있으면 가져가지 않는다 — 백업에서 되살린 일감이 열려도 Esc · ↑↓ 가 대화상자에 남게(17단계). 닫힐 때 refocus 가 다시 부른다
+    if (document.querySelector('[aria-modal="true"]')) return
     if (active && !(document.activeElement instanceof Element && document.activeElement.closest('.find-bar'))) termRef.current?.focus()
   }, [active, focusSignal])
 
-  return <div className="terminal-pane" ref={hostRef} data-testid={`pane-${paneId}`} />
+  // 가리기 설정이 바뀌면 처음부터 다시 훑는다(켬 · 끔 · 종류 · 가리지 않기로 한 값 · 내 종류)
+  useEffect(() => {
+    maskerRef.current?.update(mask)
+    setMaskMenu(null)
+  }, [mask])
+  // 숨어 있는 동안 미뤄 둔 훑기
+  useEffect(() => {
+    if (visible && scanPending.current) {
+      scanPending.current = false
+      maskerRef.current?.scan()
+    }
+  }, [visible])
+  // 메뉴가 가리키던 칸이 사라지면(스크롤 버퍼 밖 · ⌘K) 메뉴를 닫는다
+  useEffect(() => {
+    if (maskMenu && !hits.some((h) => h.id === maskMenu.hit.id)) setMaskMenu(null)
+  }, [hits, maskMenu])
+
+  const closeMaskMenu = () => {
+    setMaskMenu(null)
+    termRef.current?.focus()
+  }
+  const groups = maskList ? groupHits(hits) : []
+
+  return (
+    <>
+      <div className="terminal-pane" ref={hostRef} data-testid={`pane-${paneId}`} />
+      {mask.enabled && hits.length > 0 && (
+        <button type="button" className="secret-chip" data-testid="secret-chip" title="이 pane 에서 가린 칸 — 눌러서 목록 보기" onClick={() => setMaskList((v) => !v)}>
+          🔒 {hits.length}개 가림
+        </button>
+      )}
+      {maskNotice && hits.length > 0 && (
+        <div className="secret-notice" role="status" data-testid="secret-notice">
+          <span>🔒 이 출력에서 비밀값 {hits.length}개를 가렸어요. 화면을 공유 중이었다면 키를 바꾸는 게 안전해요.</span>
+          <button type="button" className="button" onClick={() => (setMaskList(true), setMaskNotice(false))}>
+            어떤 것들인지 보기
+          </button>
+          <button type="button" className="button" onClick={() => (setMaskNotice(false), termRef.current?.focus())}>
+            괜찮아요
+          </button>
+        </div>
+      )}
+      {maskList && hits.length > 0 && (
+        <div className="secret-list" role="dialog" aria-label="가린 칸 목록" data-testid="secret-list" onKeyDown={(e) => e.key === 'Escape' && (setMaskList(false), termRef.current?.focus())}>
+          <div className="secret-list-head">
+            이 pane 의 가린 칸 {hits.length}개
+            <button type="button" className="button" autoFocus onClick={() => maskerRef.current?.revealAll(REVEAL_ALL_MS)}>
+              모두 30초 보기
+            </button>
+            <button type="button" className="button" onClick={() => (setMaskList(false), termRef.current?.focus())}>
+              닫기
+            </button>
+          </div>
+          <ul>
+            {groups.map((g) => (
+              <li key={g.hash}>
+                <button type="button" className="secret-list-item" onClick={() => maskerRef.current?.focusNext(1)}>
+                  🔒 {g.kind}
+                  {g.count > 1 && <span className="secret-count"> 같은 값 ×{g.count}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {maskMenu && (
+        <div
+          className="secret-menu"
+          role="menu"
+          aria-label={`${maskMenu.hit.kind} 가린 칸`}
+          data-testid="secret-menu"
+          style={{ left: maskMenu.x, top: maskMenu.y }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              closeMaskMenu()
+            } else if (e.metaKey && e.code === 'KeyC') {
+              e.preventDefault()
+              void navigator.clipboard.writeText(maskMenu.hit.value).catch(() => {})
+              closeMaskMenu()
+            }
+          }}
+        >
+          <button type="button" role="menuitem" autoFocus onClick={() => (maskerRef.current?.toggle(maskMenu.hit), closeMaskMenu())}>
+            {maskMenu.hit.open ? '다시 가리기' : '이 칸 보기'} <kbd>↩</kbd>
+          </button>
+          <button type="button" role="menuitem" onClick={() => (void navigator.clipboard.writeText(maskMenu.hit.value).catch(() => {}), closeMaskMenu())}>
+            원문 복사 <kbd>⌘C</kbd>
+          </button>
+          <button type="button" role="menuitem" onClick={() => (onAllow?.({ hash: maskMenu.hit.hash, kind: maskMenu.hit.kind }), closeMaskMenu())}>
+            비밀값 아님 — 다시 가리지 않기
+          </button>
+        </div>
+      )}
+    </>
+  )
 }

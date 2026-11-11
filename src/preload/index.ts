@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC, type AppInfo, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type ScrollbackEntry } from '../shared/ipc'
+import type { BackupInfo } from '../shared/backup'
+import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type RedactStatus, type ScrollbackEntry } from '../shared/ipc'
+import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { WorktreeResult } from '../shared/worktree'
 import type { TaskminalApi } from './api'
@@ -44,6 +46,19 @@ const api: TaskminalApi = {
     load: () => ipcRenderer.invoke(IPC.stateLoad) as Promise<LoadedState>,
     save: (state) => ipcRenderer.send(IPC.stateSave, state),
     onError: (listener) => subscribe<[string]>(IPC.stateError, listener),
+    exportTo: () => ipcRenderer.invoke(IPC.stateExport) as Promise<string | null>,
+    importFrom: () => ipcRenderer.invoke(IPC.stateImport) as Promise<{ name: string; state: AppState } | null>,
+  },
+  backup: {
+    list: () => ipcRenderer.invoke(IPC.backupList) as Promise<BackupInfo[]>,
+    read: (name) => ipcRenderer.invoke(IPC.backupRead, name) as Promise<AppState>,
+    mark: (what: BackupMark) => ipcRenderer.invoke(IPC.backupMark, what) as Promise<boolean>,
+    onError: (listener) => subscribe<[string | null]>(IPC.backupError, listener),
+  },
+  redact: {
+    status: () => ipcRenderer.invoke(IPC.redactStatus) as Promise<RedactStatus>,
+    onStatus: (listener) => subscribe<[RedactStatus]>(IPC.redactStatus, listener),
+    fix: (action, name) => ipcRenderer.send(IPC.redactFix, action, name),
   },
   host: {
     view: () => ipcRenderer.invoke(IPC.hostView) as Promise<HostView>,

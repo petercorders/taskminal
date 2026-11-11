@@ -166,3 +166,24 @@ describe('settingsMatch (설정 찾기)', () => {
     expect(settingsMatch('무엇이든', '  ')).toBe(true)
   })
 })
+
+describe('개인정보 설정 (17단계)', () => {
+  it('기본값: 화면 가리기 켜짐 · 이름 붙은 값만 화면에서 꺼짐 · 목록 비어 있음', () => {
+    expect(parseExtraSettings({}, [])).toMatchObject({ maskScreen: true, maskKindsOff: ['named'], secretCustom: [], secretAllow: [] })
+  })
+  it('틀린 칸은 버린다 — 모르는 종류 · 모양 오류 · 해시 아닌 값 · 겹침', () => {
+    const v = parseExtraSettings(
+      {
+        maskScreen: false,
+        maskKindsOff: ['jwt-bearer', 'nope', 'jwt-bearer', 3],
+        secretCustom: [{ name: 'ACME', pattern: 'acme_[a-z]{8}' }, { name: 'bad', pattern: 'acme_[' }, { name: ' ', pattern: 'x+' }],
+        secretAllow: [{ hash: 'abc123', kind: '비밀번호', where: '서버', at: 5 }, { hash: 'abc123' }, { hash: '../x' }, 'str'],
+      },
+      [],
+    )
+    expect(v.maskScreen).toBe(false)
+    expect(v.maskKindsOff).toEqual(['jwt-bearer'])
+    expect(v.secretCustom).toEqual([{ name: 'ACME', pattern: 'acme_[a-z]{8}' }])
+    expect(v.secretAllow).toEqual([{ hash: 'abc123', kind: '비밀번호', where: '서버', at: 5 }])
+  })
+})

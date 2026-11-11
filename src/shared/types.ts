@@ -129,6 +129,23 @@ export interface Settings {
   muteViewed: boolean
   // 단축키: 명령 → 바꾼 키(accel). '' 은 키 없음. 없는 명령은 기본 키
   keys: Record<string, string>
+  // 개인정보 (17단계) — 디스크 가리기는 끌 수 없다
+  /** 화면에서 비밀값 가리기 */
+  maskScreen: boolean
+  /** 화면에 가리지 않을 종류 (shared/redact SecretToggleId) */
+  maskKindsOff: string[]
+  /** 내 종류 */
+  secretCustom: Array<{ name: string; pattern: string }>
+  /** '비밀값 아님' 으로 고른 값 — 원문이 아니라 해시만 */
+  secretAllow: SecretAllow[]
+}
+
+export interface SecretAllow {
+  hash: string
+  kind: string
+  /** 고른 곳(일감 이름) */
+  where: string
+  at: number
 }
 
 export interface AppState {

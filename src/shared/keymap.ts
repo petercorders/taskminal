@@ -29,6 +29,12 @@ export const SHORTCUTS = [
   { command: 'quit-all', accel: 'Alt+Command+Q', label: '셸까지 모두 끝내기' },
   { command: 'host-view', accel: '', label: '셸 지킴이 보기' },
   { command: 'host-orphans', accel: '', label: '주인 없는 셸 정리' },
+  // 데이터 안전(17단계) — 백업은 ⌘P 로, 화면 가리기 켜기/끄기 · 가린 칸 고르기는 키로
+  { command: 'backup-restore', accel: '', label: '백업에서 되돌리기…' },
+  { command: 'privacy', accel: '', label: '개인정보 설정' },
+  { command: 'mask-toggle', accel: 'Shift+Command+H', label: '화면에서 비밀값 가리기 켜기/끄기' },
+  { command: 'mask-next', accel: 'Alt+Command+Right', label: '다음 가린 칸' },
+  { command: 'mask-prev', accel: 'Alt+Command+Left', label: '이전 가린 칸' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

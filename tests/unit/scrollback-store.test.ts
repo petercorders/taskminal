@@ -115,3 +115,63 @@ describe('trimToBytes', () => {
     expect(trimToBytes('x'.repeat(20), 5)).toBe('')
   })
 })
+
+const ANT = 'sk-ant-api03-' + 'Q'.repeat(60)
+describe.each(ways)('ScrollbackStore 비밀값 가리기 — $name (17단계)', ({ save }) => {
+  it('파일에 원문이 남지 않는다 — ‹가림:종류›', async () => {
+    const s = new ScrollbackStore(dir)
+    await save(s, ['p1'], { p1: `$ echo ${ANT}\r\n${ANT}\r\n` })
+    const text = readFileSync(join(dir, 'p1.txt'), 'utf8')
+    expect(text).not.toContain('sk-ant-api03')
+    expect(text).toBe('$ echo ‹가림:Anthropic 키›\r\n‹가림:Anthropic 키›\r\n')
+  })
+  it('가리지 않기로 한 값은 옵션을 매번 새로 읽어 따른다', async () => {
+    let allow = new Set<string>()
+    const s = new ScrollbackStore(dir, () => ({ allow }))
+    await save(s, ['p1'], { p1: 'DB_PASSWORD=hunter2long' })
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('DB_PASSWORD=‹가림:비밀번호›')
+    const { secretHash } = await import('../../src/shared/redact')
+    allow = new Set([secretHash('hunter2long')])
+    await save(s, ['p1'], { p1: 'DB_PASSWORD=hunter2long' })
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('DB_PASSWORD=hunter2long')
+  })
+})
+
+describe('ScrollbackStore.redactExisting — 이미 남은 파일 한 번 정리', () => {
+  it('원문이 든 파일을 가려 다시 쓰고(0600) 진행을 알린 뒤 표시 파일을 만든다', async () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'p1.txt'), `key ${ANT}`, { mode: 0o644 })
+    writeFileSync(join(dir, 'p2.txt'), 'nothing here')
+    const marker = join(root, 'scrollback-redacted-v1')
+    const seen: Array<[number, number]> = []
+    const s = new ScrollbackStore(dir)
+    const r = await s.redactExisting(marker, (st) => seen.push([st.done, st.total]))
+    expect(r).toMatchObject({ state: 'done', done: 2, total: 2, masked: 1, failed: [] })
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('key ‹가림:Anthropic 키›')
+    expect(statSync(join(dir, 'p1.txt')).mode & 0o777).toBe(0o600)
+    expect(readFileSync(join(dir, 'p2.txt'), 'utf8')).toBe('nothing here')
+    expect(existsSync(marker)).toBe(true)
+    expect(seen.at(-1)).toEqual([2, 2])
+    // 표시 파일이 있으면 다시 하지 않는다
+    writeFileSync(join(dir, 'p3.txt'), ANT)
+    expect((await s.redactExisting(marker, () => {})).total).toBe(0)
+    expect(readFileSync(join(dir, 'p3.txt'), 'utf8')).toBe(ANT)
+  })
+  it('못 읽은 파일은 failed 에 · 표시 파일은 만들지 않는다 · 다시 시도 · 지우기', async () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'p1.txt'), ANT)
+    writeFileSync(join(dir, 'p2.txt'), ANT, { mode: 0o000 }) // 읽을 수 없는 파일
+    const marker = join(root, 'scrollback-redacted-v1')
+    const s = new ScrollbackStore(dir)
+    const r = await s.redactExisting(marker, () => {})
+    expect(r.failed).toEqual(['p2.txt'])
+    expect(existsSync(marker)).toBe(false)
+    expect(await s.fixRedact('delete', 'p2.txt', marker)).toMatchObject({ failed: [], state: 'done' })
+    expect(existsSync(join(dir, 'p2.txt'))).toBe(false)
+    expect(existsSync(marker)).toBe(true)
+  })
+  it('지우기는 pane 파일 이름 모양만 받는다', async () => {
+    const s = new ScrollbackStore(dir)
+    await expect(s.fixRedact('delete', '../state.json', join(root, 'm'))).rejects.toThrow()
+  })
+})

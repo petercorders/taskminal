@@ -8,6 +8,7 @@ import type { TermSettings } from './term-settings'
 import type { Shortcut } from '../shared/keymap'
 import { FindBar } from './FindBar'
 import { TerminalPane } from './TerminalPane'
+import type { MaskSettings } from './secret-mask'
 
 interface Props {
   tab: Tab
@@ -31,6 +32,9 @@ interface Props {
   onCwd(paneId: Id, cwd: string): void
   /** 마우스로 끄는 것이 끝났다(놓음 · 취소) — 터미널이 포커스를 다시 가져가게 */
   onDragEnd(): void
+  /** 화면에서 비밀값 가리기 (17단계) */
+  mask: MaskSettings
+  onAllow(paneId: Id, hit: { hash: string; kind: string }): void
 }
 
 const pct = (n: number) => `${n * 100}%`
@@ -40,7 +44,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCwd, onDragEnd, find }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCwd, onDragEnd, find, mask, onAllow }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -141,6 +145,8 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 startCommand={pane.pendingCommand}
                 onStartSent={() => onStartSent(pane.id)}
                 onCwd={(path) => onCwd(pane.id, path)}
+                mask={mask}
+                onAllow={(hit) => onAllow(pane.id, hit)}
               />
             )}
             {pane && find.paneId === pane.id && <FindBar paneId={pane.id} signal={find.signal} onClose={find.onClose} shortcuts={find.shortcuts} />}

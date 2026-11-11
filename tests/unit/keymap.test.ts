@@ -78,7 +78,7 @@ describe('SHORTCUTS', () => {
         ? `Key${last}`
         : /^\d$/.test(last)
           ? `Digit${last}`
-          : ({ '[': 'BracketLeft', ']': 'BracketRight', '=': 'Equal', '-': 'Minus', ',': 'Comma', Up: 'ArrowUp', Down: 'ArrowDown' } as Record<string, string>)[last]
+          : ({ '[': 'BracketLeft', ']': 'BracketRight', '=': 'Equal', '-': 'Minus', ',': 'Comma', Up: 'ArrowUp', Down: 'ArrowDown', Left: 'ArrowLeft', Right: 'ArrowRight' } as Record<string, string>)[last]
       expect(code, s.accel).toBeDefined()
       const ev = key(code!, { shiftKey: parts.includes('Shift'), altKey: parts.includes('Alt') })
       expect(commandForKey(ev), s.accel).toBe(s.command)

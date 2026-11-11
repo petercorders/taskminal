@@ -1,7 +1,8 @@
 // 설정 창의 값 — 고를 수 있는 것 · 기본값 · 저장 파일 검증. 순수 함수(renderer · main 모두 쓴다).
 import { isObj } from './guards'
 import { isAccel, isAppCommand } from './keymap'
-import type { CursorStyle, NotifyKind, NotifyWay, Settings, SidebarDensity, StartupMode, Theme } from './types'
+import { customPatternError, SECRET_TOGGLES } from './redact'
+import type { CursorStyle, NotifyKind, NotifyWay, SecretAllow, Settings, SidebarDensity, StartupMode, Theme } from './types'
 
 export const ACCENTS = [
   { color: '#5b9cf5', name: '파랑' },
@@ -52,7 +53,40 @@ export function defaultExtraSettings(): ExtraSettings {
     longAfterSec: 30,
     muteViewed: true,
     keys: {},
+    maskScreen: true,
+    maskKindsOff: SECRET_TOGGLES.filter((t) => !t.screenDefault).map((t) => t.id),
+    secretCustom: [],
+    secretAllow: [],
   }
+}
+
+export const MAX_SECRET_CUSTOM = 20
+export const MAX_SECRET_ALLOW = 500
+
+function parseKindsOff(v: unknown, d: string[]): string[] {
+  if (!Array.isArray(v)) return d
+  const ids = new Set<string>(SECRET_TOGGLES.map((t) => t.id))
+  return [...new Set(v.filter((x): x is string => typeof x === 'string' && ids.has(x)))]
+}
+
+function parseCustom(v: unknown): Array<{ name: string; pattern: string }> {
+  if (!Array.isArray(v)) return []
+  return v
+    .filter((c): c is { name: string; pattern: string } => isObj(c) && typeof c['name'] === 'string' && c['name'].trim() !== '' && typeof c['pattern'] === 'string' && customPatternError(c['pattern']) === null)
+    .slice(0, MAX_SECRET_CUSTOM)
+    .map((c) => ({ name: c.name, pattern: c.pattern }))
+}
+
+function parseAllow(v: unknown): SecretAllow[] {
+  if (!Array.isArray(v)) return []
+  const seen = new Set<string>()
+  const out: SecretAllow[] = []
+  for (const a of v) {
+    if (!isObj(a) || typeof a['hash'] !== 'string' || !/^[0-9a-z]{1,16}$/.test(a['hash']) || seen.has(a['hash'])) continue
+    seen.add(a['hash'])
+    out.push({ hash: a['hash'], kind: typeof a['kind'] === 'string' ? a['kind'] : '', where: typeof a['where'] === 'string' ? a['where'] : '', at: typeof a['at'] === 'number' && Number.isFinite(a['at']) ? a['at'] : 0 })
+  }
+  return out.slice(-MAX_SECRET_ALLOW)
 }
 
 const oneOf = <T>(v: unknown, list: readonly T[], fallback: T): T => (list.includes(v as T) ? (v as T) : fallback)
@@ -105,6 +139,10 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     longAfterSec: oneOf<number>(v['longAfterSec'], LONG_AFTER_CHOICES, d.longAfterSec),
     muteViewed: bool(v['muteViewed'], d.muteViewed),
     keys: parseKeys(v['keys']),
+    maskScreen: bool(v['maskScreen'], d.maskScreen),
+    maskKindsOff: parseKindsOff(v['maskKindsOff'], d.maskKindsOff),
+    secretCustom: parseCustom(v['secretCustom']),
+    secretAllow: parseAllow(v['secretAllow']),
   }
 }
 

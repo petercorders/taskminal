@@ -1,7 +1,9 @@
 import { chmodSync, closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, writeSync } from 'node:fs'
-import { chmod, mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises'
+import { chmod, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { RedactStatus } from '../shared/ipc'
 import { isPaneId } from '../shared/pty'
+import { findSecrets, redact, type SecretOptions } from '../shared/redact'
 
 /** pane 하나의 스크롤 글 상한 — 넘으면 뒤(최근)만 남긴다(renderer 를 믿지 않는다). 한글은 글자당 3바이트라 바이트로 센다. */
 export const MAX_SCROLLBACK_BYTES = 2 * 1024 * 1024
@@ -15,17 +17,22 @@ export function trimToBytes(text: string, max: number): string {
   return nl >= 0 ? tail.slice(nl + 1) : ''
 }
 
-/** renderer 가 보낸 값 — 믿지 않고 여기서 거른다: live 는 맞는 paneId 만, 글은 live 안의 문자열만 */
-function parse(live: unknown, panes: unknown): { live: Set<string>; texts: Array<[string, string]> } {
+/**
+ * renderer 가 보낸 값 — 믿지 않고 여기서 거른다: live 는 맞는 paneId 만, 글은 live 안의 문자열만.
+ * 디스크로 가기 전 비밀값을 가린다(17단계) — renderer 가 가렸다고 믿지 않는다.
+ */
+function parse(live: unknown, panes: unknown, opts: SecretOptions): { live: Set<string>; texts: Array<[string, string]> } {
   const ids = new Set(Array.isArray(live) ? live.filter(isPaneId) : [])
   const texts: Array<[string, string]> = []
   if (panes && typeof panes === 'object') {
     for (const [id, text] of Object.entries(panes as Record<string, unknown>)) {
-      if (ids.has(id) && typeof text === 'string') texts.push([id, trimToBytes(text, MAX_SCROLLBACK_BYTES)])
+      if (ids.has(id) && typeof text === 'string') texts.push([id, redact(trimToBytes(text, MAX_SCROLLBACK_BYTES), opts)])
     }
   }
   return { live: ids, texts }
 }
+
+const PANE_FILE = /^[A-Za-z0-9_-]{1,128}\.txt$/
 
 const paneOf = (name: string): string | null => (name.endsWith('.txt') ? name.slice(0, -4) : null)
 const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)))
@@ -36,7 +43,16 @@ const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)))
  * node fs 만 쓴다 — vitest 에서 실제 임시 폴더로 시험한다.
  */
 export class ScrollbackStore {
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    /** 가리기 옵션 — 저장할 때마다 새로 읽는다(설정의 '가리지 않기로 한 값' · 내 종류가 바뀌면 바로) */
+    private readonly redactOptions: () => SecretOptions = () => ({}),
+  ) {}
+  private status: RedactStatus = { state: 'idle', done: 0, total: 0, masked: 0, failed: [] }
+
+  get redactStatus(): RedactStatus {
+    return this.status
+  }
   /** saveSync 마다 +1 — 그 사이에 끝나는 옛 주기 저장이 새 글을 덮거나 새 pane 파일을 지우지 않게 */
   private generation = 0
 
@@ -57,7 +73,7 @@ export class ScrollbackStore {
 
   /** 주기 저장. 실패(디스크 가득 · 권한)는 던지지 않고 돌려준다 — 스크롤은 덤이라 앱을 멈추지 않는다. */
   async save(live: unknown, panes: unknown): Promise<Error | null> {
-    const req = parse(live, panes)
+    const req = parse(live, panes, this.redactOptions())
     const gen = this.generation
     let first: Error | null = null
     try {
@@ -103,7 +119,7 @@ export class ScrollbackStore {
   /** 페이지가 내려갈 때(앱 종료 · 창 닫기 · 새로 고침) — 다 쓴 뒤에 돌아와야 해서 동기. 규칙은 save 와 같다. */
   saveSync(live: unknown, panes: unknown): Error | null {
     this.generation++
-    const req = parse(live, panes)
+    const req = parse(live, panes, this.redactOptions())
     let first: Error | null = null
     try {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 })
@@ -141,5 +157,75 @@ export class ScrollbackStore {
       first ??= asError(e)
     }
     return first
+  }
+
+  /**
+   * 이미 남은 스크롤 파일을 한 번 가린다(17단계 업데이트 뒤 첫 실행). 파일마다 임시 → rename(0600), 바뀐 것만 쓴다.
+   * 모두 읽었을 때만 표시 파일(marker)을 만든다 — 못 읽은 것이 있으면 다음 실행 · 다시 시도에서 또 본다.
+   * 그 사이 지워진 파일(live 정리)은 건너뛴다. 부르는 쪽이 저장과 한 줄로 세운다(겹치지 않게).
+   */
+  async redactExisting(marker: string, onProgress: (s: RedactStatus) => void, only?: string[]): Promise<RedactStatus> {
+    if (!only) {
+      try {
+        await stat(marker)
+        this.status = { state: 'done', done: 0, total: 0, masked: 0, failed: [] }
+        return this.status
+      } catch {
+        // 아직 안 함
+      }
+    }
+    let names: string[] = []
+    try {
+      names = only ?? (await readdir(this.dir)).filter((n) => PANE_FILE.test(n))
+    } catch {
+      names = [] // 폴더가 없음 — 정리할 것 없음
+    }
+    const keepFailed = only ? this.status.failed.filter((n) => !only.includes(n)) : []
+    const masked0 = only ? this.status.masked : 0
+    this.status = { state: 'running', done: 0, total: names.length, masked: masked0, failed: [...keepFailed] }
+    onProgress(this.status)
+    const opts = this.redactOptions()
+    for (const name of names) {
+      const path = join(this.dir, name)
+      try {
+        const text = await readFile(path, 'utf8')
+        const count = findSecrets(text.replace(/\x1b\[[0-9;:?<=>]*[ -/]*[@-~]/g, ''), opts).length
+        const out = redact(text, opts)
+        if (out !== text) {
+          const tmp = `${path}.tmp-redact`
+          await writeFile(tmp, out, { mode: 0o600 })
+          await chmod(tmp, 0o600)
+          await rename(tmp, path)
+          this.status = { ...this.status, masked: this.status.masked + count }
+        } else {
+          await chmod(path, 0o600)
+        }
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') this.status = { ...this.status, failed: [...this.status.failed, name] }
+      }
+      this.status = { ...this.status, done: this.status.done + 1 }
+      onProgress(this.status)
+    }
+    this.status = { ...this.status, state: 'done', finishedAt: Date.now() }
+    if (this.status.failed.length === 0) {
+      try {
+        await writeFile(marker, new Date().toISOString(), { mode: 0o600 })
+      } catch {
+        // 다음 실행이 다시 정리한다(가린 글을 다시 가려도 같다)
+      }
+    }
+    onProgress(this.status)
+    return this.status
+  }
+
+  /** 못 읽은 파일: 다시 시도 · 지우기. 이름은 pane 파일 모양만 */
+  async fixRedact(action: 'retry' | 'delete', name: string, marker: string, onProgress: (s: RedactStatus) => void = () => {}): Promise<RedactStatus> {
+    if (!PANE_FILE.test(name)) throw new Error('모르는 파일')
+    if (action === 'delete') {
+      await rm(join(this.dir, name), { force: true })
+      this.status = { ...this.status, failed: this.status.failed.filter((n) => n !== name) }
+      return this.redactExisting(marker, onProgress, [])
+    }
+    return this.redactExisting(marker, onProgress, [name])
   }
 }

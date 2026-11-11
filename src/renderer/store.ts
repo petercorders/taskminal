@@ -40,6 +40,8 @@ export type SettingsPatch = Partial<Omit<Settings, 'statuses' | 'groups' | 'temp
 
 export type Action =
   | { type: 'loaded'; state: AppState }
+  /** 백업에서 되돌리기 · 가져오기 · 지운 일감 되살리기 (17단계) — 셸 정리는 부르는 쪽이 먼저 */
+  | { type: 'state/replace'; state: AppState }
   | { type: 'task/create'; task: Task }
   | { type: 'task/select'; id: Id }
   | { type: 'task/remove'; id: Id }
@@ -91,6 +93,7 @@ function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'loaded':
+    case 'state/replace':
       return action.state
     case 'task/create':
       return { ...state, tasks: [...state.tasks, action.task], activeTaskId: action.task.id }
