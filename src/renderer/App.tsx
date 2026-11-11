@@ -12,7 +12,7 @@ import type { BackupMark, LoadedState } from '../shared/ipc'
 import type { AppState, NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
 import { restoreTask, type Restored } from '../shared/backup'
 import { redact, SECRET_TOGGLES, type SecretOptions, type SecretToggleId } from '../shared/redact'
-import { CMD_MAX, type HistoryEntry } from '../shared/history'
+import { CMD_MAX, hasMask, type HistoryEntry } from '../shared/history'
 import { isDangerous } from '../shared/danger'
 import { useHistory } from './history-state'
 import { HistoryPanel } from './history-ui'
@@ -475,6 +475,8 @@ export function App() {
   useEffect(() => window.taskminal.setBadge(settings.dockBadge ? attentionTasks : 0), [settings.dockBadge, attentionTasks])
   // 바꾼 단축키: renderer 가 처리하는 표 · 앱 메뉴의 표시
   const shortcuts = useMemo(() => shortcutTable(settings.keys), [settings.keys])
+  const findingRef = useRef(finding)
+  findingRef.current = finding
   const findProps = {
     paneId: finding.paneId,
     signal: finding.signal,
@@ -545,14 +547,14 @@ export function App() {
   /** ↩ 입력줄에 넣기 — 지금 pane, 실행하지 않는다 */
   const historyInsert = (e: HistoryEntry) => {
     if (!activePaneNow) return
-    terminals.get(activePaneNow)?.insert(e.cmd)
+    if (terminals.get(activePaneNow)?.insert(e.cmd) === false) showToast({ text: '여러 줄 명령은 이 pane 에 바로 넣지 않았어요.', sub: '셸이 붙여넣기 보호를 켜지 않아 줄바꿈이 실행될 수 있어요 · ⋯ 명령 복사로 붙여 넣어 주세요.' })
     refocus()
   }
-  /** ⌥↩ 그 기록의 폴더로 오른쪽 분할 — 위험 명령이면 넣기만 */
+  /** ⌥↩ 그 기록의 폴더로 오른쪽 분할 — 위험 명령 · 가린 자리가 든 명령(원래 값이 아니다)이면 넣기만 */
   const historySplit = (e: HistoryEntry) => {
     const task = stateRef.current.tasks.find((t) => t.id === stateRef.current.activeTaskId)
     if (!task || !task.activeTabId) return
-    dispatch({ type: 'pane/split', taskId: task.id, dir: 'right', paneId: newId(), spec: { cwd: e.cwd, command: e.cmd, ...(isDangerous(e.cmd) ? { insert: true } : {}) } })
+    dispatch({ type: 'pane/split', taskId: task.id, dir: 'right', paneId: newId(), spec: { cwd: e.cwd, command: e.cmd, ...(isDangerous(e.cmd) || hasMask(e.cmd) ? { insert: true } : {}) } })
     refocus()
   }
   /** ⌘O 출력으로 — 누르는 순간 paneId 로 다시 찾는다(그 사이 닫혔으면 아무 일 없음) */
@@ -876,8 +878,17 @@ export function App() {
   useEffect(() => {
     if (!pendingReveal) return
     const { paneId, line, query } = pendingReveal
-    // 보이게 된 다음 프레임(크기 맞춤 뒤)에. 아래 setPendingReveal(null) 의 다시 그리기가 이 프레임을 취소하지 않게 정리 함수는 두지 않는다
-    requestAnimationFrame(() => terminals.get(paneId)?.reveal(line, query))
+    // 보이게 된 다음 프레임(크기 맞춤 뒤)에. 아래 setPendingReveal(null) 의 다시 그리기가 이 프레임을 취소하지 않게 정리 함수는 두지 않는다.
+    // 안 연 탭(⇧⌘F 저장된 출력)은 이제 막 셸을 띄우고 이전 출력을 되살리는 중 — 글자가 보일 때까지 3초 동안 다시 해 본다.
+    // 찾으면 그 pane 의 ⌘F 막대(같은 글자로 열렸으면)도 그 자리부터 다시 센다
+    let tries = 0
+    const attempt = () => {
+      const found = terminals.get(paneId)?.reveal(line, query) ?? false
+      if (found) {
+        if (findingRef.current.paneId === paneId && findingRef.current.query === query) terminals.get(paneId)?.find.next(query, true)
+      } else if (++tries < 30) setTimeout(attempt, 100)
+    }
+    requestAnimationFrame(attempt)
     setPendingReveal(null)
   }, [pendingReveal])
   useEffect(() => {

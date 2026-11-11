@@ -14,7 +14,7 @@ import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
-import { tailLines } from '../shared/history'
+import { safeToInsert, tailLines } from '../shared/history'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
 import { dirtyPanes, findingPanes, integratedPanes, osc7Panes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
@@ -225,9 +225,17 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       clearTimeout(startTimer)
       if (startBlocked || !command || sentStarts.has(paneId)) return
       sentStarts.add(paneId)
-      // 넣기만(위험 명령): 괄호 붙여넣기로 — 셸이 받아도 실행하지 않는다
-      if (insert) term.paste(command)
-      else pty.write(paneId, command + '\r')
+      // 넣기만(위험 · 가린 명령): 붙여넣기로 — ↩ 를 보내지 않는다. 여러 줄이면 셸이 괄호 붙여넣기를 켤 때까지(프롬프트 신호 뒤 입력줄이 열릴 때) 조금 기다리고,
+      // 끝내 안 켜지면 넣지 않는다(줄바꿈이 실행되지 않게)
+      if (insert) {
+        let tries = 0
+        const tryInsert = () => {
+          if (disposed) return
+          if (safeToInsert(command, term.modes.bracketedPasteMode)) term.paste(command)
+          else if (++tries < 10) startTimer = setTimeout(tryInsert, 100)
+        }
+        tryInsert()
+      } else pty.write(paneId, command + '\r')
       onSent?.()
     }
 
@@ -238,6 +246,8 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     const record = (ev: ActivityEvent) => {
       if (ev.type === 'command') lastCommand = ev.text
       else if (ev.type === 'start') {
+        // D 없이 C 가 또 오면(셸 안의 셸) 앞 것은 버린다 — 마커를 놓는다
+        running?.marker?.dispose()
         running = { cmd: lastCommand, startedAt: Date.now(), marker: term.registerMarker(0) }
         lastCommand = ''
       } else if (ev.type === 'end' && running) {
@@ -250,15 +260,17 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         const id = crypto.randomUUID()
         const buf = term.buffer.active
         const rows: string[] = []
-        if (marker && !marker.isDisposed) {
-          const end = buf.baseY + buf.cursorY
-          for (let i = Math.max(marker.line + 1, end - 200); i <= end; i++) {
-            const row = buf.getLine(i)
-            if (!row) continue
-            const text = row.translateToString(true)
-            if (row.isWrapped && rows.length > 0) rows[rows.length - 1] += text
-            else rows.push(text)
-          }
+        // 꼬리: 마커 다음 줄부터. 출력이 스크롤 버퍼보다 길어 마커가 밀려 사라졌으면 남은 버퍼가 모두 이 명령의 출력이다
+        const alive = marker !== undefined && !marker.isDisposed
+        const end = buf.baseY + buf.cursorY
+        for (let i = Math.max(alive ? marker.line + 1 : 0, end - 200); i <= end; i++) {
+          const row = buf.getLine(i)
+          if (!row) continue
+          const text = row.translateToString(true)
+          if (row.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+          else rows.push(text)
+        }
+        if (alive) {
           markers.set(id, marker)
           marker.onDispose(() => markers.delete(id))
         }
@@ -408,7 +420,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         term.scrollToLine(Math.max(0, m.line - 1))
         return true
       },
-      insert: (text) => term.paste(text),
+      insert: (text) => {
+        if (!safeToInsert(text, term.modes.bracketedPasteMode)) return false
+        term.paste(text)
+        return true
+      },
       serialize: () => serializer.serialize({ scrollback: saveLines(settingsRef.current.scrollback), excludeAltBuffer: true, excludeModes: true }),
       search: (query, limit) => {
         const q = query.toLowerCase()
@@ -427,11 +443,16 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
           const at = l.text.toLowerCase().indexOf(q)
           if (at >= 0 && (!best || Math.abs(l.line - line) < Math.abs(best.line - line))) best = { line: l.line, at }
         }
-        if (!best) return
+        if (!best) {
+          // 글자가 없다(아직 되살리는 중 · 가린 자리 ‹가림:…› 로 찾은 줄) — 줄 번호로만
+          term.scrollToLine(Math.max(0, line - Math.floor(term.rows / 2)))
+          return false
+        }
         // 접힌 줄이면 맞은 자리가 몇째 행인지 (넓은 글자(한글)는 칸이 둘이라 어긋날 수 있다)
         const row = best.line + Math.floor(best.at / term.cols)
         term.scrollToLine(Math.max(0, row - Math.floor(term.rows / 2)))
         term.select(best.at % term.cols, row, query.length)
+        return true
       },
       find: {
         next: (query, incremental = false) => void searcher.findNext(query, { ...FIND_OPTIONS, incremental }),

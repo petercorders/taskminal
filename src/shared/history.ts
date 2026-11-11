@@ -59,6 +59,15 @@ export function mergeEntries(a: readonly HistoryEntry[], b: readonly HistoryEntr
   return [...seen.values()].sort(byEnd)
 }
 
+/** 저장 전에 가린 자리(‹가림:종류›)가 든 명령 — 그대로 다시 실행하면 원래 값이 아니라 가린 글자가 들어간다 */
+export const hasMask = (cmd: string): boolean => cmd.includes('‹가림:')
+
+/**
+ * 입력줄에 넣기만 해도 되는가 — xterm 의 붙여넣기는 \n 을 \r 로 바꿔 보내므로, 셸이 괄호 붙여넣기(2004)를 켜지 않았으면
+ * 여러 줄 명령의 줄바꿈이 그대로 실행된다. 한 줄은 ↩ 가 없어 늘 안전
+ */
+export const safeToInsert = (text: string, bracketedPaste: boolean): boolean => bracketedPaste || !/[\r\n]/.test(text)
+
 export const isFailed = (e: Pick<HistoryEntry, 'code'>): boolean => e.code !== null && e.code !== 0
 
 export type HistoryScope = 'pane' | 'task' | 'all'

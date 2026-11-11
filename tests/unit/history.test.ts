@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { maskOf } from '../../src/shared/redact'
 import {
+  hasMask,
+  safeToInsert,
   CMD_MAX,
   DAY_LIMIT,
   HISTORY_DAYS,
@@ -164,5 +167,22 @@ describe('tailLines — 끝날 때 뜬 마지막 출력', () => {
   })
   it('비면 빈 배열', () => {
     expect(tailLines(['', ' '])).toEqual([])
+  })
+})
+
+describe('hasMask — 가린 자리가 든 명령은 다시 실행하지 않는다 (리뷰)', () => {
+  it('‹가림:종류› 가 있으면 true', () => {
+    expect(hasMask(`export KEY=${maskOf('OpenAI 키')}`)).toBe(true)
+    expect(hasMask('echo 가림: 이라는 글자')).toBe(false)
+    expect(hasMask('npm test')).toBe(false)
+  })
+})
+
+describe('safeToInsert — 넣기만(실행 안 함)이 지켜지는가 (리뷰)', () => {
+  it('한 줄은 늘 · 여러 줄은 셸이 괄호 붙여넣기를 켰을 때만(아니면 줄바꿈이 ↩ 로 실행된다)', () => {
+    expect(safeToInsert('rm -rf build', false)).toBe(true)
+    expect(safeToInsert('cd app\nrm -rf build', false)).toBe(false)
+    expect(safeToInsert('a\rb', false)).toBe(false)
+    expect(safeToInsert('cd app\nrm -rf build', true)).toBe(true)
   })
 })

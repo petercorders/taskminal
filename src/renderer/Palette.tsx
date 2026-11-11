@@ -61,7 +61,7 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
       commands: commandsOf(shortcuts),
       templates: state.settings.templates.map((t) => ({ id: t.id, name: t.name })),
       outputs,
-      history: query.trim() ? [...history].reverse().map((h) => ({ id: h.id, cmd: h.cmd, taskName: state.tasks.find((t) => t.id === h.taskId)?.name ?? '' })) : [],
+      history: historyMatches(history, state, query),
       query,
       scope,
     })
@@ -147,6 +147,24 @@ export function Palette({ state, shortcuts, history = [], onRun, onClose }: Prop
     </div>
   )
 }
+
+/** ⌘P 에 넘길 기록 — 최근 것부터 거꾸로 훑어 맞는 명령 8개(같은 명령 한 번)에서 멈춘다. 지운 일감(되돌리기 기다리는 중)의 기록은 뺀다 (리뷰) */
+function historyMatches(history: readonly HistoryEntry[], state: AppState, query: string): Array<{ id: string; cmd: string; taskName: string }> {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const names = new Map(state.tasks.map((t) => [t.id, t.name]))
+  const out: Array<{ id: string; cmd: string; taskName: string }> = []
+  const seen = new Set<string>()
+  for (let i = history.length - 1; i >= 0 && out.length < HISTORY_PICK; i--) {
+    const h = history[i]!
+    const name = names.get(h.taskId)
+    if (name === undefined || seen.has(h.cmd) || !h.cmd.toLowerCase().includes(q)) continue
+    seen.add(h.cmd)
+    out.push({ id: h.id, cmd: h.cmd, taskName: name })
+  }
+  return out
+}
+const HISTORY_PICK = 8
 
 /** 맞은 글자를 굵게 */
 function Marked({ text, marks }: { text: string; marks: number[] }) {

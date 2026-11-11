@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { formatDuration, type PaneActivity } from '../shared/activity'
 import { isDangerous } from '../shared/danger'
-import { filterHistory, groupByDay, HISTORY_SCOPE_LABEL, HISTORY_SCOPES, isFailed, type HistoryEntry, type HistoryScope } from '../shared/history'
+import { filterHistory, groupByDay, hasMask, HISTORY_SCOPE_LABEL, HISTORY_SCOPES, isFailed, type HistoryEntry, type HistoryScope } from '../shared/history'
 import { hasPane } from '../shared/layout'
 import { tabLabel } from '../shared/model'
 import type { Task } from '../shared/types'
@@ -66,12 +66,17 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
 
   const taskOf = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
   const now = Date.now()
-  const base = { scope, taskId: activeTaskId ?? '', paneId: activePaneId ?? '', hideShort, query }
-  // 지운 일감의 기록(되돌리기를 기다리는 동안)은 보이지 않는다
-  const live = view.entries.filter((e) => taskOf.has(e.taskId))
-  const shown = filterHistory(live, { ...base, failedOnly: chip === 'failed' })
-  const failedCount = filterHistory(live, { ...base, failedOnly: true }).length
-  const allCount = filterHistory(live, { ...base, failedOnly: false }).length
+  // 거르기 · 묶기는 기록 · 거르기 칸이 바뀔 때만 — 칸이 열린 동안 활동 신호마다 App 이 다시 그려도 5,000줄 × 일감을 다시 훑지 않게 (리뷰)
+  const { live, failedCount, allCount, grouped } = useMemo(() => {
+    const base = { scope, taskId: activeTaskId ?? '', paneId: activePaneId ?? '', hideShort, query }
+    // 지운 일감의 기록(되돌리기를 기다리는 동안)은 보이지 않는다
+    const live = view.entries.filter((e) => taskOf.has(e.taskId))
+    const all = filterHistory(live, { ...base, failedOnly: false })
+    const failed = all.filter(isFailed)
+    const shown = chip === 'failed' ? failed : all
+    const prev = view.prevIds
+    return { live, shown, failedCount: failed.length, allCount: all.length, grouped: groupByDay(shown, Date.now(), openDays, (e) => prev.has(e.id)) }
+  }, [view.entries, view.prevIds, taskOf, scope, activeTaskId, activePaneId, hideShort, query, chip, openDays])
   // 실행 중(C 뒤 D 전) — 활동에서. 저장하지 않는다
   const q = query.trim().toLowerCase()
   const running = Object.entries(activity)
@@ -84,7 +89,7 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
       return !q || a.command.toLowerCase().includes(q)
     })
     .map(([paneId, a]) => ({ paneId, command: a.command!, startedAt: a.startedAt ?? now, taskId: tasks.find((t) => paneId in t.panes)!.id }))
-  const days = chip === 'running' ? [] : groupByDay(shown, now, openDays, (e) => view.prevIds.has(e.id))
+  const days = chip === 'running' ? [] : grouped
   const rows = days.flatMap((d) => d.rows)
   const selected = rows.find((e) => e.id === selectedId) ?? null
 
@@ -213,6 +218,7 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
               const failed = isFailed(e)
               const markerOk = !view.prevIds.has(e.id) && (terminals.get(e.paneId)?.hasMarker(e.id) ?? false)
               const danger = isDangerous(e.cmd)
+              const masked = hasMask(e.cmd)
               return (
                 <div
                   key={e.id}
@@ -258,7 +264,7 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
                           ↻ 입력줄에 넣기 <kbd>↩</kbd>
                         </button>
                         <button type="button" className="button" data-testid="history-split" onClick={() => onRunSplit(e)}>
-                          ⊞ {danger ? '새 pane 에 넣기' : '새 pane 에서 실행'} <kbd>⌥↩</kbd>
+                          ⊞ {danger || masked ? '새 pane 에 넣기' : '새 pane 에서 실행'} <kbd>⌥↩</kbd>
                         </button>
                         <button type="button" className="button" aria-haspopup="menu" aria-expanded={menuId === e.id} aria-label="더 보기" data-testid="history-more" onClick={() => setMenuId((m) => (m === e.id ? null : e.id))}>
                           ⋯
@@ -266,6 +272,7 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
                       </div>
                       {!markerOk && <p className="history-note">출력이 스크롤 밖이에요{view.prevIds.has(e.id) ? ' (이전 세션)' : ''}</p>}
                       {danger && <p className="history-note">위험할 수 있는 명령이라 새 pane 에는 넣기만 해요</p>}
+                      {masked && !danger && <p className="history-note">가린 값이 들어 있어 새 pane 에는 넣기만 해요 · 가린 자리를 고쳐 실행해 주세요</p>}
                       {menuId === e.id && (
                         <div className="history-menu" role="menu">
                           <button

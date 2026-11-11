@@ -1,6 +1,6 @@
 // 명령 기록의 renderer 쪽 (19단계): 메모리 목록 · main 으로 보내는 대기열 · 지운 표시.
 // 목록은 앱이 처음 읽힐 때 한 번 읽고(그 뒤는 메모리가 기준 — 이 앱 말고 쓰는 곳이 없다), 그 사이 끝난 명령과 id 로 합친다.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { mergeEntries, type HistoryEntry } from '../shared/history'
 
 /** 한 번에 보내는 줄 (main 의 APPEND_MAX 와 같다) */
@@ -68,8 +68,10 @@ export function useHistory(ready: boolean): HistoryView {
     return () => void (alive = false)
   }, [ready])
 
+  // 숨긴 것이 있어도 바뀔 때만 새 배열 — 팔레트 · 칸의 계산이 다시 그릴 때마다 돌지 않게
+  const entries = useMemo(() => (hidden.size === 0 ? all : all.filter((e) => !hidden.has(e.id))), [all, hidden])
   return {
-    entries: hidden.size === 0 ? all : all.filter((e) => !hidden.has(e.id)),
+    entries,
     prevIds,
     saveFailed,
     add: (entry) => {
@@ -97,11 +99,14 @@ export function useHistory(ready: boolean): HistoryView {
       setAll((cur) => cur.filter((e) => e.taskId !== taskId))
       window.taskminal.history.removeTask(taskId)
     },
+    // 화면부터 비우고 지운다 — 지우는 동안 끝난 명령은 지우기 뒤에 보내져(main 은 한 줄로 처리) 화면 · 파일 모두에 남는다
     clearAll: async () => {
       queue.current = []
-      await window.taskminal.history.clear()
       setAll([])
+      setHidden(new Set())
+      setPrevIds(new Set())
       setSaveFailed(false)
+      await window.taskminal.history.clear()
     },
   }
 }

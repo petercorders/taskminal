@@ -11,13 +11,15 @@ export interface TerminalHandle {
   /** 그 명령의 출력 첫 줄로 스크롤 — 마커가 사라졌으면 false */
   gotoMarker(id: string): boolean
   /** 입력줄에 넣기(괄호 붙여넣기 — 실행하지 않음) */
-  insert(text: string): void
+  /** 입력줄에 넣기(실행 안 함) — 여러 줄인데 셸이 괄호 붙여넣기를 안 켰으면 넣지 않고 false */
+  insert(text: string): boolean
   /** 스크롤 저장용 글 (색 · 줄 포함) */
   serialize(): string
   /** 스크롤 버퍼에서 찾기 글자가 든 줄 (대소문자 무시) — 최근 줄부터 limit 개 */
   search(query: string, limit: number): Array<{ line: number; text: string }>
   /** 그 줄로 스크롤하고 찾기 글자를 선택한다 */
-  reveal(line: number, query: string): void
+  /** 그 줄(가까운, 찾기 글자가 든 줄)로 스크롤 · 선택. 글자를 못 찾으면 줄 번호로만 스크롤하고 false */
+  reveal(line: number, query: string): boolean
   /** ⌘F 찾기 막대 (15d) — 대소문자 무시, 맞은 곳을 칠한다 */
   find: {
     next(query: string, incremental?: boolean): void

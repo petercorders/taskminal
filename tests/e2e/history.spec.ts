@@ -101,6 +101,20 @@ test('D 마다 기록 · ⌘Y 칸: 이 일감 → ⌥R 모든 일감 → 실패 
   expect(statSync(join(userData, 'history')).mode & 0o777).toBe(0o700)
   expect(readFileSync(historyFile('task-a'), 'utf8')).not.toContain(ANT)
   expect(fileLines('task-a').find((e) => e.cmd === 'sleep 0.6; false')?.code).toBe(1)
+
+  // 가린 자리가 든 명령은 ⌥↩ 로도 실행하지 않고 넣기만 (리뷰 — 가린 글자가 실행되지 않게)
+  await panel().getByTestId('history-chip-failed').click() // 실패 칩 끄기
+  await select('SEC$((1))')
+  await expect(row('SEC$((1))').getByTestId('history-split')).toContainText('새 pane 에 넣기')
+
+  // 설정 › 개인정보 › 명령 기록 모두 지우기 (확인 뒤)
+  await win.getByRole('button', { name: '설정' }).click()
+  await win.getByRole('button', { name: '개인정보' }).click()
+  await win.getByTestId('history-clear').click()
+  await win.getByRole('alertdialog').getByRole('button', { name: '모두 지우기' }).click()
+  await expect(rows()).toHaveCount(0)
+  await expect(panel().getByTestId('history-empty')).toBeVisible()
+  await expect.poll(() => existsSync(historyFile('task-a')) || existsSync(historyFile('task-b'))).toBe(false)
 })
 
 test('↩ 입력줄에 넣기(실행 안 함) · ⌥↩ 오른쪽 분할에서 실행 · 위험 명령은 넣기만', async () => {
@@ -267,4 +281,9 @@ test('⌘P 출력 결과 아래 "모두 보기 ⇧⌘F" — 같은 낱말로 열
   await expect(win.getByTestId('global-find').getByTestId('gf-row')).toHaveCount(1)
   await expect(win.getByTestId('gf-saved')).toContainText('열지 않은 탭 1개는 저장된 출력에서 찾았어요')
   await win.screenshot({ path: 'test-results/global-find-saved.png' })
+  // ↩: 안 연 탭은 이제 막 출력을 되살린다 — 되살린 뒤 그 줄 · ⌘F 막대가 맞는다 (리뷰)
+  await win.keyboard.press('Enter')
+  await expect(win.locator('[data-testid="task-view"]:visible')).toHaveAttribute('data-task-name', 'B 일감')
+  await expect(win.getByTestId('find-bar').getByRole('textbox')).toHaveValue('SAVED9Y')
+  await expect(win.getByTestId('find-count')).toHaveText(/^1\/1$/)
 })
