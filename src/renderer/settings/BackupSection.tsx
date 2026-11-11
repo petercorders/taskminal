@@ -125,7 +125,8 @@ function DiffView({ diff, busy, onTask, firstRef }: { diff: StateDiff; busy: boo
 export function BackupSection({ state, Row, newId, onRestore }: Props) {
   const [list, setList] = useState<BackupInfo[] | null>(null)
   const [listError, setListError] = useState<string | null>(null)
-  const [selected, setSelected] = useState(0)
+  // 이름으로 고른다 — 되돌린 뒤 새 백업이 맨 위에 생겨도 고른 것이 바뀌지 않게
+  const [selectedName, setSelectedName] = useState<string | null>(null)
   const [showOlder, setShowOlder] = useState(false)
   const [snap, setSnap] = useState<{ name: string; state: AppState } | { name: string; error: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -150,11 +151,12 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
 
   const groups = useMemo(() => groupBackups(list ?? [], Date.now(), new Date().getTimezoneOffset()), [list])
   const visible = groups.flatMap((g) => (g.id === 'older' && !showOlder ? [] : g.items))
-  const current = visible[Math.min(selected, visible.length - 1)] ?? null
+  const current = visible.find((b) => b.name === selectedName) ?? visible[0] ?? null
 
   // 고른 백업을 읽는다 — 읽는 동안 다른 것을 고르면 옛 응답은 버린다(읽기 번호)
   useEffect(() => {
     if (!current) return setSnap(null)
+    setSelectedName(current.name) // 처음 보인 기본(맨 위)도 이름으로 붙잡는다
     const no = ++readNo.current
     window.taskminal.backup.read(current.name).then(
       (s) => no === readNo.current && setSnap({ name: current.name, state: s }),
@@ -177,7 +179,9 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
     }
   }
 
-  const snapState = snap && 'state' in snap ? snap.state : null
+  // 다른 백업을 고른 뒤 읽기가 끝나기 전에는 옛 미리 보기를 쓰지 않는다(되살리기 단추가 옛 백업으로 돌지 않게)
+  const shown = snap && snap.name === current?.name ? snap : null
+  const snapState = shown && 'state' in shown ? shown.state : null
   const diff = snapState ? diffStates(state, snapState) : null
 
   const restoreOne = (taskId: string) => {
@@ -199,7 +203,9 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
   const onListKey = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      setSelected((i) => Math.max(0, Math.min(visible.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))))
+      const i = current ? visible.indexOf(current) : 0
+      const next = visible[Math.max(0, Math.min(visible.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]
+      if (next) setSelectedName(next.name)
     } else if (e.key === 'Enter') {
       e.preventDefault()
       firstTaskRef.current?.focus()
@@ -248,7 +254,6 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
                   </div>
                   {(g.id !== 'older' || showOlder) &&
                     g.items.map((b) => {
-                      const i = visible.indexOf(b)
                       return (
                         <div
                           key={b.name}
@@ -258,7 +263,7 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
                           className={`backup-row${b === current ? ' selected' : ''}`}
                           data-testid="backup-row"
                           data-reason={b.reason}
-                          onClick={() => setSelected(i)}
+                          onClick={() => setSelectedName(b.name)}
                         >
                           <span className="backup-time">{g.id === 'today' || g.id === 'yesterday' ? clock(b.at) : dateClock(b.at)}</span>
                           <span className={`reason-chip reason-${b.reason}`}>{REASON_LABEL[b.reason]}</span>
@@ -270,8 +275,8 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
               ))}
             </div>
             <div className="backup-preview" data-testid="backup-preview">
-              {!snap && <p className="muted">읽는 중…</p>}
-              {snap && 'error' in snap && <p className="err">이 백업은 읽을 수 없어요: {snap.error}</p>}
+              {!shown && <p className="muted">읽는 중…</p>}
+              {shown && 'error' in shown && <p className="err">이 백업은 읽을 수 없어요: {shown.error}</p>}
               {diff && (
                 <>
                   <DiffView diff={diff} busy={busy} onTask={restoreOne} firstRef={firstTaskRef} />

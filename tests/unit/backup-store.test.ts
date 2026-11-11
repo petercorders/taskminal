@@ -54,12 +54,12 @@ describe('BackupStore', () => {
     expect(readdirSync(backups())).toEqual([backupName(NOW, 'start')])
   })
 
-  it('list: 새 것부터 · 일감 수 · 깨진 것은 null', () => {
+  it('list: 새 것부터 · 일감 수 · 깨진 것은 null', async () => {
     mkdirSync(backups(), { recursive: true })
     writeFileSync(join(backups(), backupName(NOW - 1000, 'auto')), JSON.stringify({ ...emptyState(), tasks: [{}, {}] }))
     writeFileSync(join(backups(), backupName(NOW, 'delete')), '{broken')
     writeFileSync(join(backups(), 'notes.txt'), 'x')
-    const list = new BackupStore(root, SEOUL).list()
+    const list = await new BackupStore(root, SEOUL).list()
     expect(list.map((e) => [e.reason, e.tasks])).toEqual([
       ['delete', null],
       ['auto', 2],

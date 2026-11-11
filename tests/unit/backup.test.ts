@@ -199,4 +199,18 @@ describe('내보내기', () => {
     expect(text).toContain('‹가림:Anthropic 키›')
     expect(JSON.parse(text).tasks[0].id).toBe('a')
   })
+  it('따옴표 속 값도 가리고 JSON 이 깨지지 않는다', () => {
+    const s = state([task('a', ['p1'])])
+    s.tasks[0]!.panes['p1']!.command = 'curl -d "api_key=abcd1234" && PASSWORD="hunter22" x'
+    const text = exportText(s)
+    const back = JSON.parse(text) as { tasks: Array<{ panes: Record<string, { command: string }> }> }
+    expect(back.tasks[0]!.panes['p1']!.command).toBe('curl -d "api_key=‹가림:비밀번호›" && PASSWORD="‹가림:비밀번호›" x')
+  })
+  it('내 종류도 가린다', () => {
+    const s = state([task('a', ['p1'])])
+    s.tasks[0]!.panes['p1']!.command = 'echo acme_' + 'Z'.repeat(32)
+    const text = exportText(s, { custom: [{ name: 'ACME', pattern: 'acme_[A-Za-z0-9]{32}' }] })
+    expect(text).not.toContain('Z'.repeat(32))
+    expect(text).toContain('‹가림:ACME›')
+  })
 })

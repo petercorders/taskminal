@@ -21,16 +21,19 @@ export function trimToBytes(text: string, max: number): string {
  * renderer 가 보낸 값 — 믿지 않고 여기서 거른다: live 는 맞는 paneId 만, 글은 live 안의 문자열만.
  * 디스크로 가기 전 비밀값을 가린다(17단계) — renderer 가 가렸다고 믿지 않는다.
  */
-function parse(live: unknown, panes: unknown, opts: SecretOptions): { live: Set<string>; texts: Array<[string, string]> } {
+function parse(live: unknown, panes: unknown, mask: (id: string, text: string) => string): { live: Set<string>; texts: Array<[string, string]> } {
   const ids = new Set(Array.isArray(live) ? live.filter(isPaneId) : [])
   const texts: Array<[string, string]> = []
   if (panes && typeof panes === 'object') {
     for (const [id, text] of Object.entries(panes as Record<string, unknown>)) {
-      if (ids.has(id) && typeof text === 'string') texts.push([id, redact(trimToBytes(text, MAX_SCROLLBACK_BYTES), opts)])
+      if (ids.has(id) && typeof text === 'string') texts.push([id, mask(id, trimToBytes(text, MAX_SCROLLBACK_BYTES))])
     }
   }
   return { live: ids, texts }
 }
+
+/** 가리기 옵션이 같은지 — 내 종류 · 가리지 않기로 한 값 */
+const optsKey = (o: SecretOptions): string => JSON.stringify([o.custom ?? [], [...(o.allow ?? [])].sort(), [...(o.toggles ?? [])].sort()])
 
 const PANE_FILE = /^[A-Za-z0-9_-]{1,128}\.txt$/
 
@@ -53,6 +56,20 @@ export class ScrollbackStore {
   get redactStatus(): RedactStatus {
     return this.status
   }
+  /** pane 마다 지난번 가린 결과 — 주기 저장마다 바뀌지 않은 2MB 를 다시 훑지 않게(같은 글 · 같은 옵션일 때만) */
+  private masked = new Map<string, { text: string; key: string; out: string }>()
+
+  private mask(opts: SecretOptions): (id: string, text: string) => string {
+    const key = optsKey(opts)
+    return (id, text) => {
+      const hit = this.masked.get(id)
+      if (hit && hit.text === text && hit.key === key) return hit.out
+      const out = redact(text, opts)
+      this.masked.set(id, { text, key, out })
+      return out
+    }
+  }
+
   /** saveSync 마다 +1 — 그 사이에 끝나는 옛 주기 저장이 새 글을 덮거나 새 pane 파일을 지우지 않게 */
   private generation = 0
 
@@ -73,7 +90,8 @@ export class ScrollbackStore {
 
   /** 주기 저장. 실패(디스크 가득 · 권한)는 던지지 않고 돌려준다 — 스크롤은 덤이라 앱을 멈추지 않는다. */
   async save(live: unknown, panes: unknown): Promise<Error | null> {
-    const req = parse(live, panes, this.redactOptions())
+    const req = parse(live, panes, this.mask(this.redactOptions()))
+    for (const id of this.masked.keys()) if (!req.live.has(id)) this.masked.delete(id)
     const gen = this.generation
     let first: Error | null = null
     try {
@@ -119,7 +137,7 @@ export class ScrollbackStore {
   /** 페이지가 내려갈 때(앱 종료 · 창 닫기 · 새로 고침) — 다 쓴 뒤에 돌아와야 해서 동기. 규칙은 save 와 같다. */
   saveSync(live: unknown, panes: unknown): Error | null {
     this.generation++
-    const req = parse(live, panes, this.redactOptions())
+    const req = parse(live, panes, this.mask(this.redactOptions()))
     let first: Error | null = null
     try {
       mkdirSync(this.dir, { recursive: true, mode: 0o700 })
@@ -182,11 +200,14 @@ export class ScrollbackStore {
     }
     const keepFailed = only ? this.status.failed.filter((n) => !only.includes(n)) : []
     const masked0 = only ? this.status.masked : 0
-    this.status = { state: 'running', done: 0, total: names.length, masked: masked0, failed: [...keepFailed] }
+    // 다시 시도 · 지우기(only)는 첫 정리의 전체 수를 그대로 둔다 — '0개를 정리했어요' 로 바뀌지 않게
+    const total = only ? Math.max(this.status.total, names.length) : names.length
+    this.status = { state: 'running', done: total - names.length, total, masked: masked0, failed: [...keepFailed] }
     onProgress(this.status)
     const opts = this.redactOptions()
     for (const name of names) {
       const path = join(this.dir, name)
+      const gen = this.generation
       try {
         const text = await readFile(path, 'utf8')
         const count = findSecrets(text.replace(/\x1b\[[0-9;:?<=>]*[ -/]*[@-~]/g, ''), opts).length
@@ -195,6 +216,13 @@ export class ScrollbackStore {
           const tmp = `${path}.tmp-redact`
           await writeFile(tmp, out, { mode: 0o600 })
           await chmod(tmp, 0o600)
+          if (gen !== this.generation) {
+            // 읽은 뒤 페이지가 내려가며(saveSync) 새 글(이미 가린 것)을 쓰거나 파일을 지웠다 — 옛 글로 덮지 않는다
+            await rm(tmp, { force: true })
+            this.status = { ...this.status, done: this.status.done + 1 }
+            onProgress(this.status)
+            continue
+          }
           await rename(tmp, path)
           this.status = { ...this.status, masked: this.status.masked + count }
         } else {

@@ -319,7 +319,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // ─── 17단계: 백업 · 되돌리기 · 내보내기/가져오기 ───
-  ipcMain.handle(IPC.backupList, (event): BackupInfo[] => {
+  ipcMain.handle(IPC.backupList, (event): Promise<BackupInfo[]> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     return backups().list()
   })
@@ -349,7 +349,7 @@ if (!app.requestSingleInstanceLock()) {
     const options = { title: '상태 내보내기', defaultPath: join(app.getPath('documents'), `taskminal-${day}.json`), filters: [{ name: 'JSON', extensions: ['json'] }] }
     const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
     if (r.canceled || !r.filePath) return null
-    writeFileSync(r.filePath, exportText(state), { mode: 0o600 }) // 출력 · 스크롤은 넣지 않고, 명령 속 키도 가린 글
+    writeFileSync(r.filePath, exportText(state, { custom: state.settings.secretCustom }), { mode: 0o600 }) // 출력 · 스크롤은 넣지 않고, 명령 속 키도 가린 글
     return r.filePath
   })
   ipcMain.handle(IPC.stateImport, async (event): Promise<{ name: string; state: AppState } | null> => {

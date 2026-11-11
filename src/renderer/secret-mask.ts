@@ -70,8 +70,10 @@ export class SecretMasker {
   }
 
   private clearAll(): void {
-    for (const h of this.hits) this.disposeHit(h)
+    // marker.dispose() 가 onDispose → drop() 으로 this.hits 를 바로 고치므로 목록을 먼저 떼어 낸 뒤 지운다
+    const old = this.hits
     this.hits = []
+    for (const h of old) this.disposeHit(h)
     this.scanMarker?.dispose()
     this.scanMarker = null
   }
@@ -89,12 +91,12 @@ export class SecretMasker {
     while (start > 0 && buf.getLine(start)?.isWrapped) start--
     // 이 범위의 옛 가림은 지우고 다시 찾는다(줄이 이어 쓰였을 수 있다) — 열어 둔 것은 같은 값 · 같은 줄이면 연 채로
     const wasOpen = new Set<string>()
-    this.hits = this.hits.filter((h) => {
-      if (h.line() < start) return true
+    const gone = this.hits.filter((h) => h.line() >= start)
+    this.hits = this.hits.filter((h) => h.line() < start)
+    for (const h of gone) {
       if (h.open) wasOpen.add(`${h.line()}|${h.value}`)
       this.disposeHit(h)
-      return false
-    })
+    }
     // 논리 줄을 '\n' 으로 이은 글 + 글자마다 칸 위치 — 줄바꿈된 긴 토큰 · 여러 줄 개인 키도 한 번에 찾는다
     let text = ''
     const at: Array<{ row: number; col: number; w: number } | null> = []

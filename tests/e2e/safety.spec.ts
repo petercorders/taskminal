@@ -76,9 +76,12 @@ test('일감 지우기 → 알림 ⌘Z 로 되돌림 · 알림이 지난 뒤엔 
   await expect(win.getByTestId('backup-row').first()).toBeVisible()
   await expect(preview.locator('[data-task-name="B"]')).toBeVisible()
   await win.screenshot({ path: 'test-results/safety-backup-list.png' })
+  const chosen = win.locator('[data-testid="backup-row"][aria-selected="true"]')
+  const chosenId = await chosen.getAttribute('id')
   await preview.locator('[data-task-name="B"]').getByTestId('restore-task').click()
   await expect(win.getByTestId('backup-message')).toContainText('‘B’ 일감을 되살렸어요')
   await expect(win.locator('[data-reason="restore"]').first()).toBeVisible() // 되돌리기 전 백업이 목록에
+  await expect(chosen).toHaveAttribute('id', chosenId!) // 새 백업이 맨 위에 생겨도 고른 백업은 그대로
   await win.keyboard.press('Escape')
   await expect(row('B')).toBeVisible()
   await expect(pane('p2')).toBeVisible() // 되살린 일감이 열리고 셸이 뜬다
@@ -157,6 +160,26 @@ test('sk-ant 키를 출력한 뒤 스크롤 파일에 원문이 없고 화면은
   const text = readFileSync(join(userData, 'scrollback', 'p1.txt'), 'utf8')
   expect(text).toContain('KEYLINE ‹가림:Anthropic 키›')
   expect(text).not.toContain(KEY_TAIL)
+})
+
+test('가린 칸이 여럿이어도 끄기 · 같은 줄 다시 훑기에서 하나도 남거나 겹치지 않는다', async () => {
+  seedState(userData, [{ id: 't', name: '여럿', paneId: 'p1' }])
+  await launch()
+  const masks = pane('p1').locator('.secret-mask')
+  // 같은 줄에 키 둘 → 훑은 뒤 그 줄에 글이 더 붙으면 그 줄을 다시 훑는다
+  const key = (c: string) => `"sk-ant-api03-$(printf '${c}%.0s' {1..40})"`
+  await run('p1', `printf 'TWO %s %s' ${key('A')} ${key('B')}; sleep 1; printf ' END\\n'`)
+  await expect(screen('p1')).toContainText(' END')
+  await expect(win.getByTestId('secret-chip')).toHaveText('🔒 2개 가림')
+  await expect(masks).toHaveCount(2)
+  // 넷이 된 뒤 끄면 모두 사라진다
+  await run('p1', `printf 'M %s\\nM %s\\n' ${key('C')} ${key('D')}`)
+  await expect(win.getByTestId('secret-chip')).toHaveText('🔒 4개 가림')
+  await expect(masks).toHaveCount(4)
+  await win.keyboard.press('Shift+Meta+h')
+  await expect(masks).toHaveCount(0)
+  await win.keyboard.press('Shift+Meta+h')
+  await expect(masks).toHaveCount(4)
 })
 
 test('이미 남은 스크롤 파일은 첫 실행에 가려 다시 쓴다 · 설정 › 개인정보에 정리 결과', async () => {

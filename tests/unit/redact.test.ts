@@ -97,6 +97,11 @@ describe('옵션', () => {
     const allow = new Set([secretHash('Qx7!pL2m9zR')])
     expect(redact('A_PASSWORD=Qx7!pL2m9zR B_PASSWORD=other123', { allow })).toBe('A_PASSWORD=Qx7!pL2m9zR B_PASSWORD=‹가림:비밀번호›')
   })
+  it('가리지 않기로 한 값의 자리는 겹치는 다른 종류(Bearer)도 가리지 않는다', () => {
+    const jwt = 'eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4f'
+    const allow = new Set([secretHash(jwt)])
+    expect(redact(`Authorization: Bearer ${jwt}~x`, { allow })).toBe(`Authorization: Bearer ${jwt}~x`)
+  })
   it('내 종류', () => {
     expect(redact('id acme_abcdefgh1234', { custom: [{ name: 'ACME 키', pattern: 'acme_[a-z0-9]{12}' }] })).toBe('id ‹가림:ACME 키›')
   })

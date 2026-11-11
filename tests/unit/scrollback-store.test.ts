@@ -1,10 +1,24 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_SCROLLBACK_BYTES, ScrollbackStore, trimToBytes } from '../../src/main/scrollback-store'
 
 // 실제 임시 폴더로 시험한다 (권한 · rename 은 mock 으로 대신하지 않는다).
+// 하나만 예외: readFile 뒤에 끼어들 자리(hooks.afterRead) — 정리 도중 saveSync 가 끼는 순서를 만든다. 실제 읽기는 그대로.
+const hooks = vi.hoisted(() => ({ afterRead: null as null | ((path: string) => void) }))
+vi.mock('node:fs/promises', async (orig) => {
+  const actual = await orig<typeof import('node:fs/promises')>()
+  const readFile = (async (...args: Parameters<typeof actual.readFile>) => {
+    const r = await actual.readFile(...args)
+    hooks.afterRead?.(String(args[0]))
+    return r
+  }) as typeof actual.readFile
+  return { ...actual, default: { ...actual, readFile }, readFile }
+})
+afterEach(() => {
+  hooks.afterRead = null
+})
 let root: string
 let dir: string
 beforeEach(() => {
@@ -135,6 +149,16 @@ describe.each(ways)('ScrollbackStore 비밀값 가리기 — $name (17단계)', 
     await save(s, ['p1'], { p1: 'DB_PASSWORD=hunter2long' })
     expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('DB_PASSWORD=hunter2long')
   })
+  it('같은 글이어도 내 종류가 더해지면 다시 가린다(지난 결과를 그대로 쓰지 않는다)', async () => {
+    let custom: Array<{ name: string; pattern: string }> = []
+    const s = new ScrollbackStore(dir, () => ({ custom }))
+    const text = 'id acme_' + 'Z'.repeat(32)
+    await save(s, ['p1'], { p1: text })
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe(text)
+    custom = [{ name: 'ACME', pattern: 'acme_[A-Za-z0-9]{32}' }]
+    await save(s, ['p1'], { p1: text })
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('id ‹가림:ACME›')
+  })
 })
 
 describe('ScrollbackStore.redactExisting — 이미 남은 파일 한 번 정리', () => {
@@ -166,9 +190,20 @@ describe('ScrollbackStore.redactExisting — 이미 남은 파일 한 번 정리
     const r = await s.redactExisting(marker, () => {})
     expect(r.failed).toEqual(['p2.txt'])
     expect(existsSync(marker)).toBe(false)
-    expect(await s.fixRedact('delete', 'p2.txt', marker)).toMatchObject({ failed: [], state: 'done' })
+    expect(await s.fixRedact('delete', 'p2.txt', marker)).toMatchObject({ failed: [], state: 'done', total: 2, done: 2 })
     expect(existsSync(join(dir, 'p2.txt'))).toBe(false)
     expect(existsSync(marker)).toBe(true)
+  })
+  it('읽은 뒤 내려갈 때 저장(saveSync)이 끼면 그 새 글을 옛 글로 덮지 않는다', async () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'p1.txt'), `old ${ANT}`)
+    const s = new ScrollbackStore(dir)
+    hooks.afterRead = (path) => {
+      if (path.endsWith('p1.txt')) s.saveSync(['p1'], { p1: 'new text' })
+    }
+    await s.redactExisting(join(root, 'scrollback-redacted-v1'), () => {})
+    expect(readFileSync(join(dir, 'p1.txt'), 'utf8')).toBe('new text')
+    expect(readdirSync(dir).filter((n) => n.includes('.tmp'))).toEqual([])
   })
   it('지우기는 pane 파일 이름 모양만 받는다', async () => {
     const s = new ScrollbackStore(dir)

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { chmodSync, closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs'
+import { chmodSync, closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { backupName, parseBackupName, pruneBackups, type BackupInfo, type BackupReason } from '../shared/backup'
 import type { NewId } from '../shared/model'
@@ -102,23 +103,23 @@ export class BackupStore {
     }
   }
 
-  /** 새 것부터. 일감 수는 파일을 읽어 센다(못 읽으면 null) */
-  list(): BackupInfo[] {
-    return this.entries()
-      .sort((a, b) => b.at - a.at)
-      .map((e) => {
-        const path = join(this.dir, e.name)
-        let bytes = 0
-        let tasks: number | null = null
-        try {
-          bytes = statSync(path).size
-          const raw = JSON.parse(readFileSync(path, 'utf8')) as { tasks?: unknown }
-          tasks = Array.isArray(raw.tasks) ? raw.tasks.length : null
-        } catch {
-          // 깨진 백업 — 목록에는 두고 읽을 때 알린다
-        }
-        return { ...e, bytes, tasks }
-      })
+  /** 새 것부터. 일감 수는 파일을 읽어 센다(못 읽으면 null). 비동기 — 백업 수십 개를 main 스레드에서 한 번에 읽지 않게 */
+  async list(): Promise<BackupInfo[]> {
+    const out: BackupInfo[] = []
+    for (const e of this.entries().sort((a, b) => b.at - a.at)) {
+      const path = join(this.dir, e.name)
+      let bytes = 0
+      let tasks: number | null = null
+      try {
+        bytes = (await stat(path)).size
+        const raw = JSON.parse(await readFile(path, 'utf8')) as { tasks?: unknown }
+        tasks = Array.isArray(raw.tasks) ? raw.tasks.length : null
+      } catch {
+        // 깨진 백업 · 그 사이 지워짐 — 목록에는 두고 읽을 때 알린다
+      }
+      out.push({ ...e, bytes, tasks })
+    }
+    return out
   }
 
   /** 이름 모양을 검사한 뒤(경로 탈출 막음) 읽어 검증한 상태 — 못 쓰는 백업이면 Error */

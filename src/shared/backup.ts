@@ -1,7 +1,7 @@
 // 상태 백업 규칙 (17단계 Backup). 순수 함수 — main 의 BackupStore 와 renderer 의 설정 › 백업이 함께 쓴다.
 import { paneIds } from './layout'
 import type { NewId } from './model'
-import { redact } from './redact'
+import { redact, type SecretOptions } from './redact'
 import type { AppState, Id, Layout, Settings, Task } from './types'
 
 export type BackupReason = 'start' | 'version' | 'delete' | 'settings' | 'auto' | 'restore' | 'import' | 'recover'
@@ -277,9 +277,13 @@ export function mergeState(cur: AppState, incoming: AppState, newId: NewId): { s
   return { state: { ...cur, settings, tasks }, added }
 }
 
-/** 내보내기 글 — 상태 JSON 을 가린 것(명령 · 이름 속 키도). 출력 · 스크롤은 상태에 없다 */
-export function exportText(state: AppState): string {
-  return redact(JSON.stringify(state, null, 2)) + '\n'
+/**
+ * 내보내기 글 — 상태의 글 값마다 가린 JSON(명령 · 이름 속 키도). 출력 · 스크롤은 상태에 없다.
+ * JSON 글 전체를 가리면 \" 같은 이스케이프를 값으로 삼켜 파일이 깨진다 → 값 단위로.
+ * custom 은 내 종류 — '가리지 않기로 한 값'(allow)은 이 Mac 에서만이라 파일로 나갈 때는 쓰지 않는다.
+ */
+export function exportText(state: AppState, opts: Pick<SecretOptions, 'custom'> = {}): string {
+  return JSON.stringify(state, (_key, v: unknown) => (typeof v === 'string' ? redact(v, { custom: opts.custom }) : v), 2) + '\n'
 }
 
 /** 일감이 쓰는 pane 수 (확인 창 글) */

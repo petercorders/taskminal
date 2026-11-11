@@ -153,9 +153,10 @@ export function findSecrets(text: string, opts: SecretOptions = {}): SecretMatch
   let end = -1
   for (const f of found) {
     if (f.start < end) continue
+    end = f.end
+    // 가리지 않기로 한 값도 그 자리를 차지한다 — 겹치는 아래 순위 종류(Bearer 등)가 같은 값을 다시 가리지 않게
     if (opts.allow?.has(secretHash(f.value))) continue
     out.push({ start: f.start, end: f.end, kind: f.kind, value: f.value })
-    end = f.end
   }
   return out
 }
