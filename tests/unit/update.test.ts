@@ -48,6 +48,8 @@ describe('blockedReason', () => {
   it('디스크 이미지 안 · 쓸 수 없는 폴더면 업데이트를 받을 수 없다', () => {
     expect(blockedReason('/Volumes/Taskminal 0.1.0/Taskminal.app/Contents/MacOS/Taskminal', true)).toBe('dmg')
     expect(blockedReason('/Applications/Taskminal.app/Contents/MacOS/Taskminal', false)).toBe('readonly')
+    // 내려받은 zip 을 옮기지 않고 열면 macOS 가 읽기 전용 임시 자리로 옮긴다 — 옮기기로 풀리는 자리 (18단계 리뷰)
+    expect(blockedReason('/private/var/folders/ab/xyz/T/AppTranslocation/1234-ABCD/d/Taskminal.app/Contents/MacOS/Taskminal', false)).toBe('translocated')
     expect(blockedReason('/Applications/Taskminal.app/Contents/MacOS/Taskminal', true)).toBeNull()
   })
 })

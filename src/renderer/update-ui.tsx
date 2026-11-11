@@ -23,6 +23,12 @@ export function useUpdateView(): UpdateView | null {
 
 export const mbOf = (bytes: number | undefined): string => `${Math.round((bytes ?? 0) / 1024 ** 2)}MB`
 
+/** 옮기면 풀리는 자리 — 창 위 줄 · 설정 줄 제목 */
+const BLOCKED_TITLE = {
+  dmg: '디스크 이미지 안에서 실행 중이라 업데이트를 받을 수 없어요',
+  translocated: '내려받은 자리에서 바로 열려 업데이트를 받을 수 없어요',
+} as const
+
 /** 설정 › 정보의 상태 줄 글 */
 export function updateStatusText(v: UpdateView | null): { text: string; tone: 'ok' | 'run' | 'err' | 'dim' } {
   if (!v) return { text: '확인 중…', tone: 'dim' }
@@ -30,7 +36,7 @@ export function updateStatusText(v: UpdateView | null): { text: string; tone: 'o
     case 'disabled':
       return { text: '이 빌드는 업데이트를 확인하지 않아요 (개발 실행 · 로컬 패키징)', tone: 'dim' }
     case 'blocked':
-      return { text: v.blocked === 'dmg' ? '디스크 이미지 안에서 실행 중이라 업데이트를 받을 수 없어요' : '쓸 수 없는 폴더에 있어 업데이트를 받을 수 없어요', tone: 'err' }
+      return { text: v.blocked === 'readonly' ? '쓸 수 없는 폴더에 있어 업데이트를 받을 수 없어요' : BLOCKED_TITLE[v.blocked ?? 'dmg'], tone: 'err' }
     case 'idle':
       return { text: '아직 확인하지 않았어요', tone: 'dim' }
     case 'checking':
@@ -128,11 +134,11 @@ export function UpdateBanners({ view, crashed, later, onLater, onSkip, onOpenLog
       ],
     })
   }
-  if (v?.state === 'blocked' && v.blocked === 'dmg') {
+  if (v?.state === 'blocked' && (v.blocked === 'dmg' || v.blocked === 'translocated')) {
     banners.push({
       key: 'blocked',
       tone: 'warn',
-      title: '디스크 이미지 안에서 실행 중이라 업데이트를 받을 수 없어요',
+      title: BLOCKED_TITLE[v.blocked],
       detail: 'Taskminal 을 응용 프로그램 폴더로 옮기면 업데이트를 받을 수 있어요.',
       actions: [
         { label: '응용 프로그램 폴더로 옮기고 다시 열기', primary: true, run: () => act('move') },

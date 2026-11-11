@@ -1,6 +1,6 @@
 // 자동 업데이트 진행(18단계) — 엔진(electron-updater)을 감싸 '한 번에 하나' · 건너뛰기 · 받기 설정 · 실패를 정한다.
 // 엔진은 시험에서 가짜로 바꾼다(tests/unit/updater.test.ts). 실제 엔진은 index.ts 의 electronUpdaterEngine.
-import { compareVersions, noteSummary, UPDATE_CHECK_MS, updateErrorText, type UpdateView } from '../shared/update'
+import { compareVersions, noteSummary, UPDATE_CHECK_MS, updateErrorText, type BlockedReason, type UpdateView } from '../shared/update'
 import type { LogLevel } from '../shared/errlog'
 
 export interface UpdateProgress {
@@ -24,7 +24,7 @@ export interface UpdatePrefs {
 }
 interface Deps {
   current: string
-  blocked?: 'dmg' | 'readonly' | null
+  blocked?: BlockedReason | null
   /** 설정 — 매번 읽는다(main 이 상태를 받을 때마다 바뀐다) */
   prefs(): UpdatePrefs
   now(): number
@@ -37,11 +37,16 @@ interface Deps {
 }
 
 const BUSY = new Set<UpdateView['state']>(['checking', 'downloading', 'installing'])
+/** 설치(Squirrel)가 이 안에 앱을 끄지도 오류를 주지도 않으면 실패로 본다 — 끄기 안내를 막은 채 남지 않게 */
+export const INSTALL_TIMEOUT_MS = 60_000
 
 export class Updater {
   private v: UpdateView
+  private installTimer: ReturnType<typeof setTimeout> | null = null
   /** 받을(받은) 새 버전 */
   private found: { version: string; notes: unknown } | null = null
+  /** 받아 둔 뒤에 건너뛰었다 — 다시 알리기면 받지 않고 downloaded 로 */
+  private skippedWhile = false
 
   constructor(
     private readonly engine: UpdateEngine | null,
@@ -50,8 +55,7 @@ export class Updater {
     this.v = engine === null ? { state: 'disabled', current: d.current } : d.blocked ? { state: 'blocked', current: d.current, blocked: d.blocked } : { state: 'idle', current: d.current }
     engine?.onError((e) => {
       if (this.v.state !== 'installing') return // 확인 · 받기 실패는 약속(reject)으로 이미 받는다
-      this.fail('install', e)
-      this.d.installFailed()
+      this.installFail(e)
     })
   }
 
@@ -62,6 +66,8 @@ export class Updater {
   /** 확인 — 진행 중이면 무시(한 번에 하나). 새 버전이면 설정에 따라 받는다 */
   async check(): Promise<void> {
     if (!this.engine || this.v.state === 'disabled' || this.v.state === 'blocked' || BUSY.has(this.v.state)) return
+    // 받아 둔 버전이 있으면(설치 실패 뒤 포함) 다시 확인하지 않는다 — 6시간 주기 · 메뉴가 받은 zip 과 칩을 버리고 다시 받지 않게
+    if (this.v.state === 'downloaded' || (this.v.state === 'failed' && this.v.during === 'install')) return
     this.set({ state: 'checking', current: this.d.current })
     let info: { version: string; notes: unknown } | null
     try {
@@ -77,6 +83,7 @@ export class Updater {
       return
     }
     this.found = info
+    this.skippedWhile = false
     const prefs = this.d.prefs() // 결과가 온 지금 다시 읽는다 — 확인이 도는 사이 건너뛰었을 수 있다
     if (prefs.skip === info.version) {
       this.set({ state: 'latest', current: this.d.current, checkedAt, skipped: info.version })
@@ -110,8 +117,10 @@ export class Updater {
       return
     }
     // 받는 사이 그 버전을 건너뛰었으면 알리지 않는다
-    if (this.d.prefs().skip === version) this.set({ state: 'latest', current: this.d.current, checkedAt: this.d.now(), skipped: version })
-    else this.set({ ...base, state: 'downloaded' })
+    if (this.d.prefs().skip === version) {
+      this.skippedWhile = true
+      this.set({ state: 'latest', current: this.d.current, checkedAt: this.d.now(), skipped: version })
+    } else this.set({ ...base, state: 'downloaded' })
   }
 
   /** 다시 시작해서 설치 — 받은 뒤(또는 설치 실패 뒤)에만, 두 번 눌러도 한 번 */
@@ -121,19 +130,37 @@ export class Updater {
     this.set({ ...this.v, state: 'installing' })
     delete this.v.error
     this.d.beforeInstall()
+    // 오류가 먼저 오면 installFail 이 이 타이머를 지운다
+    this.installTimer = setTimeout(() => this.installFail(new Error('install timed out — no quit or error from Squirrel')), INSTALL_TIMEOUT_MS)
+    this.installTimer.unref?.()
     try {
       this.engine.install()
     } catch (e) {
-      this.fail('install', e)
-      this.d.installFailed()
+      this.installFail(e)
     }
   }
 
-  /** 설정이 바뀌었다 — 받아 둔(나온) 버전을 건너뛰었으면 최신처럼 */
+  private installFail(e: unknown): void {
+    if (this.installTimer) clearTimeout(this.installTimer)
+    this.installTimer = null
+    this.fail('install', e)
+    this.d.installFailed()
+  }
+
+  /** 설정이 바뀌었다 — 받아 둔(나온) 버전을 건너뛰었으면 최신처럼, 건너뛰기를 풀었으면(다시 알리기) 그 버전을 다시 알린다 */
   prefsChanged(): void {
     const v = this.v
-    if ((v.state === 'available' || v.state === 'downloaded' || (v.state === 'failed' && v.version)) && v.version === this.d.prefs().skip) {
+    const prefs = this.d.prefs()
+    if ((v.state === 'available' || v.state === 'downloaded' || (v.state === 'failed' && v.version)) && v.version === prefs.skip) {
+      this.skippedWhile = v.state === 'downloaded'
       this.set({ state: 'latest', current: this.d.current, checkedAt: v.checkedAt ?? this.d.now(), skipped: v.version })
+      return
+    }
+    if (v.state === 'latest' && v.skipped && v.skipped !== prefs.skip && this.found?.version === v.skipped) {
+      const base = { current: this.d.current, version: v.skipped, ...this.notes(), ...(v.checkedAt ? { checkedAt: v.checkedAt } : {}) }
+      if (this.skippedWhile) this.set({ ...base, state: 'downloaded' }) // 이미 받아 둔 것
+      else if (prefs.download) void this.fetch()
+      else this.set({ ...base, state: 'available' })
     }
   }
 

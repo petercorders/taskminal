@@ -40,7 +40,7 @@ export interface UpdateView {
   nextAt?: number
   /** 건너뛴 버전 — 최신처럼 보이되 설정 줄에 '건너뜀' */
   skipped?: string
-  blocked?: 'dmg' | 'readonly'
+  blocked?: BlockedReason
 }
 
 /** 'x.y.z(-pre)' 비교 — 숫자 칸을 차례로, 미리 보기는 같은 번호의 정식보다 낮다 */
@@ -98,7 +98,10 @@ export function updateErrorText(e: unknown): string {
 }
 
 /** 업데이트를 받을 수 없는 위치 — 디스크 이미지 안(/Volumes) · 쓸 수 없는 폴더 */
-export function blockedReason(exePath: string, writable: boolean): 'dmg' | 'readonly' | null {
+/** 업데이트를 받을 수 없는 자리 — dmg: 디스크 이미지 · translocated: 내려받은 zip 을 옮기지 않고 열어 macOS 가 읽기 전용 임시 자리로 옮김(App Translocation) · readonly: 그 밖의 쓸 수 없는 폴더 */
+export type BlockedReason = 'dmg' | 'translocated' | 'readonly'
+export function blockedReason(exePath: string, writable: boolean): BlockedReason | null {
   if (exePath.startsWith('/Volumes/')) return 'dmg'
+  if (exePath.includes('/AppTranslocation/')) return 'translocated'
   return writable ? null : 'readonly'
 }

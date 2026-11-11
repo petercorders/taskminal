@@ -335,11 +335,29 @@ function createUpdater(): Updater {
 /** 디스크 이미지에서 실행 중 — 응용 프로그램 폴더로 옮기고 다시 연다 */
 function moveToApplications(): void {
   quitting = true // 옮기면 앱이 바로 다시 열린다 — 끄기 안내를 건너뛴다
+  // 옮기기는 will-quit 없이 프로세스를 끝낼 수 있다 — 상태 쓰기 · 정상 종료 표시를 먼저 한다(다시 연 앱이 '갑자기 꺼짐' 으로 보지 않게)
+  stateWriter.flush()
+  markRunning(false)
+  let moved = false
   try {
-    if (!app.moveToApplicationsFolder()) quitting = false
+    moved = app.moveToApplicationsFolder()
   } catch (e) {
-    quitting = false
     report('error', 'move-app', '응용 프로그램 폴더로 옮기지 못했어요', e)
+  }
+  if (!moved) {
+    quitting = false
+    markRunning(true)
+  }
+}
+
+/** 실행 중 표시 — 남아 있으면 다음 실행이 '지난번에 갑자기 꺼짐' 으로 본다 */
+function markRunning(on: boolean): void {
+  try {
+    if (on) writeFileSync(runningFile(), String(process.pid), { mode: 0o600 })
+    else unlinkSync(runningFile())
+  } catch (e) {
+    if (on) report('warn', 'running-mark', '실행 표시 파일을 쓰지 못했어요', e)
+    // 지울 때 없으면 그만
   }
 }
 
@@ -671,11 +689,7 @@ if (!app.requestSingleInstanceLock()) {
       stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
     } finally {
       hostControl?.dispose()
-      try {
-        unlinkSync(runningFile()) // 정상으로 끝남 — 다음 실행이 '갑자기 꺼짐' 으로 보지 않게
-      } catch {
-        // 없으면 그만
-      }
+      markRunning(false) // 정상으로 끝남 — 다음 실행이 '갑자기 꺼짐' 으로 보지 않게
     }
   })
   // 도우미 프로세스(GPU · 네트워크 …)가 비정상으로 끝나면 기록만 (화면 renderer 는 창의 render-process-gone 이 맡는다)
@@ -694,11 +708,7 @@ if (!app.requestSingleInstanceLock()) {
     errlog().prune()
     crashedLast = existsSync(runningFile())
     if (crashedLast) errlog().write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
-    try {
-      writeFileSync(runningFile(), String(process.pid), { mode: 0o600 })
-    } catch (e) {
-      report('warn', 'running-mark', '실행 표시 파일을 쓰지 못했어요', e)
-    }
+    markRunning(true)
     installAppMenu()
     hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error))
     updater = createUpdater()

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ErrorLog } from '../../src/main/errlog'
@@ -43,13 +43,29 @@ describe('ErrorLog', () => {
     expect(readdirSync(dir).sort()).toEqual([logFileName(NOW), 'other.txt'])
   })
 
-  it('폴더가 상한(5MB)을 넘으면 더 쓰지 않는다 · 쓰기 실패는 던지지 않는다', () => {
+  it('폴더가 상한(5MB)에 닿으면 오래된 날 파일부터 지워 자리를 만든다 — 꺼짐 같은 새 기록을 며칠씩 버리지 않게 (18단계 리뷰)', () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'main-2026-11-09.log'), Buffer.alloc(LOG_MAX_BYTES / 2))
+    writeFileSync(join(dir, 'main-2026-11-10.log'), Buffer.alloc(LOG_MAX_BYTES / 2))
     const log = new ErrorLog(dir, () => ({}), () => NOW)
-    log.write('warn', 'k', 'm')
-    writeFileSync(join(dir, 'main-2026-11-10.log'), Buffer.alloc(LOG_MAX_BYTES))
-    const before = statSync(join(dir, logFileName(NOW))).size
+    log.write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
+    expect(readdirSync(dir).sort()).toEqual(['main-2026-11-10.log', logFileName(NOW)])
+    expect(log.rows().map((r) => r.key)).toEqual(['crash'])
+  })
+
+  it('오늘 파일만으로 상한이면 오늘은 더 쓰지 않는다 · 쓰기 실패는 던지지 않는다', () => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, logFileName(NOW)), Buffer.alloc(LOG_MAX_BYTES))
+    const log = new ErrorLog(dir, () => ({}), () => NOW)
     log.write('error', 'k2', 'm2')
-    expect(statSync(join(dir, logFileName(NOW))).size).toBe(before)
+    expect(statSync(join(dir, logFileName(NOW))).size).toBe(LOG_MAX_BYTES)
+    // 쓴 만큼 세어 둔다 — 상한 바로 아래에서 시작해도 넘기지 않는다
+    const near = join(root, 'near')
+    mkdirSync(near)
+    writeFileSync(join(near, logFileName(NOW)), Buffer.alloc(LOG_MAX_BYTES - 300))
+    const log2 = new ErrorLog(near, () => ({}), () => NOW)
+    for (let i = 0; i < 10; i++) log2.write('warn', 'k', '반복 경고')
+    expect(statSync(join(near, logFileName(NOW))).size).toBeLessThanOrEqual(LOG_MAX_BYTES)
     // 폴더 자리에 파일 — mkdir 이 실패해도 앱을 멈추지 않는다
     const broken = new ErrorLog(join(root, 'file-not-dir', 'logs'), () => ({}), () => NOW)
     writeFileSync(join(root, 'file-not-dir'), '')

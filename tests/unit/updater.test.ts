@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { Updater, type UpdateEngine, type UpdatePrefs } from '../../src/main/updater'
+import { describe, expect, it, vi } from 'vitest'
+import { INSTALL_TIMEOUT_MS, Updater, type UpdateEngine, type UpdatePrefs } from '../../src/main/updater'
 import { UPDATE_CHECK_MS, type UpdateView } from '../../src/shared/update'
 
 /** 끝을 시험이 정하는 약속 */
@@ -187,6 +187,75 @@ describe('Updater', () => {
     void blocked.check()
     expect(blocked.view()).toMatchObject({ state: 'blocked', blocked: 'dmg' })
     expect(engine.checks).toBe(0)
+  })
+
+  it('받아 둔 뒤 · 설치 실패 뒤에는 다시 확인하지 않는다 — 6시간 주기 · 메뉴가 받은 것을 버리지 않게 (18단계 리뷰)', async () => {
+    const { engine, u, flush } = setup()
+    void u.check()
+    engine.check.resolve({ version: '0.1.1', notes: null })
+    await flush()
+    engine.download.resolve()
+    await flush()
+    void u.check()
+    expect(engine.checks).toBe(1)
+    expect(u.view()).toMatchObject({ state: 'downloaded', version: '0.1.1' })
+    u.install()
+    engine.errorFn!(new Error('x'))
+    void u.check()
+    expect(engine.checks).toBe(1)
+    expect(u.view()).toMatchObject({ state: 'failed', during: 'install' })
+  })
+
+  it('다시 알리기(건너뛰기 풀기)면 그 버전을 바로 다시 알린다 — 받아 둔 것은 downloaded, 아니면 받는다 (18단계 리뷰)', async () => {
+    const { engine, u, p, flush } = setup()
+    void u.check()
+    engine.check.resolve({ version: '0.1.1', notes: null })
+    await flush()
+    engine.download.resolve()
+    await flush()
+    p.skip = '0.1.1'
+    u.prefsChanged()
+    expect(u.view()).toMatchObject({ state: 'latest', skipped: '0.1.1' })
+    p.skip = ''
+    u.prefsChanged()
+    expect(u.view()).toMatchObject({ state: 'downloaded', version: '0.1.1' })
+    expect(engine.downloads).toBe(1)
+
+    // 확인 때 이미 건너뛴 버전(받지 않음) → 다시 알리기면 받는다
+    const s = setup({ download: true, skip: '0.1.1' })
+    void s.u.check()
+    s.engine.check.resolve({ version: '0.1.1', notes: null })
+    await s.flush()
+    expect(s.engine.downloads).toBe(0)
+    s.p.skip = ''
+    s.u.prefsChanged()
+    expect(s.u.view().state).toBe('downloading')
+    expect(s.engine.downloads).toBe(1)
+  })
+
+  it('설치가 응답 없이 멈추면 시간이 지나 failed(install) · installFailed — 끄기 안내가 막힌 채 남지 않는다 (18단계 리뷰)', async () => {
+    vi.useFakeTimers()
+    try {
+      const { engine, u, calls } = setup()
+      void u.check()
+      engine.check.resolve({ version: '0.1.1', notes: null })
+      await vi.advanceTimersByTimeAsync(0)
+      engine.download.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      u.install()
+      vi.advanceTimersByTime(INSTALL_TIMEOUT_MS - 1)
+      expect(u.view().state).toBe('installing')
+      vi.advanceTimersByTime(1)
+      expect(u.view()).toMatchObject({ state: 'failed', during: 'install' })
+      expect(calls).toEqual(['before', 'failed'])
+      // 오류가 먼저 오면 시간 초과는 다시 실패시키지 않는다
+      u.install()
+      engine.errorFn!(new Error('x'))
+      vi.advanceTimersByTime(INSTALL_TIMEOUT_MS)
+      expect(calls).toEqual(['before', 'failed', 'before', 'failed'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('바뀔 때마다 창에 보낸다', async () => {
