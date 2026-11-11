@@ -66,6 +66,18 @@ export const IPC = {
   chatHistory: 'chat:history', // invoke(paneId) → ChatEvent[] (가린 것, 화면 다시 그리기)
   chatClose: 'chat:close', // send(paneId, forget) — pane 을 닫음 · forget 이면 화면 기록도 지움
   chatEvent: 'chat:event', // main → renderer: (paneId, ChatEvent) 가린 것
+  // 23단계 변경 검토 — git 은 main 이 부르고, 패치는 main 이 만든다(renderer 가 보낸 패치 글을 쓰지 않음)
+  reviewLoad: 'review:load', // invoke(dir, base|null) → ReviewLoad
+  reviewRevertLines: 'review:revert-lines', // invoke(dir, path, sig, lineKey[]) → RevertResult — 본 diff 와 지금 diff 의 표지가 같을 때만
+  reviewRevertFile: 'review:revert-file', // invoke(dir, path, sig) → RevertResult
+  reviewRestore: 'review:restore', // invoke(id) → 'ok' | 'changed' | 'gone' | 'unknown'
+  reviewReverted: 'review:reverted', // invoke(root) → RevertedView[] (7일 · 그 저장소 것)
+  reviewClearReverted: 'review:clear-reverted', // invoke — 설정 › 개인정보 '되돌린 것 비우기'
+  reviewCommit: 'review:commit', // invoke(dir, path[], message) → CommitResult
+  reviewUndoCommit: 'review:undo-commit', // invoke(dir, hash) → 'ok' | 'moved' | 'remote' | 'root' | 'failed'
+  reviewWatch: 'review:watch', // send(paneId, root|null) — 보이는 동안만 폴더 감시
+  reviewChanged: 'review:changed', // main → renderer: (paneId) 폴더가 바뀜(0.5초 모음)
+  reviewOpenFile: 'review:open-file', // send(root, path) — 편집기로 열기(open -t — shell.openPath 는 .command 를 실행한다, 저장소 안만)
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

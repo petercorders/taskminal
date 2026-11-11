@@ -90,6 +90,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('history'),
         { type: 'separator' },
         item('chat-terminal'),
+        item('review'),
         { type: 'separator' },
         item('mask-toggle'),
         item('mask-next'),

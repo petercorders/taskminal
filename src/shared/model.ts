@@ -277,6 +277,7 @@ export function tabLabel(task: Task, tab: Tab): string {
   if (tab.title) return tab.title
   const active = task.panes[tab.activePaneId]
   if (active?.kind === 'chat') return `${AGENT_NAME[active.chat?.agent ?? 'claude']} 대화`
+  if (active?.kind === 'review') return '변경'
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd
   return cwd.slice(cwd.lastIndexOf('/') + 1)
@@ -364,6 +365,33 @@ export function splitActivePaneChat(task: Task, dir: SplitDir, newId: NewId, age
   const tab = next.tabs.find((t) => t.id === next.activeTabId)!
   const id = tab.activePaneId
   return { ...next, panes: { ...next.panes, [id]: chatPane(id, next.panes[id]!.cwd, agent) } }
+}
+
+// ─── 변경 pane (23단계) ─────────────────────────────────────
+
+/** 일감의 변경 pane — 탭 · pane id. 없으면 null */
+export function findReviewPane(task: Task): { tabId: Id; paneId: Id } | null {
+  for (const tab of task.tabs) for (const id of paneIds(tab.layout)) if (task.panes[id]?.kind === 'review') return { tabId: tab.id, paneId: id }
+  return null
+}
+
+/** ⇧⌘G — 변경 pane 이 있으면 그리로, 없으면 지금 pane 오른쪽에 나누어(탭이 없으면 새 탭) 일감 폴더로 연다 */
+export function openReviewPane(task: Task, newId: NewId): Task {
+  const found = findReviewPane(task)
+  if (found) {
+    return { ...task, activeTabId: found.tabId, tabs: task.tabs.map((t) => (t.id === found.tabId ? { ...t, activePaneId: found.paneId } : t)) }
+  }
+  const tab = activeTab(task)
+  if (!tab || !hasPane(tab.layout, tab.activePaneId)) {
+    const tabId = newId()
+    const paneId = newId()
+    const t: Tab = { id: tabId, layout: { type: 'pane', paneId }, activePaneId: paneId }
+    return { ...task, tabs: [...task.tabs, t], activeTabId: tabId, panes: { ...task.panes, [paneId]: { id: paneId, cwd: task.cwd, kind: 'review' } } }
+  }
+  const next = splitActivePane(task, 'right', newId)
+  const t = next.tabs.find((x) => x.id === next.activeTabId)!
+  const id = t.activePaneId
+  return { ...next, panes: { ...next.panes, [id]: { id, cwd: task.cwd, kind: 'review' } } }
 }
 
 /** 대화의 session_id(Codex thread id)를 남긴다 — 재시작 뒤 다음 보내기가 이어 한다. 갈라진 새 세션이 떴으면 forkAt 을 지운다. 같으면 같은 객체 */
@@ -700,6 +728,11 @@ function parsePane(id: Id, v: unknown, taskCwd: string): Pane | null {
   if (isStr(v.command)) pane.command = v.command
   if (isStr(v.pendingCommand)) pane.pendingCommand = v.pendingCommand
   if (pane.pendingCommand !== undefined && v.pendingInsert === true) pane.pendingInsert = true
+  if (v.kind === 'review') {
+    pane.kind = 'review'
+    delete pane.pendingCommand
+    delete pane.pendingInsert
+  }
   if (v.kind === 'chat') {
     pane.kind = 'chat'
     const c = isObj(v.chat) ? v.chat : {}

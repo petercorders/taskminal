@@ -10,6 +10,8 @@ import { FindBar } from './FindBar'
 import { TerminalPane, type CommandDone } from './TerminalPane'
 import type { MaskSettings } from './secret-mask'
 import { ChatPane } from './ChatPane'
+import { ReviewPane, type ReviewRequest } from './ReviewPane'
+import type { ToastSpec } from './Toast'
 import type { ChatPermission } from '../shared/chat'
 
 interface Props {
@@ -49,6 +51,18 @@ interface Props {
     onRewound(paneId: Id, forkAt: string | null, sessionId?: string): void
     onBranch(paneId: Id, index: number, at: number): void
     onToast(text: string, sub?: string): void
+    /** 도구 줄의 'diff 열기' — 그 일감의 변경 pane 에서 그 파일 (23단계) */
+    onOpenDiff(paneId: Id, path: string): void
+    /** '대화에 묻기' 로 넣을 글 — pane 마다 한 번(n) */
+    draft: { paneId: Id; text: string; n: number } | null
+  }
+  /** 변경 pane (23단계) */
+  review: {
+    request: { paneId: Id; req: ReviewRequest } | null
+    toReview: { name: string; run(): void } | null
+    onAskChat(text: string): void
+    onInsertTerminal(command: string): void
+    onToast(t: Omit<ToastSpec, 'id'>): void
   }
 }
 
@@ -59,7 +73,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow, chat }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow, chat, review }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -146,7 +160,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
             // 보이는 탭에서만 — 숨은 탭 안의 포커스가 활성 탭을 바꾸지 않게
             onFocus={() => visible && onFocusPane(r.paneId)}
           >
-            {pane && pane.kind !== 'chat' && <PaneHead activity={activity[pane.id]} folder={shortPath(pane.cwd)} focused={split && focused} />}
+            {pane && !pane.kind && <PaneHead activity={activity[pane.id]} folder={shortPath(pane.cwd)} focused={split && focused} />}
             {pane?.kind === 'chat' && (
               <ChatPane
                 paneId={pane.id}
@@ -164,9 +178,25 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onBranch={(index, at) => chat.onBranch(pane.id, index, at)}
                 onToast={chat.onToast}
                 onActivity={(ev) => onActivity(pane.id, ev)}
+                onOpenDiff={(path) => chat.onOpenDiff(pane.id, path)}
+                draft={chat.draft?.paneId === pane.id ? chat.draft : null}
               />
             )}
-            {pane && pane.kind !== 'chat' && (
+            {pane?.kind === 'review' && (
+              <ReviewPane
+                paneId={pane.id}
+                dir={pane.cwd}
+                active={visible && focused}
+                visible={visible}
+                focusSignal={focusSignal}
+                request={review.request?.paneId === pane.id ? review.request.req : null}
+                toReview={review.toReview}
+                onAskChat={review.onAskChat}
+                onInsertTerminal={review.onInsertTerminal}
+                onToast={review.onToast}
+              />
+            )}
+            {pane && !pane.kind && (
               <TerminalPane
                 paneId={pane.id}
                 cwd={pane.cwd}

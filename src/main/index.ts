@@ -28,7 +28,9 @@ import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
-import { spawn as spawnChild } from 'node:child_process'
+import { commitFiles, loadReview, makeRunGit, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
+import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
+import { execFile as execFileChild, spawn as spawnChild } from 'node:child_process'
 import { ChatManager } from './chat/chat-manager'
 import { ChatStore } from './chat/chat-store'
 import { AgentBinFinder } from './chat/find-bin'
@@ -139,6 +141,12 @@ const setChatPermission = (p: ChatPermission) => {
   chatPermission = p
   chatManager?.setPermission(p)
 }
+// 변경 검토(23단계) — 되돌린 것 보관 · 폴더 감시. git 은 TASKMINAL_GIT_BIN(e2e '없음' 시험) 또는 PATH 의 git
+let revertStore: RevertStore | null = null
+const reverts = () => (revertStore ??= new RevertStore(join(app.getPath('userData'), 'reverted')))
+const runGit = makeRunGit(process.env['TASKMINAL_GIT_BIN'] || 'git')
+const reviewWatch = new ReviewWatch()
+
 // 상태 백업(17단계) — userData 가 정해진 뒤 만든다
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
@@ -267,6 +275,7 @@ function createWindow(): BrowserWindow {
   }
   const detach = () => {
     hostControl?.ptys.detachOwner(wc)
+    reviewWatch.stopPrefix(`${wc.id}:`)
     forget()
   }
   wc.on('destroyed', detach) // ① 창 닫기
@@ -647,6 +656,61 @@ if (!app.requestSingleInstanceLock()) {
     if (!isPaneId(paneId) || !Number.isInteger(port) || !Number.isInteger(pid) || (pid as number) <= 1) return 'failed'
     const shellPid = control().ptys.pids(event.sender, [paneId])[paneId]
     return shellPid ? killPort(shellPid, port as number, pid as number) : 'gone'
+  })
+
+  // ─── 23단계: 변경 검토 — 폴더 · 경로 모양만 믿는다(경로는 review-git 이 저장소 안인지 · 바뀐 목록에 있는지 다시 본다) ───
+  const okDir = (v: unknown): v is string => typeof v === 'string' && v.startsWith('/') && v.length <= 4096 && !v.includes('\0')
+  const okStrs = (v: unknown, max: number): v is string[] => Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && x.length <= 4096)
+  const okBase = (v: unknown): v is string | null => v === null || v === 'main' || v === 'master'
+  ipcMain.handle(IPC.reviewLoad, async (event, dir: unknown, base: unknown): Promise<ReviewLoad> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(dir) || !okBase(base)) return { state: 'error', message: '잘못된 요청' }
+    return loadReview(runGit, dir, base)
+  })
+  ipcMain.handle(IPC.reviewRevertLines, async (event, dir: unknown, path: unknown, sig: unknown, keys: unknown): Promise<RevertResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(dir) || typeof path !== 'string' || !safeRel(path) || typeof sig !== 'string' || !okStrs(keys, 100_000) || !keys.every((k) => /^\d+:\d+$/.test(k))) return { ok: false, reason: 'changed' }
+    return revertLines(runGit, reverts(), dir, path, sig, keys)
+  })
+  ipcMain.handle(IPC.reviewRevertFile, async (event, dir: unknown, path: unknown, sig: unknown): Promise<RevertResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(dir) || typeof path !== 'string' || !safeRel(path) || typeof sig !== 'string') return { ok: false, reason: 'changed' }
+    return revertFile(runGit, reverts(), dir, path, sig)
+  })
+  ipcMain.handle(IPC.reviewRestore, async (event, id: unknown): Promise<RestoreResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return typeof id === 'string' ? restoreReverted(runGit, reverts(), id) : 'gone'
+  })
+  ipcMain.handle(IPC.reviewReverted, (event, root: unknown): RevertedView[] => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(root)) return []
+    return reverts().list(root).map(({ id, at, path, what }) => ({ id, at, path, what }))
+  })
+  ipcMain.handle(IPC.reviewClearReverted, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    reverts().clear()
+  })
+  ipcMain.handle(IPC.reviewCommit, async (event, dir: unknown, paths: unknown, message: unknown): Promise<CommitResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(dir) || !okStrs(paths, 20_000) || typeof message !== 'string' || message.length > 100_000) return { ok: false, reason: 'changed', tail: '' }
+    return commitFiles(runGit, dir, paths, message)
+  })
+  ipcMain.handle(IPC.reviewUndoCommit, async (event, dir: unknown, hash: unknown): Promise<UndoResult> => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!okDir(dir) || typeof hash !== 'string') return 'failed'
+    return undoCommit(runGit, dir, hash)
+  })
+  ipcMain.on(IPC.reviewWatch, (event, paneId: unknown, root: unknown) => {
+    if (!fromOurWindow(event) || !isPaneId(paneId)) return
+    const wc = event.sender
+    reviewWatch.set(`${wc.id}:${paneId}`, okDir(root) ? root : null, () => {
+      if (!wc.isDestroyed()) wc.send(IPC.reviewChanged, paneId)
+    })
+  })
+  ipcMain.on(IPC.reviewOpenFile, (event, root: unknown, path: unknown) => {
+    if (!fromOurWindow(event) || !okDir(root) || typeof path !== 'string' || !safeRel(path)) return
+    // shell.openPath 는 .command · .app 을 실행한다 — 기본 글 편집기로만 연다
+    execFileChild('/usr/bin/open', ['-t', join(root, path)], () => {})
   })
 
   // ─── 21단계: 대화 ───

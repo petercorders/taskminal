@@ -7,7 +7,8 @@ import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
 import { keepIfSame, taskDirs, type Branches } from '../shared/git'
-import { branchChat, createTask, dropQuick, emptyState, findPaneTask, findQuick, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
+import { branchChat, createTask, dropQuick, emptyState, findPaneTask, findQuick, findReviewPane, openReviewPane, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
+import type { ReviewMode, ReviewRequest } from './ReviewPane'
 import { advanceRun, closeRun, decideRun, quickButtons, quickStatus, WHERE_LABEL, type QuickButton, type QuickCommand, type QuickRun, type QuickSource } from '../shared/quick'
 import { portConflict, type PortChip } from '../shared/ports'
 import type { BackupMark, LoadedState } from '../shared/ipc'
@@ -1052,6 +1053,56 @@ export function App() {
     }
     dispatch({ type: 'chat/branch', paneId, newPaneId: to, forkAt: r.forkAt, ...(r.sessionId ? { sessionId: r.sessionId } : {}) })
   }
+  // ─── 변경 pane (23단계) ───
+  const [reviewReq, setReviewReq] = useState<{ paneId: string; req: ReviewRequest } | null>(null)
+  const [chatDraft, setChatDraft] = useState<{ paneId: string; text: string; n: number } | null>(null)
+  /** ⇧⌘G · ⌘P · 대화 카드 — 변경 pane 을 열거나 그리로 가서 mode · 파일을 알린다. 만들 pane id 는 같은 순수 함수로 미리 안다 */
+  const openReview = (taskId: string, mode: ReviewMode, file?: string) => {
+    const task = stateRef.current.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const ids: [string, string] = [newId(), newId()]
+    const left = [...ids]
+    const found = findReviewPane(openReviewPane(task, () => left.shift()!))
+    if (!found) return
+    dispatch({ type: 'task/select', id: taskId })
+    dispatch({ type: 'review/open', taskId, ids })
+    setReviewReq({ paneId: found.paneId, req: { mode, ...(file ? { file } : {}), n: Date.now() } })
+  }
+  /** '대화에 묻기' · '고쳐 달라고 하기' — 그 일감의 대화 pane 입력칸에(보이는 탭 것 먼저), 없으면 대화로 오른쪽 나누기 */
+  const askChat = (taskId: string, text: string) => {
+    const task = stateRef.current.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    const tab = task.tabs.find((t) => t.id === task.activeTabId)
+    const inTab = tab ? paneIds(tab.layout).filter((id) => task.panes[id]?.kind === 'chat') : []
+    const any = Object.values(task.panes).filter((x) => x.kind === 'chat').map((x) => x.id)
+    const target = inTab[0] ?? any[0]
+    if (target) {
+      dispatch({ type: 'pane/focus', taskId, paneId: target })
+      setChatDraft({ paneId: target, text, n: Date.now() })
+      return
+    }
+    const paneId = newId()
+    if (task.tabs.length === 0) dispatch({ type: 'chat/add-tab', taskId, tabId: newId(), paneId, agent: 'claude' })
+    else dispatch({ type: 'chat/split', taskId, paneId, agent: 'claude' })
+    setChatDraft({ paneId, text, n: Date.now() })
+  }
+  /** 빈 화면의 'git init 넣기' 등 — 일감 폴더 터미널을 오른쪽에 열고 넣기만(실행하지 않음) */
+  const insertTerminal = (taskId: string, command: string) => {
+    const task = stateRef.current.tasks.find((t) => t.id === taskId)
+    if (!task) return
+    if (task.tabs.length === 0) dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId(), spec: { cwd: task.cwd, command, insert: true } })
+    else dispatch({ type: 'pane/split', taskId, dir: 'right', paneId: newId(), spec: { cwd: task.cwd, command, insert: true } })
+    refocus()
+  }
+  const reviewStatus = state.settings.statuses.find((x) => x.name.includes('리뷰')) ?? null
+  const reviewProps = (taskId: string) => ({
+    request: reviewReq,
+    toReview: reviewStatus ? { name: reviewStatus.name, run: () => dispatch({ type: 'task/edit', id: taskId, patch: { statusId: reviewStatus.id } }) } : null,
+    onAskChat: (text: string) => askChat(taskId, text),
+    onInsertTerminal: (command: string) => insertTerminal(taskId, command),
+    onToast: showToast,
+  })
+
   const chatProps = {
     permission: state.settings.chatPermission,
     onPermission: (p: ChatPermission) => dispatch({ type: 'settings/patch', patch: { chatPermission: p } }),
@@ -1061,6 +1112,11 @@ export function App() {
     onRewound: (paneId: string, forkAt: string | null, sessionId?: string) => dispatch({ type: 'chat/rewound', paneId, forkAt, ...(sessionId ? { sessionId } : {}) }),
     onBranch: (paneId: string, index: number, at: number) => void chatBranch(paneId, index, at),
     onToast: (text: string, sub?: string) => showToast({ text, ...(sub ? { sub } : {}) }),
+    onOpenDiff: (paneId: string, path: string) => {
+      const taskId = findPaneTask(stateRef.current, paneId)
+      if (taskId) openReview(taskId, 'diff', path)
+    },
+    draft: chatDraft,
   }
 
   const closePane = (paneId: string, confirmed = false) => {
@@ -1157,6 +1213,10 @@ export function App() {
       case 'sidebar-filter':
         setFilterSignal((n) => n + 1)
         return
+      case 'review':
+      case 'review-commit':
+      case 'review-reverted':
+        return openReview(task.id, command === 'review' ? 'diff' : command === 'review-commit' ? 'commit' : 'reverted')
       case 'chat-new':
       case 'chat-new-codex': {
         const agent = command === 'chat-new-codex' ? 'codex' : 'claude'
@@ -1495,6 +1555,7 @@ export function App() {
                           mask={maskSettings}
                           onAllow={allowSecret}
                           chat={chatProps}
+                          review={reviewProps(task.id)}
                         />
                       )}
                     </div>

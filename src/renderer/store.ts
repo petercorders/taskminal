@@ -43,6 +43,7 @@ import {
   chatToTerminal,
   setChatSession,
   splitActivePaneChat,
+  openReviewPane,
 } from '../shared/model'
 import type { QuickCommand } from '../shared/quick'
 import type { ChatAgent } from '../shared/chat'
@@ -100,6 +101,7 @@ export type Action =
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
   | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent }
   | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent }
+  | { type: 'review/open'; taskId: Id; ids: [Id, Id] }
   | { type: 'chat/rewound'; paneId: Id; forkAt: string | null; sessionId?: string }
   | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string; sessionId?: string }
   | { type: 'chat/session'; paneId: Id; sessionId: string }
@@ -231,6 +233,10 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'chat/add-tab': {
       const ids = [action.tabId, action.paneId]
       return updateTask(state, action.taskId, (t) => addChatTab(t, () => ids.shift()!, action.agent))
+    }
+    case 'review/open': {
+      const ids = [...action.ids]
+      return updateTask(state, action.taskId, (t) => openReviewPane(t, () => ids.shift()!))
     }
     case 'chat/split':
       return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId, action.agent))

@@ -42,6 +42,21 @@ interface Props {
   /** ⑂ 여기서 새 대화로 나누기 */
   onBranch(index: number, at: number): void
   onToast(text: string, sub?: string): void
+  /** 파일을 고친 도구 줄의 'diff 열기 →' — 변경 pane 에서 그 파일 (23단계) */
+  onOpenDiff(path: string): void
+  /** 변경 pane 의 '대화에 묻기' 가 넣는 글 — n 이 바뀔 때마다 입력칸 끝에 붙인다 */
+  draft: { text: string; n: number } | null
+}
+
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+/** 이 도구 묶음이 고친 파일 — 폴더 안 상대 경로만(절대 경로 = 폴더 밖, 변경 pane 에 없다). Codex 는 여러 경로를 ', ' 로 잇는다 */
+function editedPaths(items: ReadonlyArray<{ name: string; summary: string; state: string }>): string[] {
+  const out = new Set<string>()
+  for (const i of items) {
+    if (!EDIT_TOOLS.has(i.name) || i.state !== 'ok') continue
+    for (const path of i.summary.split(', ')) if (path && !path.startsWith('/') && !path.endsWith('…')) out.add(path)
+  }
+  return [...out]
 }
 
 /** 대기열 한 칸 — 원문 · 그림은 renderer 메모리에만(디스크 · 상태 파일에 쓰지 않는다) */
@@ -105,6 +120,13 @@ export function ChatPane(p: Props) {
   /** ⌘↩ 지금 보내기 — 멈춤을 받으면 대기열 첫 것을 보낸다 */
   const sendNow = useRef(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // 변경 pane 의 '대화에 묻기' · '고쳐 달라고 하기' (23단계) — 보내지 않고 입력칸에만
+  useEffect(() => {
+    if (!p.draft) return
+    const add = p.draft.text
+    setText((t) => (t ? `${t.replace(/\s+$/, '')}\n${add}` : add))
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [p.draft?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   const listRef = useRef<HTMLDivElement>(null)
   const cb = useRef(p)
   cb.current = p
@@ -499,6 +521,15 @@ export function ChatPane(p: Props) {
                 ))}
               </ul>
             )}
+            {st[1] !== 'run' &&
+              editedPaths(b.items).map((path) => (
+                <div key={path} className="chat-diff-card" data-testid="chat-diff-card">
+                  <span className="chat-diff-path">{path}</span>
+                  <button type="button" onClick={() => p.onOpenDiff(path)}>
+                    diff 열기 →
+                  </button>
+                </div>
+              ))}
           </div>
         )
       }

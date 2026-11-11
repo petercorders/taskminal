@@ -50,6 +50,10 @@ export const SHORTCUTS = [
   { command: 'chat-split-codex', accel: '', label: '대화(Codex)로 오른쪽 나누기' },
   { command: 'chat-terminal', accel: 'Shift+Command+J', label: '대화를 터미널로 전환' },
   { command: 'sidebar-filter', accel: '', label: '사이드바에서 거르기' },
+  // 변경 검토(23단계)
+  { command: 'review', accel: 'Shift+Command+G', label: '변경 보기' },
+  { command: 'review-commit', accel: '', label: '변경 커밋' },
+  { command: 'review-reverted', accel: '', label: '되돌린 것 보기' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

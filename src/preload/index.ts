@@ -9,7 +9,7 @@ import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { WorktreeResult } from '../shared/worktree'
-import type { ChatApi as ChatApiT, TaskminalApi } from './api'
+import type { ChatApi as ChatApiT, ReviewApi as ReviewApiT, TaskminalApi } from './api'
 
 // renderer 에 여는 유일한 통로. ipcRenderer 자체나 채널 이름을 받는 함수는 열지 않는다.
 // 이벤트 객체(sender 등)는 renderer 에 넘기지 않는다.
@@ -100,6 +100,19 @@ const api: TaskminalApi = {
     history: (paneId) => ipcRenderer.invoke(IPC.chatHistory, paneId) as Promise<{ events: ChatEvent[]; upTo: number }>,
     close: (paneId, forget) => ipcRenderer.send(IPC.chatClose, paneId, forget),
     onEvent: (listener) => subscribe(IPC.chatEvent, listener),
+  },
+  review: {
+    load: (dir, base) => ipcRenderer.invoke(IPC.reviewLoad, dir, base) as ReturnType<ReviewApiT['load']>,
+    revertLines: (dir, path, sig, keys) => ipcRenderer.invoke(IPC.reviewRevertLines, dir, path, sig, keys) as ReturnType<ReviewApiT['revertLines']>,
+    revertFile: (dir, path, sig) => ipcRenderer.invoke(IPC.reviewRevertFile, dir, path, sig) as ReturnType<ReviewApiT['revertFile']>,
+    restore: (id) => ipcRenderer.invoke(IPC.reviewRestore, id) as ReturnType<ReviewApiT['restore']>,
+    reverted: (root) => ipcRenderer.invoke(IPC.reviewReverted, root) as ReturnType<ReviewApiT['reverted']>,
+    clearReverted: () => ipcRenderer.invoke(IPC.reviewClearReverted) as Promise<void>,
+    commit: (dir, paths, message) => ipcRenderer.invoke(IPC.reviewCommit, dir, paths, message) as ReturnType<ReviewApiT['commit']>,
+    undoCommit: (dir, hash) => ipcRenderer.invoke(IPC.reviewUndoCommit, dir, hash) as ReturnType<ReviewApiT['undoCommit']>,
+    watch: (paneId, root) => ipcRenderer.send(IPC.reviewWatch, paneId, root),
+    onChanged: (listener) => subscribe<[string]>(IPC.reviewChanged, listener),
+    openFile: (root, path) => ipcRenderer.send(IPC.reviewOpenFile, root, path),
   },
   ports: {
     probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,

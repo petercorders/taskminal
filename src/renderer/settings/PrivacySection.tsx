@@ -163,6 +163,18 @@ export function PrivacySection({ s, patch, Row, Switch, onClearHistory }: Props)
           명령 기록 모두 지우기…
         </button>
       </Row>
+      <Row title="되돌린 줄 보관" desc="변경 pane 에서 되돌린 줄 · 파일은 다시 살릴 수 있게 원문 그대로 7일 동안 이 Mac 에만 남아요(나만 읽는 파일). 지금 비우면 되살릴 수 없어요." keywords="되돌린 것 변경 revert 7일">
+        <button
+          type="button"
+          className="button"
+          data-testid="reverted-clear"
+          onClick={() => {
+            void window.taskminal.review.clearReverted()
+          }}
+        >
+          되돌린 것 비우기
+        </button>
+      </Row>
     </>
   )
 }

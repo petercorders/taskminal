@@ -174,6 +174,24 @@ export interface TaskminalApi {
   history: HistoryApi
   ports: PortsApi
   chat: ChatApi
+  review: ReviewApi
+}
+
+/** 23단계 변경 검토 — 일감 폴더의 저장소. 패치는 main 이 만든다 */
+export interface ReviewApi {
+  load(dir: string, base: string | null): Promise<import('../shared/review').ReviewLoad>
+  /** 고른 줄(`덩어리:줄`)만 되돌린다 — sig 는 본 diff 의 fileSig. 그 사이 바뀌었으면 changed */
+  revertLines(dir: string, path: string, sig: string, keys: string[]): Promise<import('../shared/review').RevertResult>
+  revertFile(dir: string, path: string, sig: string): Promise<import('../shared/review').RevertResult>
+  restore(id: string): Promise<import('../shared/review').RestoreResult>
+  reverted(root: string): Promise<import('../shared/review').RevertedView[]>
+  clearReverted(): Promise<void>
+  commit(dir: string, paths: string[], message: string): Promise<import('../shared/review').CommitResult>
+  undoCommit(dir: string, hash: string): Promise<import('../shared/review').UndoResult>
+  /** 보이는 동안만 폴더 감시 — null 이면 끔 */
+  watch(paneId: string, root: string | null): void
+  onChanged(listener: (paneId: string) => void): () => void
+  openFile(root: string, path: string): void
 }
 
 declare global {

@@ -60,8 +60,8 @@ export interface Pane {
   command?: string
   /** pendingCommand 를 실행하지 않고 입력줄에 넣기만 (19단계 — 기록의 위험 명령) */
   pendingInsert?: true
-  /** pane 종류 — 없으면 터미널. '대화' 는 셸 대신 에이전트와 채팅 (21단계) */
-  kind?: 'chat'
+  /** pane 종류 — 없으면 터미널. '대화' 는 셸 대신 에이전트와 채팅 (21단계) · '변경' 은 일감 폴더 저장소의 diff · 커밋 (23단계) */
+  kind?: 'chat' | 'review'
   /** 대화 pane 의 에이전트 · 이어 할 세션 (Claude session_id · Codex thread id) · forkAt: 되감기 · 나누기 뒤 아직 안 보냄 — 다음 띄울 때 여기서 가른다 (22단계) */
   chat?: { agent: ChatAgent; sessionId?: string; forkAt?: string }
 }

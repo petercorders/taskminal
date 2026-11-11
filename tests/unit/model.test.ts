@@ -13,6 +13,8 @@ import {
   focusPane,
   markCommandSent,
   normalizeState,
+  openReviewPane,
+  findReviewPane,
   removeGroup,
   removeStatus,
   renameTab,
@@ -630,5 +632,36 @@ describe('setPaneCwd (13단계 — 셸 안의 cd 를 따라감)', () => {
     const before = t.panes[pid]!
     const u = setPaneCwd(t, pid, '/tmp')
     expect(u.panes[pid]).toEqual({ ...before, cwd: '/tmp' })
+  })
+})
+
+describe('변경 pane (23단계)', () => {
+  test('없으면 지금 pane 오른쪽에 일감 폴더로 나누고, 있으면 그 탭 · pane 으로', () => {
+    const t = flutterTask()
+    const opened = openReviewPane(t, () => 'rv')
+    const tab = opened.tabs.find((x) => x.id === opened.activeTabId)!
+    expect(tab.activePaneId).toBe('rv')
+    expect(opened.panes.rv).toEqual({ id: 'rv', cwd: t.cwd, kind: 'review' })
+    const { title: _t, ...untitled } = tab
+    expect(tabLabel(opened, untitled)).toBe('변경')
+    // 다른 탭으로 옮긴 뒤 다시 열면 새로 만들지 않고 그 pane 으로
+    const other = selectTab(opened, opened.tabs.find((x) => x.id !== tab.id)!.id)
+    const again = openReviewPane(other, () => 'never')
+    expect(again.activeTabId).toBe(tab.id)
+    expect(again.tabs.find((x) => x.id === tab.id)!.activePaneId).toBe('rv')
+    expect(Object.keys(again.panes)).not.toContain('never')
+    expect(findReviewPane(again)).toEqual({ tabId: tab.id, paneId: 'rv' })
+  })
+  test('탭이 없으면 새 탭', () => {
+    const t = { ...flutterTask(), tabs: [], activeTabId: null, panes: {} }
+    const ids2 = ['tb', 'pn']
+    const o = openReviewPane(t, () => ids2.shift()!)
+    expect(o.tabs.map((x) => x.id)).toEqual(['tb'])
+    expect(o.panes.pn).toEqual({ id: 'pn', cwd: t.cwd, kind: 'review' })
+  })
+  test('저장 · 읽기를 거쳐도 종류가 남고 시작 명령은 버린다', () => {
+    const o = openReviewPane(flutterTask(), () => 'rv')
+    const st = { ...emptyState(), tasks: [{ ...o, panes: { ...o.panes, rv: { ...o.panes.rv!, pendingCommand: 'x' } } }], activeTaskId: o.id }
+    expect(normalizeState(JSON.parse(JSON.stringify(st)), ids()).tasks[0]!.panes.rv).toEqual({ id: 'rv', cwd: o.cwd, kind: 'review' })
   })
 })

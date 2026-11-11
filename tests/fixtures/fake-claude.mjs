@@ -105,6 +105,16 @@ function turn(text, images = 0) {
     )
     return
   }
+  if (text.includes('edit')) {
+    // 23단계: 파일을 실제로 고치는 Edit 도구 — 대화 diff 카드 'diff 열기' 시험
+    const file = `${process.cwd()}/x.txt`
+    appendFileSync(file, 'agent line\n')
+    assistant([{ type: 'tool_use', id: `tu-e${++seq}`, name: 'Edit', input: { file_path: file, old_string: 'a', new_string: 'b' } }])
+    out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `tu-e${seq}`, content: 'ok', is_error: false }] } })
+    assistant([{ type: 'text', text: '고쳤어요' }])
+    result()
+    return
+  }
   if (text.includes('ask')) {
     ask(
       {
