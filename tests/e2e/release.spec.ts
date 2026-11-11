@@ -128,9 +128,11 @@ test.describe('업데이트 (로컬 피드)', () => {
     await menu('update-check')
     await expect(status()).toHaveText('● 최신이에요 · 0.1.1 건너뜀', { timeout: 15_000 })
     await expect(banner('downloaded')).toHaveCount(0)
+    const checks = requests.filter((r) => r === '/latest-mac.yml').length
     await win.getByRole('button', { name: '다시 알리기' }).click()
-    await win.getByRole('button', { name: '지금 확인' }).click()
+    // 다시 확인하지 않고 그 버전을 바로 다시 알린다(받기는 첫 실행에서 받아 둔 캐시를 쓴다)
     await expect(status()).toHaveText('● 0.1.1 설치 가능', { timeout: 15_000 })
+    expect(requests.filter((r) => r === '/latest-mac.yml').length).toBe(checks)
   })
 
   test('다시 시작해서 설치 — 서명 없는 개발 앱이라 Squirrel 이 거절 → 빨간 줄 · 앱은 그대로 · 오류 기록에 한 줄', async () => {
