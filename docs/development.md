@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (21단계 대화 1 — Claude · 사이드바 흐름 보기 병합 — 단위 726 · e2e 174, 다음은 22단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (22단계 대화 2 — Codex · 그림 · 되감기 · 나누기 · 대기열 병합 — 단위 785 · e2e 186, 다음은 23단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -18,7 +18,8 @@
 | 19 기록과 찾기 | main 에 병합(브랜치 `stage-19-history`). 명령 기록 ⌘Y(`<userData>/history/*.jsonl`, 가린 뒤) · 모든 출력 찾기 ⇧⌘F · ⌘P 기록 · 설정 › 개인정보 모두 지우기. 계획 · 결과 `docs/stages/19-history.md` |
 | 20 빠른 명령 · 포트 | main 에 병합(브랜치 `stage-20-quick-ports`). 빠른 명령 단추 줄(일감 · 템플릿 · 모든 일감, ⌥1~9, ⌘P) · 포트 칩(탭 · 사이드바 · ⌘P · 끄기 · 숨기기 · 겹침 막대). 계획 · 결과 `docs/stages/20-quick-ports.md` |
 | 21 대화 1 — Claude · 사이드바 | main 에 병합(브랜치 `stage-21-chat-claude`). 대화 pane(가짜 claude 로 e2e · stream-json · 허락/질문 카드 · `--resume` · 허락 방식 · ⇧⌘J 터미널 전환 · 가린 대화 기록 `<userData>/chat/*.jsonl`) + 사이드바 흐름 보기(상태 칸 · 개수 막대 · `/` 거르기 · 끌어 놓기 · 안 본 점). 계획 · 결과 `docs/stages/21-chat-claude.md` |
-| 22~25 1차 출시 | 22 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 22 대화 2 — Codex · 확장 | main 에 병합(브랜치 `stage-22-chat-codex`). Codex app-server 대화(가짜 codex 로 e2e · 같은 카드로 승인 · 로그인 없음 띠 · `thread/resume`) · 그림(📎 · ⌘V · 끌어 놓기) · 되감기 · 여기서 새 대화로 나누기(둘 다 앞 턴 끝에서 갈라진 새 세션, 파일은 그대로) · 대기열 · ⌘↩ 지금 보내기 · 여러 개 고르기. Codex 승인 · 질문 · 항목 줄은 로그인한 codex 로 **미확인**. 계획 · 결과 `docs/stages/22-chat-codex.md` |
+| 23~25 1차 출시 | 23 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -140,6 +141,16 @@
 - 사이드바 기본이 흐름 보기 — 묶음을 보는 e2e 는 `sidebarView: 'group'` 으로 띄우거나 '묶음' 단추를 누른다. 불러오기 전에는 흐름 칸을 그리지 않는다(기본 설정으로 번쩍여 재시작 시험의 locator 가 엉뚱한 칸을 잡았다).
 - 메뉴 이름이 일감 이름보다 ⌘P 순위가 높으면 palette 시험이 깨진다('일감 거르기' → '사이드바에서 거르기').
 
+### 22 대화 2 — Codex · 확장
+계획 · 결과 `docs/stages/22-chat-codex.md`(0절 스파이크 = codex-cli 0.167.1 app-server · claude 2.1.322 fork). 구조: `src/main/chat/session.ts`(`AgentSession` 겉모양) · `codex-adapter.ts`(`CodexSession`) · `src/shared/chat.ts` 의 `codexNoteToEvents` · `codexRequestToEvents` · `codexPolicy` · `rewindPlan`. 짚어 둔 함정:
+- e2e 는 `TASKMINAL_CODEX_BIN=tests/fixtures/fake-codex.mjs`(JSON-RPC 대본) · `FAKE_CODEX_LOG` · `FAKE_CODEX_NOLOGIN=1`. 그림 고르기는 `app.evaluate` 로 `dialog.showOpenDialog` 를 바꿔 시험한다.
+- app-server 줄에는 `"jsonrpc"` 칸이 없다. 로그인이 없으면 turn/start 가 401 을 15초쯤 되풀이 → 띄울 때 `account/read` 로 먼저 막는다. 스레드를 못 열면 프로세스를 떼어 낸다(남기면 threadId 없이 turn/start 만 되풀이 — 리뷰).
+- 되감기 · 나누기 anchor = Claude 는 턴의 마지막 assistant `uuid`(`--fork-session --resume-session-at`, 숨은 플래그), Codex 는 turn id(`thread/fork lastTurnId`). anchor 가 난 세션은 기록의 마지막 `session` 이벤트로 찾는다 — 한 번 갈라진 뒤 앞 턴 anchor 를 새 세션에 쓰면 못 찾는다. 앞 턴이 anchor 없이 끝났으면 되감지 않는다.
+- 창이 보낸 메시지 번호는 저장 파일과 어긋날 수 있다(파일 앞 잘림) — main 은 보낸 시각(`at`)으로 다시 찾는다.
+- 사용자 말풍선에 hover 단추를 display none 으로 넣으면 올렸다 내릴 때 목록 높이가 바뀌어 클릭이 빗나간다 → 바깥에 absolute · visibility. 말풍선 글을 보는 시험은 `chat-user-text` 를 본다(단추 글이 섞인다).
+- 같은 글의 카드가 둘이면 `.last()` 가 첫 카드를 잡은 채 기다린다 — 개수로 먼저 기다린다.
+- ⌘P '새 대화' 는 Codex 가 위(짧은 이름 점수). 대화 e2e 는 '새 대화 (Claude)' 로 고른다.
+
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
 
@@ -148,6 +159,7 @@
 - Playwright `expect.poll` 은 콜백이 throw 하면 다시 시도하지 않는다 → `?.` 로 undefined 를 돌려준다.
 - Playwright 는 페이지 포커스를 흉내 내 `document.hasFocus()` 를 못 낮춘다 · 합성 키는 네이티브 메뉴 단축키를 부르지 않는다.
 - 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인. 19단계 전체 실행 3번 중 1번 다시 나옴: 받은 화면이 `echo BACK$((1+1)) ` 뿐 — **프롬프트가 한 번도 안 그려졌다**(입력은 tty 가 되돌린 글자). 시험은 프롬프트를 기다리지 않고 친다. 지킴이 `spawn` 은 같은 paneId 의 끝나지 않은 세션이 있으면 그 세션에 붙는다(`host-core.ts` spawn 의 `old && !old.exited`) — 지운 B 의 셸(SIGHUP · 2초 뒤 SIGKILL)과 되살린 B 가 같은 `p2` 를 쓰므로 후보지만, 지우기 → 되살리기 사이가 몇 초라 확인 못 함. 다음에 볼 것: 실패 때 지킴이 `list` 로 p2 세션의 pid · killed · 시작 시각을 남기기.
+- 22단계 전체 검사에서 한 번씩 불안정: `safety.spec` '일감 지우기 → … 되살리기' 의 셸 출력 기다림 · `sidebar-flow.spec` 의 afterEach `rmSync` ENOTEMPTY. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림 · 정리를 고친다.
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
 - e2e `win.evaluate` 안에서는 `window` 대신 `globalThis`(tsconfig.node 에 DOM 이 없다).
 - 변이 목록의 `\n` 은 줄바꿈 — 코드의 글자 그대로 `\n` 은 `\\n`.
