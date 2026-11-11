@@ -11,6 +11,8 @@ class FakeServer extends EventEmitter implements ChildLike {
   got: Msg[] = []
   killed = false
   loggedIn = true
+  /** thread/resume 에 오류로 답한다 (지워진 스레드) */
+  failResume = false
   threads = 0
   stdout = new EventEmitter()
   stderr = new EventEmitter()
@@ -40,6 +42,7 @@ class FakeServer extends EventEmitter implements ChildLike {
       case 'thread/start':
       case 'thread/resume':
       case 'thread/fork':
+        if (m.method === 'thread/resume' && this.failResume) return queueMicrotask(() => this.out({ id: m.id, error: { code: -32600, message: 'thread not found' } }))
         return reply({ thread: { id: m.method === 'thread/resume' ? m.params!['threadId'] : `thr-${++this.threads}`, model: 'gpt-fake' } })
       case 'turn/start':
         return reply({ turn: { id: `turn-${this.got.filter((x) => x.method === 'turn/start').length}`, status: 'inProgress' } })
@@ -57,7 +60,7 @@ class FakeServer extends EventEmitter implements ChildLike {
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean } = {}) {
+function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean } = {}) {
   const servers: FakeServer[] = []
   const events: ChatEvent[] = []
   const saved: string[] = []
@@ -72,6 +75,7 @@ function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean } = 
       expect(args).toEqual(['app-server'])
       const c = new FakeServer()
       if (o.loggedIn === false) c.loggedIn = false
+      if (o.failResume) c.failResume = true
       servers.push(c)
       return c
     },
@@ -268,5 +272,27 @@ describe('CodexSession', () => {
     s.send('y')
     await tick()
     expect(servers[0]!.got.filter((m) => m.method === 'turn/start').at(-1)!.params).toMatchObject({ approvalPolicy: 'never' })
+  })
+
+  it('리뷰: 스레드를 못 열면(이어 할 스레드가 없음) 오류 · 프로세스를 떼어 내고 다음 보내기가 처음부터 다시', async () => {
+    const { s, servers, events } = setup({ sessionId: 'gone', failResume: true })
+    s.send('x')
+    for (let i = 0; i < 6; i++) await tick()
+    expect(events.at(-1)).toMatchObject({ t: 'error', kind: 'other', message: 'thread not found' })
+    expect(servers[0]!.killed).toBe(true)
+    expect(servers[0]!.sentMethods()).not.toContain('turn/start')
+    expect(s.busy).toBe(false)
+    s.send('y')
+    for (let i = 0; i < 6; i++) await tick()
+    expect(servers).toHaveLength(2) // 새로 띄워 initialize 부터
+    expect(servers[1]!.sentMethods()[0]).toBe('initialize')
+  })
+  it('리뷰: 턴 id 를 받기 전에 누른 멈춤은 턴 id 를 받으면 보낸다', async () => {
+    const { s, servers } = setup()
+    s.send('x')
+    expect(s.interrupt()).toBe(true) // 아직 띄우는 중
+    for (let i = 0; i < 6; i++) await tick()
+    expect(servers[0]!.got.at(-1)).toMatchObject({ method: 'turn/interrupt', params: { threadId: 'thr-1', turnId: 'turn-1' } })
+    expect(servers[0]!.sentMethods().filter((m) => m === 'turn/interrupt')).toHaveLength(1)
   })
 })

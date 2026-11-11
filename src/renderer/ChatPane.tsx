@@ -38,7 +38,7 @@ interface Props {
   onOpenLogin(): void
   onActivity(ev: ActivityEvent): void
   /** 되감기 뒤 — 다음 보내기가 forkAt 에서 갈라지게 상태에 남긴다 (null = 새 세션) */
-  onRewound(forkAt: string | null): void
+  onRewound(forkAt: string | null, sessionId?: string): void
   /** ⑂ 여기서 새 대화로 나누기 */
   onBranch(index: number, at: number): void
   onToast(text: string, sub?: string): void
@@ -177,12 +177,23 @@ export function ChatPane(p: Props) {
     setHint(null)
     cb.current.onActivity({ type: 'command', text: item.text.split('\n')[0]!.slice(0, 200) })
     cb.current.onActivity({ type: 'start' })
-    const r = await window.taskminal.chat.send(p.paneId, item.text, p.cwd, cb.current.chat, item.images).catch(() => 'busy' as const)
+    const r = await window.taskminal.chat.send(p.paneId, item.text, p.cwd, cb.current.chat, item.images).catch(() => 'rejected' as const)
     if (r === 'busy') {
       setQueue((q) => [item, ...q])
       setHint('끝나면 보낼게요 · 대기열에 넣었어요')
+    } else if (r === 'rejected') {
+      // main 이 거절했다(붙일 수 없는 그림 등) — 끝 이벤트가 오지 않으니 대기열에 두면 영영 안 간다(리뷰). 입력창에 되돌린다
+      cb.current.onActivity({ type: 'end', code: null }) // 위에서 연 '시작' 을 닫는다
+      lastSent.current = null
+      setText((t) => (t ? `${item.text}\n${t}` : item.text))
+      setImages([])
+      setHint('보내지 못했어요 · 그림을 빼고 다시 보내 주세요')
     }
   }
+  // 대기열을 손으로 비웠으면 멈춤도 푼다 — 남겨 두면 다음 대기열이 저절로 가지 않는다(리뷰)
+  useEffect(() => {
+    if (queue.length === 0) setQueuePaused(false)
+  }, [queue.length])
 
   // 대기열: 턴이 잘 끝나면 다음 것을 저절로, 실패 · 멈춤이면 멈춰 둔다. ⌘↩ 은 멈춤을 받은 뒤 보낸다
   useEffect(() => {
@@ -338,7 +349,7 @@ export function ChatPane(p: Props) {
     handledEnd.current = r.events.length - 1
     setEvents(r.events.filter(isChatEvent))
     lastSent.current = null
-    cb.current.onRewound(r.forkAt)
+    cb.current.onRewound(r.forkAt, r.sessionId)
     if (r.refill !== null) setText((t) => t || r.refill!)
     else if (r.masked) setHint('가린 글이 있어 입력창에 다시 넣지 않았어요')
     inputRef.current?.focus()
@@ -428,6 +439,8 @@ export function ChatPane(p: Props) {
     switch (b.kind) {
       case 'user': {
         const canBranch = !running && rewindPlan(events, b.index, 'branch') !== null
+        // 앞 턴이 멈춤 · 실패로 끝났으면 되감을 자리가 없다 — 단추를 숨긴다
+        const canRewind = !running && rewindPlan(events, b.index, 'rewind') !== null
         return (
           <div key={b.key} className="chat-user" data-testid="chat-block" data-kind="user">
             <span data-testid="chat-user-text">{b.text}</span>
@@ -440,11 +453,13 @@ export function ChatPane(p: Props) {
                 ))}
               </div>
             )}
-            {!running && (
+            {(canRewind || canBranch) && (
               <span className="chat-user-actions">
-                <button type="button" data-testid="chat-rewind" onClick={() => askRewind(b)} title="이 메시지 앞으로 대화를 되돌려요 · 파일은 그대로">
-                  ↶ 여기로 되감기
-                </button>
+                {canRewind && (
+                  <button type="button" data-testid="chat-rewind" onClick={() => askRewind(b)} title="이 메시지 앞으로 대화를 되돌려요 · 파일은 그대로">
+                    ↶ 여기로 되감기
+                  </button>
+                )}
                 {canBranch && (
                   <button type="button" data-testid="chat-branch" onClick={() => p.onBranch(b.index, b.at)} title="이 메시지의 답까지 가진 새 대화를 오른쪽에">
                     ⑂ 여기서 새 대화로 나누기

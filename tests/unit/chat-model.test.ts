@@ -93,6 +93,7 @@ describe('대화 pane 모델', () => {
     expect(chatOf(chatRewound(t, pid, null), pid)).toEqual({ agent: 'codex' })
     expect(chatOf(setChatSession(r, pid, 'th-1'), pid)).toEqual({ agent: 'codex', sessionId: 'th-1' }) // 같은 id 여도 forkAt 은 지운다
     expect(chatRewound(t, t.tabs[0]!.activePaneId, 'x')).toBe(t) // 터미널 pane 은 그대로
+    expect(chatOf(chatRewound(t, pid, 'turn-0', 'th-0'), pid)).toEqual({ agent: 'codex', sessionId: 'th-0', forkAt: 'turn-0' }) // 리뷰: anchor 가 난 옛 세션
   })
   it('branchChat: 오른쪽에 같은 에이전트 · 같은 세션 + forkAt, 세션이 없으면 그대로', () => {
     const c = addChatTab(task(), ids(), 'codex')
@@ -105,6 +106,7 @@ describe('대화 pane 모델', () => {
     const tab = b.tabs.at(-1)!
     expect(tab.layout).toMatchObject({ type: 'split', dir: 'right', a: { paneId: pid }, b: { paneId: 'np' } })
     expect(tab.activePaneId).toBe('np')
+    expect(branchChat(t, pid, 'np2', 'turn-0', 'th-0').panes['np2']).toMatchObject({ chat: { sessionId: 'th-0', forkAt: 'turn-0' } })
   })
   it('chatToTerminal: codex 는 `codex resume <id>` · 아직 안 보낸 되감기면 옛 세션 대신 새로', () => {
     const c = addChatTab(task(), ids(), 'codex')

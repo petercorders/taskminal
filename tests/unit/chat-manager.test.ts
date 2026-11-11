@@ -143,15 +143,32 @@ describe('ChatManager — 되감기 · 나누기 (22단계)', () => {
   it('되감기: 그 메시지 앞까지 잘라 쓰고 앞 턴 anchor · 되감은 글', async () => {
     const t = setup(true, saved)
     const r = await t.m.rewind('p1', 3, 2, { agent: 'claude', sessionId: 's1' })
-    expect(r).toMatchObject({ forkAt: 'u1', refill: '둘', masked: false })
+    expect(r).toMatchObject({ forkAt: 'u1', sessionId: 's1', refill: '둘', masked: false })
     expect(r!.events).toHaveLength(3)
     expect(t.replaced).toEqual([{ p: 'p1', ev: saved.slice(0, 3) }])
   })
-  it('확인 띠가 열린 사이 기록이 바뀌었으면(자리 · 시각이 다르면) 버린다', async () => {
+  it('확인 띠가 열린 사이 그 메시지가 사라졌으면(시각이 없으면) 버린다', async () => {
     const t = setup(true, saved)
     expect(await t.m.rewind('p1', 3, 99, { agent: 'claude' })).toBeNull()
-    expect(await t.m.rewind('p1', 4, 2, { agent: 'claude' })).toBeNull()
     expect(t.replaced).toEqual([])
+  })
+  it('리뷰: 저장 파일 앞이 잘려 창의 번호가 어긋나도 보낸 시각으로 찾는다', async () => {
+    const t = setup(true, saved)
+    expect(await t.m.rewind('p1', 40, 2, { agent: 'claude' })).toMatchObject({ forkAt: 'u1', refill: '둘' })
+    expect(t.replaced).toEqual([{ p: 'p1', ev: saved.slice(0, 3) }])
+    expect(await t.m.branch('p1', 'p2', 0, 1)).toEqual({ forkAt: 'u1', sessionId: 's1' })
+  })
+  it('리뷰: 기록을 읽는 사이 보내기가 시작되면 되감지 않는다(그 턴을 잘라 내지 않게)', async () => {
+    const t = setup(true, saved)
+    t.release()
+    const r = t.m.rewind('p1', 3, 2, { agent: 'claude', sessionId: 's1' })
+    void t.m.send(t.sink, 'p1', '끼어든 글', '/tmp', { agent: 'claude' })
+    expect(await r).toBeNull()
+    expect(t.replaced).toEqual([])
+  })
+  it('리뷰: 한 번 갈라진 뒤 앞 턴으로 되감으면 그 anchor 가 난 옛 세션에서 가른다', async () => {
+    const t = setup(true, [...saved, { t: 'session', id: 's2' }, { t: 'user', text: '셋', at: 3 }, { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'v1' }])
+    expect(await t.m.rewind('p1', 3, 2, { agent: 'claude', sessionId: 's2' })).toMatchObject({ forkAt: 'u1', sessionId: 's1' })
   })
   it('도는 중에는 되감지 않는다', async () => {
     const t = setup(true, saved)
@@ -161,7 +178,7 @@ describe('ChatManager — 되감기 · 나누기 (22단계)', () => {
   })
   it('나누기: 그 턴 끝까지를 새 pane 기록으로 · 그 턴 anchor', async () => {
     const t = setup(true, saved)
-    expect(await t.m.branch('p1', 'p2', 1, 1)).toEqual({ forkAt: 'u1' })
+    expect(await t.m.branch('p1', 'p2', 1, 1)).toEqual({ forkAt: 'u1', sessionId: 's1' })
     expect(t.replaced).toEqual([{ p: 'p2', ev: saved.slice(0, 3) }])
     expect(await t.m.branch('p1', 'p3', 1, 5)).toBeNull()
   })

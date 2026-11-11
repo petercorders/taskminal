@@ -377,16 +377,17 @@ export function setChatSession(task: Task, paneId: Id, sessionId: string): Task 
  * 되감기 뒤 (22단계): 다음 보내기가 forkAt 에서 갈라진 세션으로 — 앱을 껐다 켜도 잃지 않게 상태에 남긴다.
  * forkAt = null 이면 갈라질 앞 턴이 없다 → 세션을 지워 새로 시작.
  */
-export function chatRewound(task: Task, paneId: Id, forkAt: string | null): Task {
+export function chatRewound(task: Task, paneId: Id, forkAt: string | null, sessionId?: string): Task {
   const p = task.panes[paneId]
   if (!p || p.kind !== 'chat') return task
   const agent = p.chat?.agent ?? 'claude'
-  const chat = forkAt && p.chat?.sessionId ? { agent, sessionId: p.chat.sessionId, forkAt } : { agent }
+  const sid = sessionId ?? p.chat?.sessionId // anchor 가 난 세션 (한 번 갈라진 뒤 앞 턴이면 옛 세션)
+  const chat = forkAt && sid ? { agent, sessionId: sid, forkAt } : { agent }
   return { ...task, panes: { ...task.panes, [paneId]: { ...p, chat } } }
 }
 
 /** 나누기 (22단계): 그 대화 pane 오른쪽에 같은 에이전트의 새 대화 pane — 다음 보내기가 forkAt 에서 갈라진다 */
-export function branchChat(task: Task, paneId: Id, newPaneId: Id, forkAt: string): Task {
+export function branchChat(task: Task, paneId: Id, newPaneId: Id, forkAt: string, sessionId?: string): Task {
   const p = task.panes[paneId]
   const tab = task.tabs.find((t) => hasPane(t.layout, paneId))
   if (!p || p.kind !== 'chat' || !p.chat?.sessionId || !tab) return task
@@ -394,7 +395,7 @@ export function branchChat(task: Task, paneId: Id, newPaneId: Id, forkAt: string
   const next = splitActivePaneChat(focused, 'right', () => newPaneId, p.chat.agent)
   if (next === focused) return task
   const np = next.panes[newPaneId]!
-  return { ...next, panes: { ...next.panes, [newPaneId]: { ...np, chat: { agent: p.chat.agent, sessionId: p.chat.sessionId, forkAt } } } }
+  return { ...next, panes: { ...next.panes, [newPaneId]: { ...np, chat: { agent: p.chat.agent, sessionId: sessionId ?? p.chat.sessionId, forkAt } } } }
 }
 
 function swapPaneId(layout: Layout, from: Id, to: Id): Layout {

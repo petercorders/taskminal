@@ -7,7 +7,7 @@ import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
 import { keepIfSame, taskDirs, type Branches } from '../shared/git'
-import { createTask, dropQuick, emptyState, findPaneTask, findQuick, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
+import { branchChat, createTask, dropQuick, emptyState, findPaneTask, findQuick, resolveCwd, tabLabel, tabToTemplate, taskToTemplate, templateIdCount, type QuickScope } from '../shared/model'
 import { advanceRun, closeRun, decideRun, quickButtons, quickStatus, WHERE_LABEL, type QuickButton, type QuickCommand, type QuickRun, type QuickSource } from '../shared/quick'
 import { portConflict, type PortChip } from '../shared/ports'
 import type { BackupMark, LoadedState } from '../shared/ipc'
@@ -1036,10 +1036,21 @@ export function App() {
   /** 나누기 (22단계) — main 이 그 턴까지의 기록을 새 pane 으로 쓴 뒤에 pane 을 만든다(마운트가 기록을 읽는다) */
   const chatBranch = async (paneId: string, index: number, at: number) => {
     const to = newId()
+    // 나눌 수 없으면(칸이 좁음 · 아직 세션 없음) main 이 새 기록 파일을 쓰기 전에 멈춘다 — 남는 파일이 없게(리뷰)
+    const canSplit = () => {
+      const s = stateRef.current
+      const tid = findPaneTask(s, paneId)
+      const t = tid ? s.tasks.find((x) => x.id === tid) : undefined
+      return t !== undefined && branchChat(t, paneId, to, 'probe') !== t
+    }
+    if (!canSplit()) return showToast({ text: '여기서 나누지 못했어요.', sub: '칸이 좁거나 아직 보낸 적 없는 대화예요.' })
     const r = await window.taskminal.chat.branch(paneId, to, index, at).catch(() => null)
     if (!r) return showToast({ text: '여기서 나누지 못했어요.', sub: '그 사이 대화가 바뀌었거나 아직 끝나지 않은 턴이에요.' })
-    if (!isChatPane(paneId)) return // 기다리는 사이 pane 이 닫혔다
-    dispatch({ type: 'chat/branch', paneId, newPaneId: to, forkAt: r.forkAt })
+    if (!isChatPane(paneId) || !canSplit()) {
+      window.taskminal.chat.close(to, true) // 기다리는 사이 pane 이 닫혔다 · 좁아졌다 — 써 둔 기록을 지운다
+      return
+    }
+    dispatch({ type: 'chat/branch', paneId, newPaneId: to, forkAt: r.forkAt, ...(r.sessionId ? { sessionId: r.sessionId } : {}) })
   }
   const chatProps = {
     permission: state.settings.chatPermission,
@@ -1047,7 +1058,7 @@ export function App() {
     onSession: (paneId: string, sessionId: string) => dispatch({ type: 'chat/session', paneId, sessionId }),
     onToTerminal: chatToTerminalPane,
     onOpenLogin: chatLogin,
-    onRewound: (paneId: string, forkAt: string | null) => dispatch({ type: 'chat/rewound', paneId, forkAt }),
+    onRewound: (paneId: string, forkAt: string | null, sessionId?: string) => dispatch({ type: 'chat/rewound', paneId, forkAt, ...(sessionId ? { sessionId } : {}) }),
     onBranch: (paneId: string, index: number, at: number) => void chatBranch(paneId, index, at),
     onToast: (text: string, sub?: string) => showToast({ text, ...(sub ? { sub } : {}) }),
   }

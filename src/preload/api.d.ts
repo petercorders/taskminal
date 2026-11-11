@@ -125,9 +125,9 @@ export interface ChatApi {
     index: number,
     at: number,
     chat: ChatRefT,
-  ): Promise<{ events: import('../shared/chat').ChatEvent[]; upTo: number; forkAt: string | null; refill: string | null; masked: boolean } | null>
+  ): Promise<{ events: import('../shared/chat').ChatEvent[]; upTo: number; forkAt: string | null; sessionId?: string; refill: string | null; masked: boolean } | null>
   /** 나누기 (22단계) — 그 메시지의 턴까지를 새 pane 기록으로 */
-  branch(fromPaneId: string, toPaneId: string, index: number, at: number): Promise<{ forkAt: string } | null>
+  branch(fromPaneId: string, toPaneId: string, index: number, at: number): Promise<{ forkAt: string; sessionId?: string } | null>
   /** 📎 그림 고르기 — main 이 읽어 돌려준다. 크기 · 종류가 맞지 않으면 skipped */
   pickImages(): Promise<{ images: import('../shared/chat').ChatImage[]; skipped: string[] }>
   /** 허락 · 질문 답 — 같은 요청에 두 번이면 main 이 버린다 */

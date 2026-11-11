@@ -430,8 +430,8 @@ export interface ChatImage {
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 export const IMAGE_MAX_BYTES = 5 * 1024 * 1024
 export const IMAGE_MAX_COUNT = 4
-/** base64 길이로 잰 크기 */
-export const imageBytes = (data: string): number => Math.floor((data.length * 3) / 4)
+/** base64 길이로 잰 크기 — 끝의 '=' 는 바이트가 아니다(5MB 꼭 맞는 그림을 renderer 는 받고 main 이 거절하지 않게) */
+export const imageBytes = (data: string): number => Math.floor((data.length * 3) / 4) - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0)
 export function isChatImages(v: unknown): v is ChatImage[] {
   return (
     Array.isArray(v) &&
@@ -578,6 +578,8 @@ export interface RewindPlan {
   keep: number
   /** 갈라질 자리(턴 끝 anchor). null = 갈라질 앞 턴이 없다 → 새 세션 */
   forkAt: string | null
+  /** 그 anchor 가 난 세션 — 한 번 되감은 뒤엔 앞 턴들의 anchor 가 지금 세션이 아니라 옛 세션의 것이다 */
+  sessionId?: string
   /** 되감기: 입력창에 다시 넣을 글. 가린 글이면 null + masked */
   refill: string | null
   /** 사라질 메시지 수 (내 글 + 답 글) */
@@ -588,7 +590,8 @@ export interface RewindPlan {
 /**
  * 되감기(rewind): 그 메시지 앞까지 남기고, 앞 턴 끝에서 가른다 — 되감은 글은 입력창에.
  * 나누기(branch): 그 메시지의 턴 끝까지 남기고, 그 턴 끝에서 가른다 — 턴이 아직 안 끝났으면 null.
- * index 자리가 사용자 메시지가 아니면 null.
+ * index 자리가 사용자 메시지가 아니면 null. 바로 앞 턴이 anchor 없이 끝났으면(멈춤 · 갑자기 끝남 · 22단계 전 기록) 되감기도 null —
+ * 더 앞 턴에서 가르면 남긴 기록과 에이전트의 기억이 어긋난다.
  */
 export function rewindPlan(events: readonly ChatEvent[], index: number, mode: 'rewind' | 'branch'): RewindPlan | null {
   const target = events[index]
@@ -597,21 +600,35 @@ export function rewindPlan(events: readonly ChatEvent[], index: number, mode: 'r
     for (let i = index + 1; i < events.length; i++) {
       const e = events[i]!
       if (e.t === 'user') return null
-      if (e.t === 'turn_end') return e.anchor ? { keep: i + 1, forkAt: e.anchor, refill: null, removed: 0 } : null
+      if (e.t === 'turn_end') return e.anchor ? { keep: i + 1, forkAt: e.anchor, refill: null, removed: 0, ...sessionAt(events, i) } : null
     }
     return null
   }
   let forkAt: string | null = null
+  let from = -1
   for (let i = index - 1; i >= 0; i--) {
     const e = events[i]!
-    if (e.t === 'turn_end' && e.anchor) {
+    if (e.t === 'user') return null // 앞 턴이 턴 끝 없이 끝났다
+    if (e.t === 'turn_end') {
+      if (!e.anchor) return null
       forkAt = e.anchor
+      from = i
       break
     }
   }
+  const sid = from >= 0 ? sessionAt(events, from) : {}
   const removed = events.slice(index).filter((e) => e.t === 'user' || e.t === 'text').length
-  if (hasMask(target.text)) return { keep: index, forkAt, refill: null, removed, masked: true }
-  return { keep: index, forkAt, refill: target.text, removed }
+  if (hasMask(target.text)) return { keep: index, forkAt, refill: null, removed, masked: true, ...sid }
+  return { keep: index, forkAt, refill: target.text, removed, ...sid }
+}
+
+/** i 자리 앞에서 마지막으로 뜬 세션 id */
+function sessionAt(events: readonly ChatEvent[], i: number): { sessionId?: string } {
+  for (let j = i; j >= 0; j--) {
+    const e = events[j]!
+    if (e.t === 'session') return { sessionId: e.id }
+  }
+  return {}
 }
 export function claudeControlLine(requestId: string, request: Obj): string {
   return JSON.stringify({ type: 'control_request', request_id: requestId, request })

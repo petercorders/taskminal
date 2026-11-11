@@ -100,8 +100,8 @@ export type Action =
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
   | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent }
   | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent }
-  | { type: 'chat/rewound'; paneId: Id; forkAt: string | null }
-  | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string }
+  | { type: 'chat/rewound'; paneId: Id; forkAt: string | null; sessionId?: string }
+  | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string; sessionId?: string }
   | { type: 'chat/session'; paneId: Id; sessionId: string }
   | { type: 'chat/to-terminal'; paneId: Id; newPaneId: Id; bin: string }
 
@@ -236,11 +236,11 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId, action.agent))
     case 'chat/rewound': {
       const taskId = findPaneTask(state, action.paneId)
-      return taskId ? updateTask(state, taskId, (t) => chatRewound(t, action.paneId, action.forkAt)) : state
+      return taskId ? updateTask(state, taskId, (t) => chatRewound(t, action.paneId, action.forkAt, action.sessionId)) : state
     }
     case 'chat/branch': {
       const taskId = findPaneTask(state, action.paneId)
-      return taskId ? updateTask(state, taskId, (t) => branchChat(t, action.paneId, action.newPaneId, action.forkAt)) : state
+      return taskId ? updateTask(state, taskId, (t) => branchChat(t, action.paneId, action.newPaneId, action.forkAt, action.sessionId)) : state
     }
     case 'chat/session': {
       const taskId = findPaneTask(state, action.paneId)

@@ -37,6 +37,8 @@ export interface RewindResult {
   events: ChatEvent[]
   upTo: number
   forkAt: string | null
+  /** 갈라질 세션 (forkAt 이 난 세션) */
+  sessionId?: string
   refill: string | null
   masked: boolean
 }
@@ -140,28 +142,31 @@ export class ChatManager {
    * index · at 으로 같은 메시지인지 다시 본다 — 확인 띠가 열린 사이 기록이 바뀌었으면 null(버림). 도는 중이면 null.
    */
   async rewind(paneId: string, index: number, at: number, chat: ChatRef): Promise<RewindResult | null> {
-    const e = this.panes.get(paneId)
-    if (this.starting.has(paneId) || e?.s.busy) return null
+    const busy = () => this.starting.has(paneId) || this.panes.get(paneId)?.s.busy === true
+    if (busy()) return null
     const events = await this.d.store.read(paneId)
-    const target = events[index]
-    if (!target || target.t !== 'user' || target.at !== at) return null
-    const plan = rewindPlan(events, index, 'rewind')
+    // 읽는 사이 보내기가 시작됐으면 그 턴을 잘라 내지 않게 다시 본다
+    if (busy()) return null
+    const i = userIndex(events, index, at)
+    if (i < 0) return null
+    const plan = rewindPlan(events, i, 'rewind')
     if (!plan) return null
     const kept = events.slice(0, plan.keep)
     await this.d.store.replace(paneId, kept)
-    e?.s.fork(chat.sessionId, plan.forkAt)
-    return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, refill: plan.refill, masked: plan.masked === true }
+    const sessionId = plan.forkAt ? (plan.sessionId ?? chat.sessionId) : undefined
+    this.panes.get(paneId)?.s.fork(sessionId, plan.forkAt)
+    return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, ...(sessionId ? { sessionId } : {}), refill: plan.refill, masked: plan.masked === true }
   }
 
   /** 나누기 (22단계): 그 메시지의 턴 끝까지를 새 pane 의 기록으로. 갈라질 자리(anchor)를 돌려준다 · 자리가 맞지 않으면 null */
-  async branch(from: string, to: string, index: number, at: number): Promise<{ forkAt: string } | null> {
+  async branch(from: string, to: string, index: number, at: number): Promise<{ forkAt: string; sessionId?: string } | null> {
     const events = await this.d.store.read(from)
-    const target = events[index]
-    if (!target || target.t !== 'user' || target.at !== at) return null
-    const plan = rewindPlan(events, index, 'branch')
+    const i = userIndex(events, index, at)
+    if (i < 0) return null
+    const plan = rewindPlan(events, i, 'branch')
     if (!plan || !plan.forkAt) return null
     await this.d.store.replace(to, events.slice(0, plan.keep))
-    return { forkAt: plan.forkAt }
+    return { forkAt: plan.forkAt, ...(plan.sessionId ? { sessionId: plan.sessionId } : {}) }
   }
 
   answer(paneId: string, requestId: string, d: Decision): boolean {
@@ -218,4 +223,14 @@ export class ChatManager {
   get size(): number {
     return this.panes.size
   }
+}
+
+/**
+ * 창이 고른 사용자 메시지의 저장 파일 속 자리. 창의 번호를 먼저 보고, 다르면 보낸 시각으로 찾는다 —
+ * 저장 파일은 커지면 앞을 잘라 내 창이 가진 번호와 어긋난다(리뷰).
+ */
+function userIndex(events: readonly ChatEvent[], index: number, at: number): number {
+  const hit = (e: ChatEvent | undefined) => e !== undefined && e.t === 'user' && e.at === at
+  if (hit(events[index])) return index
+  return events.findIndex(hit)
 }

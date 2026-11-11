@@ -63,6 +63,8 @@ export class CodexSession implements AgentSession {
   private turnId: string | undefined
   private ctxPct: number | undefined
   private images = 0
+  /** turn/start 답(턴 id)이 오기 전에 누른 멈춤 — 턴 id 를 받으면 바로 보낸다 */
+  private interruptWanted = false
   busy = false
   private stopping = false
 
@@ -202,6 +204,7 @@ export class CodexSession implements AgentSession {
     if (this.busy) return false
     this.busy = true
     this.stopping = false
+    this.interruptWanted = false
     void this.run(text, images)
     return true
   }
@@ -242,10 +245,16 @@ export class CodexSession implements AgentSession {
       const r = await this.call('turn/start', { threadId: this.threadId, input, approvalPolicy: codexPolicy(this.o.permission).approvalPolicy })
       if (gen !== this.gen) return
       const turn = isObj(r['turn']) ? r['turn'] : {}
-      if (typeof turn['id'] === 'string' && this.busy) this.turnId = turn['id']
+      if (typeof turn['id'] === 'string' && this.busy) {
+        this.turnId = turn['id']
+        if (this.interruptWanted) this.interrupt()
+      }
     } catch (e) {
       if (gen !== this.gen || !this.busy) return // 프로세스가 끝났다 — ended 가 알렸다
       this.busy = false
+      this.interruptWanted = false
+      // 스레드를 못 열었으면 프로세스를 떼어 낸다 — 남겨 두면 다음 보내기가 준비를 건너뛰고 스레드 없이 turn/start 를 보낸다(리뷰)
+      if (!this.threadId) this.detach()
       this.o.onEvent({ t: 'error', kind: 'other', message: e instanceof Error ? e.message.slice(0, 300) : 'codex 오류' })
     }
   }
@@ -281,8 +290,13 @@ export class CodexSession implements AgentSession {
   }
 
   interrupt(): boolean {
-    if (!this.child || !this.busy || !this.threadId || !this.turnId) return false
+    if (!this.busy) return false
     this.stopping = true
+    if (!this.child || !this.threadId || !this.turnId) {
+      this.interruptWanted = true // 아직 띄우는 중 · 턴 id 를 못 받음 — 받으면 멈춘다(리뷰)
+      return true
+    }
+    this.interruptWanted = false
     void this.call('turn/interrupt', { threadId: this.threadId, turnId: this.turnId }).catch(() => {})
     return true
   }
@@ -305,6 +319,7 @@ export class CodexSession implements AgentSession {
     this.gen++
     this.busy = false
     this.stopping = false
+    this.interruptWanted = false
     this.turnId = undefined
     this.threadId = undefined
     this.pending.clear()

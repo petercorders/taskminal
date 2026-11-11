@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { codexNoteToEvents, codexPolicy, codexRequestToEvents, foldBlocks, rewindPlan, type ChatEvent } from '../../src/shared/chat'
+import { codexNoteToEvents, codexPolicy, codexRequestToEvents, foldBlocks, imageBytes, IMAGE_MAX_BYTES, isChatImages, rewindPlan, type ChatEvent } from '../../src/shared/chat'
 
 const CWD = '/tmp/work'
 interface Line {
@@ -116,7 +116,7 @@ describe('rewindPlan — 되감기 · 나누기', () => {
     { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'a3' },
   ]
   it('되감기: 그 메시지 앞까지 남기고 앞 턴의 anchor 에서 갈라진다 · 글을 입력창에', () => {
-    expect(rewindPlan(ev, 4, 'rewind')).toEqual({ keep: 4, forkAt: 'a1', refill: '둘째 글', removed: 4 })
+    expect(rewindPlan(ev, 4, 'rewind')).toEqual({ keep: 4, forkAt: 'a1', refill: '둘째 글', removed: 4, sessionId: 's1' })
   })
   it('첫 메시지로 되감으면 갈라질 곳이 없다(새 세션) · 세션 이벤트는 남긴다', () => {
     expect(rewindPlan(ev, 1, 'rewind')).toEqual({ keep: 1, forkAt: null, refill: '첫 글', removed: 6 })
@@ -125,7 +125,7 @@ describe('rewindPlan — 되감기 · 나누기', () => {
     expect(rewindPlan(ev, 7, 'rewind')).toMatchObject({ keep: 7, forkAt: 'a2', refill: null, masked: true })
   })
   it('나누기: 그 메시지의 턴 끝까지 남기고 그 턴의 anchor 에서 갈라진다', () => {
-    expect(rewindPlan(ev, 4, 'branch')).toEqual({ keep: 7, forkAt: 'a2', refill: null, removed: 0 })
+    expect(rewindPlan(ev, 4, 'branch')).toEqual({ keep: 7, forkAt: 'a2', refill: null, removed: 0, sessionId: 's1' })
   })
   it('사용자 메시지가 아닌 자리 · 끝나지 않은 턴의 나누기는 null', () => {
     expect(rewindPlan(ev, 2, 'rewind')).toBeNull()
@@ -136,11 +136,34 @@ describe('rewindPlan — 되감기 · 나누기', () => {
     const cut: ChatEvent[] = [{ t: 'user', text: '하나', at: 1 }, { t: 'stopped' }, { t: 'user', text: '둘', at: 2 }, { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'a2' }]
     expect(rewindPlan(cut, 0, 'branch')).toBeNull()
   })
+  it('리뷰: 앞 턴이 anchor 없이 끝났으면(멈춤 · 22단계 전 기록) 더 앞에서 가르지 않고 null', () => {
+    const stopped: ChatEvent[] = [...ev.slice(0, 4), { t: 'user', text: '멈춘 글', at: 9 }, { t: 'stopped' }, { t: 'user', text: '다음', at: 10 }]
+    expect(rewindPlan(stopped, 6, 'rewind')).toBeNull()
+    const old: ChatEvent[] = [{ t: 'user', text: '옛', at: 1 }, { t: 'turn_end', ok: true, ms: 1, reason: 'completed' }, { t: 'user', text: '둘', at: 2 }]
+    expect(rewindPlan(old, 2, 'rewind')).toBeNull()
+    expect(rewindPlan(old, 0, 'rewind')).toMatchObject({ keep: 0, forkAt: null }) // 첫 메시지는 새 세션으로 되감을 수 있다
+  })
+  it('리뷰: 갈라진 뒤 앞 턴의 anchor 는 그 anchor 가 난 옛 세션 id 와 함께', () => {
+    const forked: ChatEvent[] = [...ev.slice(0, 4), { t: 'session', id: 's2' }, { t: 'user', text: '갈래 글', at: 5 }, { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'b1' }, { t: 'user', text: '셋', at: 6 }]
+    expect(rewindPlan(forked, 7, 'rewind')).toMatchObject({ forkAt: 'b1', sessionId: 's2' })
+    expect(rewindPlan(forked, 1, 'branch')).toMatchObject({ forkAt: 'a1', sessionId: 's1' })
+  })
 })
 
 describe('foldBlocks — 22단계 더함', () => {
   it('사용자 블록에 이미지 이름 · 이벤트 자리(index)', () => {
     const b = foldBlocks([{ t: 'user', text: '봐 줘', at: 1, images: ['shot.png'] }])
     expect(b[0]).toMatchObject({ kind: 'user', text: '봐 줘', images: ['shot.png'], index: 0, at: 1 })
+  })
+})
+
+describe('그림 크기 (리뷰)', () => {
+  it('base64 끝의 = 는 바이트가 아니다 — 5MB 꼭 맞는 그림은 받는다', () => {
+    const b64 = (n: number) => Buffer.alloc(n).toString('base64')
+    expect(imageBytes(b64(1))).toBe(1)
+    expect(imageBytes(b64(2))).toBe(2)
+    expect(imageBytes(b64(3))).toBe(3)
+    expect(isChatImages([{ name: 'a.png', mime: 'image/png', data: b64(IMAGE_MAX_BYTES) }])).toBe(true)
+    expect(isChatImages([{ name: 'a.png', mime: 'image/png', data: b64(IMAGE_MAX_BYTES + 1) }])).toBe(false)
   })
 })

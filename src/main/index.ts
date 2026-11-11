@@ -2,6 +2,7 @@ import { app, BrowserWindow, crashReporter, dialog, ipcMain, shell, type IpcMain
 import { autoUpdater, type ProgressInfo } from 'electron-updater'
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
 import { homedir, hostname } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
@@ -690,8 +691,9 @@ if (!app.requestSingleInstanceLock()) {
       const name = basename(f)
       const mime = mimeOf[name.split('.').pop()?.toLowerCase() ?? '']
       try {
-        if (!mime || images.length >= IMAGE_MAX_COUNT || statSync(f).size > IMAGE_MAX_BYTES) throw new Error('skip')
-        images.push({ name, mime, data: readFileSync(f).toString('base64') })
+        // 4 × 5MB 까지 — main 을 막지 않게 비동기로 읽는다(리뷰)
+        if (!mime || images.length >= IMAGE_MAX_COUNT || (await stat(f)).size > IMAGE_MAX_BYTES) throw new Error('skip')
+        images.push({ name, mime, data: (await readFile(f)).toString('base64') })
       } catch {
         skipped.push(name)
       }
