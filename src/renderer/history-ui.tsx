@@ -4,7 +4,7 @@ import { formatDuration, type PaneActivity } from '../shared/activity'
 import { isDangerous } from '../shared/danger'
 import { filterHistory, groupByDay, hasMask, HISTORY_SCOPE_LABEL, HISTORY_SCOPES, isFailed, type HistoryEntry, type HistoryScope } from '../shared/history'
 import { hasPane } from '../shared/layout'
-import { tabLabel } from '../shared/model'
+import { tabShownLabel } from '../shared/model'
 import type { Task } from '../shared/types'
 import type { HistoryView } from './history-state'
 import { integratedPanes } from './runtime'
@@ -44,7 +44,7 @@ const when = (t: number) => {
 
 function paneLabel(task: Task | undefined, paneId: string): string {
   const tab = task?.tabs.find((t) => hasPane(t.layout, paneId))
-  return task && tab ? tabLabel(task, tab) : ''
+  return task && tab ? tabShownLabel(task, tab) : ''
 }
 
 /** 다음 범위 (⌥R) */

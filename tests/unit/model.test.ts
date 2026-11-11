@@ -26,6 +26,7 @@ import {
   setPaneCwd,
   tabLabel,
   tabLabels,
+  tabShownLabel,
   taskToTemplate,
   shellToggle,
   splitActivePaneChat,
@@ -284,6 +285,23 @@ describe('탭 이름 (27단계)', () => {
     const t = createTask(input(), defaultSettings(), ids(), 0)
     const three = { ...t, tabs: [t.tabs[0]!, { ...t.tabs[0]!, id: 'b' }, { ...t.tabs[0]!, id: 'c', title: '서버' }, { ...t.tabs[0]!, id: 'd' }] }
     expect(tabLabels(three)).toEqual(['app', 'app 2', '서버', 'app 3'])
+  })
+  test("tabLabels: 붙인 번호가 정한 이름('app 2')과 겹치면 다음 번호", () => {
+    const t = createTask(input(), defaultSettings(), ids(), 0)
+    const tabs = { ...t, tabs: [t.tabs[0]!, { ...t.tabs[0]!, id: 'b', title: 'app 2' }, { ...t.tabs[0]!, id: 'c' }] }
+    expect(tabLabels(tabs)).toEqual(['app', 'app 2', 'app 3'])
+    expect(tabShownLabel(tabs, tabs.tabs[2]!)).toBe('app 3')
+    // 정한 이름의 탭이 뒤에 있어도 앞의 자동 번호가 그 이름을 쓰지 않는다
+    const later = { ...t, tabs: [t.tabs[0]!, { ...t.tabs[0]!, id: 'c' }, { ...t.tabs[0]!, id: 'b', title: 'app 2' }] }
+    expect(tabLabels(later)).toEqual(['app', 'app 3', 'app 2'])
+  })
+  test('대화 탭에서 변경 칸에 포커스가 가도 대화 이름(변경 칸만 있는 탭은 "변경")', () => {
+    const chat = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    const tab = chat.tabs[0]!
+    const withReview = { ...chat, panes: { ...chat.panes, rv: { id: 'rv', cwd: chat.cwd, kind: 'review' as const } }, tabs: [{ ...tab, layout: { type: 'split' as const, dir: 'right' as const, ratio: 0.5, a: tab.layout, b: { type: 'pane' as const, paneId: 'rv' } }, activePaneId: 'rv' }] }
+    expect(tabLabel(withReview, withReview.tabs[0]!)).toBe('Claude 대화')
+    const reviewOnly = { ...withReview, tabs: [{ ...tab, layout: { type: 'pane' as const, paneId: 'rv' }, activePaneId: 'rv' }] }
+    expect(tabLabel(reviewOnly, reviewOnly.tabs[0]!)).toBe('변경')
   })
 })
 

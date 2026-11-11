@@ -96,6 +96,7 @@ describe('SHORTCUTS', () => {
     expect(commandForKey(key('KeyQ'))).toBeNull() // ⌘Q 는 표에 없다 — 네이티브 끝내기(셸은 남음)
     expect(SHORTCUTS.find((s) => s.command === 'host-view')?.accel).toBe('')
     expect(SHORTCUTS.find((s) => s.command === 'host-orphans')?.accel).toBe('')
+    expect(SHORTCUTS.find((s) => s.command === 'quick-new')?.accel).toBe('') // 27단계: 대화 탭에서 빠른 명령 만들기는 ⌘P 로
   })
 
   it('isAppCommand 는 표에 있는 명령만', () => {

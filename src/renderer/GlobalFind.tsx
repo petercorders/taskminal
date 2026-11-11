@@ -18,7 +18,7 @@ import {
   type LineHit,
 } from '../shared/global-find'
 import { paneIds } from '../shared/layout'
-import { tabLabel } from '../shared/model'
+import { tabShownLabel } from '../shared/model'
 import { redact as redactText, type SecretOptions } from '../shared/redact'
 import type { AppState } from '../shared/types'
 import { sidebarSections } from './sidebar-model'
@@ -177,7 +177,7 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
             taskId: task.id,
             taskName: task.name,
             color: task.color,
-            tabName: tabLabel(task, tab),
+            tabName: tabShownLabel(task, tab),
             paneId,
             saved,
             prev: r.hits.some((h) => saved || h.line < banner),

@@ -63,6 +63,8 @@ export const SHORTCUTS = [
   { command: 'archive', accel: 'Alt+Command+A', label: '이 일감 보관하기' },
   { command: 'archive-open', accel: 'Shift+Command+E', label: '보관함' },
   { command: 'weekly', accel: '', label: '이번 주 정리' },
+  // 27단계: 대화 탭은 빈 빠른 명령 띠를 숨겨 그 '+ 명령' 단추가 없다 — ⌘P 로 만든다
+  { command: 'quick-new', accel: '', label: '빠른 명령 만들기…' },
   { command: 'remote-reconnect', accel: 'Command+R', label: '원격 다시 연결' },
   // 이어받기(24단계)
   { command: 'resume-show', accel: 'Alt+Command+R', label: '이어받기 요약 다시 보기' },

@@ -187,6 +187,19 @@ describe('resolveTask · resolvePane', () => {
     expect(resolvePane(s, undefined, undefined)).toMatchObject({ ok: false })
     expect(resolvePane(s, 'Ux 평가', undefined)).toMatchObject({ ok: false, candidates: expect.any(Array) })
   })
+
+  it('pane: 탭 줄과 같은 번호 붙은 이름(같은 폴더 탭 셋 → 이름 · 이름 2 · 이름 3)으로 찾는다 (27단계)', () => {
+    const s = state()
+    let t = s.tasks[0]!
+    t = addTab(addTab(t, newId), newId)
+    s.tasks[0] = t
+    const rows = listRows(s, {}, undefined, 0).filter((r) => r.task === '배포')
+    const name = rows.find((r) => r.paneId === t.tabs[0]!.activePaneId)!.tab
+    expect(rows.map((r) => r.tab).sort()).toEqual([name, `${name} 2`, `${name} 3`].sort())
+    expect(resolvePane(s, `배포:${name} 2`, undefined)).toMatchObject({ ok: true, value: { tabId: t.tabs[1]!.id } })
+    expect(resolvePane(s, `배포:${name} 3`, undefined)).toMatchObject({ ok: true, value: { tabId: t.tabs[2]!.id } })
+    expect(resolvePane(s, `배포:${name}`, undefined)).toMatchObject({ ok: true, value: { tabId: t.tabs[0]!.id } })
+  })
 })
 
 describe('listRows · formatRows', () => {

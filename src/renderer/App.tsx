@@ -1500,6 +1500,9 @@ export function App() {
         return setArchiveOpen(true)
       case 'weekly':
         return setWeeklyOpen(true)
+      case 'quick-new':
+        if (state.activeTaskId) openQuickEditor(state.activeTaskId, null)
+        return
       case 'archive':
         if (state.activeTaskId) archive([state.activeTaskId])
         return

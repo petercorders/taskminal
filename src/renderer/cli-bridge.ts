@@ -3,7 +3,7 @@
 import type { PaneActivity } from '../shared/activity'
 import { formatRows, listRows, resolvePane, resolveTask, runningCount, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
 import { hasPane } from '../shared/layout'
-import { createTask, defaultTaskCwd, tabLabel, templateIdCount } from '../shared/model'
+import { createTask, defaultTaskCwd, tabShownLabel, templateIdCount } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 import { reducer, type Action } from './store'
 
@@ -50,7 +50,7 @@ export function paneTarget(task: Task, paneId: Id): PaneTarget | null {
   const pane = task.panes[paneId]
   const tab = tabOfPane(task, paneId)
   if (!pane || !tab) return null
-  const t: PaneTarget = { paneId, label: `${task.name} › ${tabLabel(task, tab)}`, kind: pane.kind === 'chat' ? 'chat' : pane.kind === 'review' ? 'review' : 'terminal', cwd: pane.cwd, pending: pane.pendingCommand !== undefined }
+  const t: PaneTarget = { paneId, label: `${task.name} › ${tabShownLabel(task, tab)}`, kind: pane.kind === 'chat' ? 'chat' : pane.kind === 'review' ? 'review' : 'terminal', cwd: pane.cwd, pending: pane.pendingCommand !== undefined }
   if (pane.kind === 'chat') t.chat = { agent: pane.chat?.agent ?? 'claude', ...(pane.chat?.sessionId ? { sessionId: pane.chat.sessionId } : {}), ...(pane.chat?.forkAt ? { forkAt: pane.chat.forkAt } : {}) }
   return t
 }
@@ -144,7 +144,7 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       if (!first) return failed('탭을 만들지 못했어요')
       if (req.title !== undefined) actions.push({ type: 'tab/rename', taskId: t.id, tabId: first.id, title: req.title })
       actions.push(...keepFocus(t))
-      const label = req.title?.trim() || tabLabel(after, first)
+      const label = req.title?.trim() || tabShownLabel(after, first)
       return done({ ok: true, text: `탭 '${label}' 을 만들었어요 · pane ${first.activePaneId}`, data: { tab: first.id, pane: first.activePaneId } }, actions, newTabs.map((x) => x.id))
     }
     case 'pane.split': {
@@ -161,7 +161,7 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       ]
       const after = run(state, actions).tasks.find((x) => x.id === taskId)!
       if (!after.panes[id]) return failed('나누지 못했어요')
-      return done({ ok: true, text: `pane ${id} 를 만들었어요 (${task.name} › ${tabLabel(after, after.tabs.find((x) => x.id === tabId)!)})`, data: { pane: id } }, actions, [tabId])
+      return done({ ok: true, text: `pane ${id} 를 만들었어요 (${task.name} › ${tabShownLabel(after, after.tabs.find((x) => x.id === tabId)!)})`, data: { pane: id } }, actions, [tabId])
     }
     case 'notify': {
       const r = resolveTask(state, req.task, self)

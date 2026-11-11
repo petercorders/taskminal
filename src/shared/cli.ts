@@ -2,7 +2,7 @@
 import { isObj } from './guards'
 import { formatDuration, taskActivity, type PaneActivity } from './activity'
 import { hasPane, paneIds } from './layout'
-import { tabLabel } from './model'
+import { tabShownLabel } from './model'
 import { isPaneId } from './pty'
 import type { AppState, Id, Task } from './types'
 
@@ -359,10 +359,10 @@ export function resolvePane(state: AppState, ref: string | undefined, self: stri
   const tabRef = ref.slice(colon + 1).trim()
   const tabs = task.value.tabs
   const n = /^\d+$/.test(tabRef) ? Number(tabRef) : NaN
-  const hits = Number.isInteger(n) ? (tabs[n - 1] ? [tabs[n - 1]!] : []) : tabs.filter((t) => tabLabel(task.value, t).toLowerCase() === tabRef.toLowerCase())
+  const hits = Number.isInteger(n) ? (tabs[n - 1] ? [tabs[n - 1]!] : []) : tabs.filter((t) => tabShownLabel(task.value, t).toLowerCase() === tabRef.toLowerCase())
   if (hits.length === 1) return { ok: true, value: { taskId: task.value.id, tabId: hits[0]!.id, paneId: hits[0]!.activePaneId } }
-  if (hits.length > 1) return fail(`'${task.value.name}' 에 '${tabRef}' 탭이 ${hits.length}개예요 — 번호로 적어 주세요`, hits.map((t) => `${task.value.name}:${tabs.indexOf(t) + 1}  ${tabLabel(task.value, t)}`))
-  return fail(`'${task.value.name}' 에 '${tabRef}' 탭이 없어요`, tabs.map((t, i) => `${task.value.name}:${i + 1}  ${tabLabel(task.value, t)}`))
+  if (hits.length > 1) return fail(`'${task.value.name}' 에 '${tabRef}' 탭이 ${hits.length}개예요 — 번호로 적어 주세요`, hits.map((t) => `${task.value.name}:${tabs.indexOf(t) + 1}  ${tabShownLabel(task.value, t)}`))
+  return fail(`'${task.value.name}' 에 '${tabRef}' 탭이 없어요`, tabs.map((t, i) => `${task.value.name}:${i + 1}  ${tabShownLabel(task.value, t)}`))
 }
 
 // ─── list ────────────────────────────────────────────────────
@@ -395,7 +395,7 @@ export function listRows(state: AppState, activity: Readonly<Record<string, Pane
         if (!pane) continue
         const a = activity[paneId]
         const act: ListRow['activity'] = !a ? 'idle' : a.attention ? 'attention' : a.state === 'running' || a.busy ? 'running' : a.state === 'failed' ? 'failed' : a.state === 'done' ? 'done' : 'idle'
-        const row: ListRow = { task: task.name, taskId: task.id, status, tab: tabLabel(task, tab), paneId, kind: pane.kind === 'chat' ? 'chat' : pane.kind === 'review' ? 'review' : 'terminal', activity: act, here: paneId === self }
+        const row: ListRow = { task: task.name, taskId: task.id, status, tab: tabShownLabel(task, tab), paneId, kind: pane.kind === 'chat' ? 'chat' : pane.kind === 'review' ? 'review' : 'terminal', activity: act, here: paneId === self }
         if (a?.command) row.command = mask(a.command)
         const detail =
           act === 'attention'

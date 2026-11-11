@@ -296,15 +296,29 @@ export function tabLabel(task: Task, tab: Tab): string {
   return cwd.slice(cwd.lastIndexOf('/') + 1)
 }
 
-/** 탭 줄에 보일 이름들 — 같은 이름이 겹치면 뒤의 것에 ' 2' · ' 3' (27단계: 같은 폴더 탭 셋이 모두 같은 이름이었다) */
+/** 탭 줄에 보일 이름들 — 같은 이름이 겹치면 뒤의 것에 ' 2' · ' 3' (27단계: 같은 폴더 탭 셋이 모두 같은 이름이었다).
+ *  붙인 번호가 다른 탭의 이름('app 2' 로 정한 탭)과 겹치면 다음 번호로. */
 export function tabLabels(task: Task): string[] {
-  const seen = new Map<string, number>()
-  return task.tabs.map((tab) => {
-    const base = tabLabel(task, tab)
-    const n = (seen.get(base) ?? 0) + 1
-    seen.set(base, n)
-    return n === 1 ? base : `${base} ${n}`
+  const bases = task.tabs.map((tab) => tabLabel(task, tab))
+  const used = new Set(bases)
+  const seen = new Set<string>()
+  return bases.map((base) => {
+    if (!seen.has(base)) {
+      seen.add(base)
+      return base
+    }
+    let n = 2
+    while (used.has(`${base} ${n}`) || seen.has(`${base} ${n}`)) n++
+    const name = `${base} ${n}`
+    seen.add(name)
+    return name
   })
+}
+
+/** 탭 줄에 보이는 그 탭의 이름(번호 포함) — CLI · 찾기 · 기록이 탭 줄과 같은 이름을 쓰게 */
+export function tabShownLabel(task: Task, tab: Tab): string {
+  const i = task.tabs.indexOf(tab)
+  return i < 0 ? tabLabel(task, tab) : tabLabels(task)[i]!
 }
 
 /** pane 을 활성으로: 그 pane 이 든 탭을 활성 탭으로, 그 탭의 활성 pane 으로. */

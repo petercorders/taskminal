@@ -42,6 +42,12 @@ test('빈 빠른 명령 안내 띠: 대화 탭에서는 숨고 · 터미널 일�
   await launch(true)
   await expect(view().getByTestId('chat-pane')).toBeVisible()
   await expect(view().getByTestId('quick-empty')).toHaveCount(0)
+  // 띠의 '+ 명령' 단추가 없으니 ⌘P 로 만든다
+  await command('palette')
+  await win.keyboard.type('빠른 명령 만들기')
+  await win.keyboard.press('Enter')
+  await expect(win.getByRole('heading', { name: '빠른 명령 만들기' })).toBeVisible()
+  await win.keyboard.press('Escape')
   await win.getByTestId('task-row').filter({ hasText: '터미널 일감' }).click()
   await expect(view().getByTestId('quick-empty')).toBeVisible()
 })

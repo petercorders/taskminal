@@ -102,7 +102,7 @@ export function FirstRun({ home, onCreate, onDone, again = false }: Props) {
           <>
             <h2 id="first-run-title">Claude 가 답을 기다릴 때 알려 드려요</h2>
             <p>
-              아래 명령을 터미널에 붙여 넣으면, 답을 기다릴 때 사이드바의 &quot;확인 필요&quot; 칸에 노란 점(●)이 떠요.
+              ⌘J 로 셸을 열고 아래 명령을 붙여 넣으면, 답을 기다릴 때 사이드바의 &quot;확인 필요&quot; 칸에 노란 점(●)이 떠요.
               <br />
               앱이 Claude 설정 파일을 직접 고치지는 않아요.
             </p>

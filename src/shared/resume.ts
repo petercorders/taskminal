@@ -3,7 +3,7 @@
 import { formatDuration, type PaneActivity } from './activity'
 import type { HistoryEntry } from './history'
 import { hasPane } from './layout'
-import { tabLabel } from './model'
+import { tabShownLabel } from './model'
 import type { Id, Task } from './types'
 
 export const RESUME_LINES = 5
@@ -51,7 +51,7 @@ const cut = (s: string, n = 120) => (s.length > n ? s.slice(0, n - 1) + '…' : 
 
 function where(task: Task, paneId: Id): string {
   const tab = task.tabs.find((t) => hasPane(t.layout, paneId))
-  return tab ? tabLabel(task, tab) : ''
+  return tab ? tabShownLabel(task, tab) : ''
 }
 
 function paneGo(task: Task, paneId: Id): { go: FactGo; button: string } {
