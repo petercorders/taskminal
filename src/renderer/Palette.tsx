@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { accelLabel, type Shortcut } from '../shared/keymap'
 import { markSegments, nextScope, paletteItems, SCOPE_LABEL, type PaletteInput, type PaletteItem, type PaletteScope } from '../shared/palette'
 import type { HistoryEntry } from '../shared/history'
@@ -130,9 +130,18 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
           <span className="palette-help">⇥ 범위 · ⌘↩ 새 탭</span>
         </div>
         <ul ref={listRef} id="palette-list" role="listbox" aria-label="찾은 것" className="palette-list">
-          {items.map((item, i) => (
+          {items.map((item, i) => {
+            // 28단계(Orca 결과 묶음): 종류가 바뀌는 곳에 제목 줄 — 제목은 고를 수 없고(↑↓ 는 항목만), 줄 안의 종류 글자는 읽기 도구용으로만 남긴다
+            const grouped = item.kind !== 'create' && item.kind !== 'find-all'
+            const heading = grouped && (i === 0 || items[i - 1]!.kind !== item.kind)
+            return (
+              <Fragment key={`${item.kind}:${item.id}`}>
+                {heading && (
+                  <li role="presentation" className="palette-group" data-testid="palette-group">
+                    {KIND_LABEL[item.kind]}
+                  </li>
+                )}
             <li
-              key={`${item.kind}:${item.id}`}
               id={optionId(i)}
               role="option"
               aria-selected={i === selected}
@@ -143,7 +152,7 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
               onMouseDown={(e) => e.preventDefault()} // 입력칸 포커스 유지
               onClick={(e) => run(item, e.metaKey, e.shiftKey)}
             >
-              <span className={`palette-kind ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
+              <span className={`palette-kind ${item.kind}${grouped ? ' sr' : ''}`}>{KIND_LABEL[item.kind]}</span>
               <span className="palette-label">
                 {item.kind === 'create' ? <>‘{item.label}’ 이름으로 새 일감</> : <Marked text={item.label} marks={item.marks} />}
               </span>
@@ -153,7 +162,9 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
               {item.kind === 'quick' && i === selected && <kbd className="palette-hint">⇧↩ 입력줄에 넣기</kbd>}
               {item.kind === 'port' && i === selected && <kbd className="palette-hint">⌘↩ 그 터미널로</kbd>}
             </li>
-          ))}
+              </Fragment>
+            )
+          })}
           {items.length === 0 && <li className="palette-empty">맞는 것이 없습니다</li>}
         </ul>
       </div>

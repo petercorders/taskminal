@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Icon } from './icons'
 import { formatDuration } from '../shared/activity'
 import { QUICK_WHERE, WHERE_LABEL, quickDefaults, quickError, type QuickButton, type QuickCommand, type QuickState, type QuickWhere } from '../shared/quick'
 import { Modal } from './Modal'
@@ -52,7 +53,7 @@ export function QuickBar({ taskName, shown, more, statusOf, lastLineOf, onRun, o
     return (
       <div className="quick-empty" data-testid="quick-empty">
         <span className="quick-bolt" aria-hidden>
-          ⚡
+          <Icon name="bolt" size={18} />
         </span>
         <span className="quick-empty-text">
           자주 치는 명령을 단추로 만들어요. <b>+ 명령</b> 을 누르거나, 명령 기록(⌘Y)의 ⋯ 에서 <b>빠른 명령으로 저장</b> 을 고르세요.

@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-12 (27단계 UX 감사 · 다듬기 병합 — 배율 1 에서 DOM 렌더러 · 첫 실행 대화. 26단계: 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
+마지막 갱신: 2026-11-12 (28단계 Orca 에서 배워 다듬기 병합 — 설정 구조 · 간격 척도 · 대화 정렬. 27단계 UX 감사 · 다듬기 병합 — 배율 1 에서 DOM 렌더러 · 첫 실행 대화. 26단계: 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
 
 ## 1. 지금 어디까지
 
@@ -24,6 +24,7 @@
 | 25 보관 · 원격 | main 에 병합(브랜치 `stage-25-archive-remote`, 25a `6788a08` · 25b `167cc7f` + 리뷰 고침). 보관함 ⇧⌘E(⌥⌘A 보관 · 되살리기 · 최근 지운 것 30일) · 주간 정리 · SSH 원격 일감(새 일감 ⌥2 · ControlMaster · tmux 이어 붙기 · 다시 붙기 다섯 번 · 호스트 키 띠). 24단계 친 글자 모으기(2340b45) 리뷰 고침도 이 브랜치. 계획 · 결과 `docs/stages/25-archive-remote.md` |
 | 26 대화 중심 · 가독성 | main 에 병합(브랜치 `stage-26-chat-first`, 26a 메뉴 · 탭 ▾ · 26b·c 대화 중심 · 가독성 · 26d 리뷰 고침). 새 일감 기본 = Claude 대화(설정 › 일반 › 새 일감 시작) · ⌘J 셸 꺼내기 · 빈 화면 단추 · 사이드바 '대화 N · 셸 M' · 글자 12px 이상 · 대비 4.5 이상. 계획 · 결과 `docs/stages/26-chat-first.md` |
 | 27 UX 감사 · 다듬기 | main 에 병합(브랜치 `stage-27-ux-polish`). 화면 30장 감사 · 8기준 72.5 → 84.4(두 번 상한). 배율 1 은 DOM 렌더러 · 첫 실행 대화로 · 대화 탭의 빠른 명령 띠 숨김 · 탭 이름 유지 · 번호 · 'TUI 로'. `docs/stages/27-ux-polish.md` |
+| 28 Orca 에서 배워 다듬기 | main 에 병합(브랜치 `stage-28-orca-polish`). 설정 구조(묶음 · 아이콘 · 경로 머리 · 묶음 카드) · 선 아이콘 · 간격 척도 `--space-*`(척도 밖 226 → 0) · 머리 40 · 줄 36/48 · 대화 머리 · 글 · 입력 같은 왼쪽 끝 · 팔레트 종류 제목. `docs/stages/28-orca-polish.md` |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -197,6 +198,15 @@
 - **WebGL 은 화면 배율 2 미만에서 쓰지 않는다**(`webglBlock` 'lowdpi' — 배율 1 에서 글자가 작고 띄엄띄엄). e2e 는 DOM 렌더러라 이걸 못 본다 — 터미널 모양은 `TASKMINAL_RENDERER` 를 비우고 실제 화면으로 찍어 본다.
 - `TASKMINAL_RENDERER=webgl` 은 이제 'webgl-always'(배율 무시) — WebGL 시험용. 기본(값 없음)은 배율로 고른다.
 - 탭 이름은 대화가 있는 탭이면 대화 이름(⌘J 셸 · 변경 칸에 포커스가 가도), 겹치면 `tabLabels` 가 ' 2' · ' 3' 을 붙인다 — 이름으로 탭을 찾는 시험은 번호를 생각한다.
+
+### 28 Orca 에서 배워 다듬기
+계획 · 결과 `docs/stages/28-orca-polish.md`(Orca 출처 · 대조표 · 전후 측정표). 짚어 둔 함정:
+- **간격은 `--space-*` 척도(4px 배수)만** — styles.css 에 `padding: 6px` 같은 척도 밖 값을 쓰면 `tests/unit/spacing.test.ts`(`tool/check-spacing.mjs`)가 줄 번호와 함께 막는다. 새 값은 `var(--space-3)` 처럼 쓴다.
+- 머리 줄 높이는 `--head-h`(40), 목록 줄은 `--row-h`(36), 설정 줄 최소는 `--setting-row-h`(48) — 한 곳만 고치면 `layout-align.spec` 이 실패한다.
+- 대화 머리 · 글 · 입력의 바깥 여백은 `--chat-gutter` 하나(`% ` 는 pane 폭 전체인 자식에서만 맞다 — 새 요소가 바깥 칸에 서려면 같은 변수를 쓴다). 설정은 `--settings-gutter`.
+- 설정 화면의 `h1` 은 이제 칸 이름만('일반' · '정보') — '설정 — …' 로 찾던 시험은 고쳤다. 설정 칸은 `settings/parts.tsx`(Row · Group · Switch · Choices · TextField)를 쓴다.
+- 이모지 대신 `src/renderer/icons.tsx` 선 아이콘(`<Icon name=… />`, aria-hidden) — 단추 글자는 그대로 두어 이름으로 찾는 시험이 유지된다.
+- 팔레트 결과의 종류 제목 줄(`.palette-group`)은 `role=presentation` — `li` 에 option 을 주면 ↑↓ 가 제목을 고른다(`layout-align.spec` 이 잡는다).
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).

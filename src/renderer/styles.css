@@ -1,4 +1,28 @@
 :root {
+  /* 28단계: 간격은 4px 배수 척도 하나(--space-*) — tool/check-spacing.mjs 가 척도 밖 값을 막는다 */
+  --space-half: 2px; /* 아이콘과 글자 사이 같은 좁은 틈만 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  /* 같은 종류 요소의 크기: 머리 줄 높이 · 목록 줄 높이 · 설정 한 줄 최소 높이 · 대화 글 칸 */
+  --head-h: 40px;
+  --row-h: 36px;
+  --setting-row-h: 48px;
+  --chat-col: 760px;
+  --settings-col: 720px;
+  --settings-gutter: max(var(--space-8), calc((100% - var(--settings-col)) / 2)); /* 설정 머리 글 · 칸 제목 · 카드가 같은 왼쪽 끝 */
+  --chat-gutter: max(var(--space-4), calc((100% - var(--chat-col)) / 2)); /* 대화 머리 · 글 · 입력이 같은 왼쪽 끝을 쓴다 — 쓰는 곳은 pane 폭 전체인 자식이어야 % 가 맞는다 */
+  /* 모서리 세 단계(Orca 처럼 단추 · 입력 = md, 카드 = lg) */
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 11px;
   --bg: #0e0f11;
   --panel: #131418;
   --raised: #1a1c21;
@@ -75,7 +99,7 @@ select {
 
 .notice {
   margin: 0;
-  padding: 6px 12px;
+  padding: var(--space-2) var(--space-3);
   font-size: 13px;
   color: #f2c46d;
   background: #2a2312;
@@ -89,21 +113,28 @@ select {
   background: var(--panel);
   border-right: 1px solid var(--line);
   overflow-y: auto;
-  padding-bottom: 12px;
+  padding-bottom: var(--space-3);
 }
 
 .sidebar-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 10px 6px 14px;
+  box-sizing: border-box;
+  height: var(--head-h);
+  padding: 0 var(--space-3) 0 var(--space-4);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
 
+.icon {
+  flex: none;
+}
 .icon-button {
+  display: inline-grid;
+  place-items: center;
   width: 24px;
   height: 24px;
   border: 0;
@@ -120,7 +151,7 @@ select {
 }
 
 .sidebar-empty {
-  margin: 8px 14px;
+  margin: var(--space-2) var(--space-3);
   font-size: 13px;
   color: var(--muted);
 }
@@ -128,11 +159,11 @@ select {
 .sidebar-section ul {
   list-style: none;
   margin: 0;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
 }
 
 .sidebar-section-title {
-  margin: 12px 14px 4px;
+  margin: var(--space-3) var(--space-3) var(--space-1);
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
@@ -156,8 +187,8 @@ select {
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
   border: 0;
   background: transparent;
   text-align: left;
@@ -167,7 +198,7 @@ select {
 .task-dot {
   width: 8px;
   height: 8px;
-  margin-top: 5px;
+  margin-top: var(--space-1);
   border-radius: 50%;
   flex: none;
   box-shadow: inset 0 0 0 1px #ffffff22;
@@ -177,7 +208,7 @@ select {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 
 .task-name,
@@ -195,7 +226,7 @@ select {
   font-size: 12px;
   color: var(--muted);
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 /* 디자인: 브랜치 · 폴더는 고정폭, 넘치면 말줄임 — 상태 이름은 줄지 않는다 (15c) */
@@ -214,14 +245,14 @@ select {
   margin-left: auto;
   align-self: center;
   flex: none;
-  padding-left: 6px;
+  padding-left: var(--space-2);
 }
 
 .attention-section .sidebar-section-title {
   color: var(--waiting);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .attention-section kbd {
   font-family: inherit;
@@ -234,7 +265,7 @@ select {
   opacity: 0; /* visibility:hidden 이면 Tab 으로 갈 수 없다 */
   width: 22px;
   height: 22px;
-  margin-right: 6px;
+  margin-right: var(--space-1);
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -248,7 +279,7 @@ select {
 .task-remove-space {
   flex: none;
   width: 22px;
-  margin-right: 6px;
+  margin-right: var(--space-1);
 }
 .task-remove:hover {
   background: #e07a7a22;
@@ -304,9 +335,9 @@ select {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   height: 22px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
@@ -332,7 +363,7 @@ select {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   flex: none;
 }
 .pane-head-status.running { color: var(--running); }
@@ -401,7 +432,8 @@ select {
   flex: none;
   display: flex;
   align-items: stretch;
-  height: 34px;
+  box-sizing: border-box;
+  height: var(--head-h);
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -443,8 +475,8 @@ select {
   flex: none;
   width: 6px;
   height: 6px;
-  margin-left: 10px;
-  margin-right: -6px;
+  margin-left: var(--space-2);
+  margin-right: -4px;
   border-radius: 50%;
 }
 .tab-mark.running { background: var(--running); }
@@ -453,7 +485,7 @@ select {
 .tab-main {
   min-width: 0;
   height: 100%;
-  padding: 0 4px 0 12px;
+  padding: 0 var(--space-1) 0 var(--space-3);
   border: 0;
   background: none;
   color: inherit;
@@ -474,7 +506,7 @@ select {
   flex: none;
   width: 20px;
   height: 20px;
-  margin-right: 6px;
+  margin-right: var(--space-1);
   border: 0;
   border-radius: 4px;
   background: none;
@@ -493,8 +525,8 @@ select {
 
 .tab-rename {
   width: 140px;
-  margin: 0 6px 0 8px;
-  padding: 3px 6px;
+  margin: 0 var(--space-1) 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--accent);
   border-radius: 4px;
   background: var(--bg);
@@ -517,7 +549,7 @@ select {
 .tab-actions {
   display: flex;
   margin-left: auto;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 .tab-action {
   width: 30px;
@@ -543,7 +575,7 @@ select {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   box-sizing: border-box;
 }
 
@@ -553,7 +585,7 @@ select {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .empty h1 {
   margin: 0;
@@ -561,17 +593,17 @@ select {
   font-weight: 600;
 }
 .empty .hint {
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-1);
   color: var(--muted);
 }
 .empty-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* ─── 버튼 · 대화상자 ─── */
 .button {
-  padding: 6px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--raised);
@@ -593,7 +625,7 @@ select {
   font-weight: 600;
 }
 .button kbd {
-  margin-left: 6px;
+  margin-left: var(--space-1);
   font-family: inherit;
   font-size: 12px;
   opacity: 0.85; /* 26단계: 0.7 은 주 단추 · 눌린 단추 위에서 대비 3.4~3.9 */
@@ -618,8 +650,8 @@ select {
   max-width: calc(100vw - 32px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5);
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
@@ -628,7 +660,7 @@ select {
 .dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-3);
 }
 .dialog.narrow {
   width: 380px;
@@ -645,7 +677,7 @@ select {
 }
 /* 칸 아래 오류 한 줄 — 비어 있어도 자리를 지켜 버튼이 들썩이지 않게 */
 .field-error {
-  margin: -6px 0 0;
+  margin: -4px 0 0;
   min-height: 1.4em;
   font-size: 13px;
   color: var(--danger);
@@ -654,7 +686,7 @@ select {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   margin: 0;
   padding: 0;
   border: 0;
@@ -670,11 +702,11 @@ select {
 }
 /* 27단계: legend 는 flex 항목이 아니라 gap 이 안 먹는다 — 고른 색의 바깥 테두리(4px)가 '색' 글자에 닿지 않게 */
 .field > legend {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2);
 }
 .field input,
 .field select {
-  padding: 7px 9px;
+  padding: var(--space-2) var(--space-2);
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--bg);
@@ -687,7 +719,7 @@ select {
 }
 .field-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .field-row input {
   flex: 1;
@@ -695,12 +727,12 @@ select {
 .field-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .swatches {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .swatch {
   width: 20px;
@@ -721,8 +753,8 @@ select {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 /* ─── 명령 팔레트 ─── */
@@ -751,8 +783,8 @@ select {
 .palette-input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
   border-bottom: 1px solid var(--line);
 }
 .palette-input-row input {
@@ -765,7 +797,7 @@ select {
 }
 .palette-scope {
   flex: none;
-  padding: 2px 8px;
+  padding: var(--space-half) var(--space-2);
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -780,20 +812,41 @@ select {
 .palette-list {
   list-style: none;
   margin: 0;
-  padding: 6px;
+  padding: var(--space-2);
   overflow-y: auto;
 }
 .palette-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  box-sizing: border-box;
+  min-height: var(--row-h);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: 7px;
   cursor: default;
   min-width: 0;
 }
 .palette-item.selected {
   background: var(--accent-soft);
+}
+.palette-group {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.palette-group:first-child {
+  padding-top: var(--space-1);
+}
+/* 제목 줄이 종류를 알리므로 줄 안의 종류 글자는 화면에서만 숨긴다(읽기 도구 · 시험은 그대로 읽음) */
+.palette-kind.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .palette-kind {
   flex: none;
@@ -841,19 +894,19 @@ select {
   margin-left: auto;
 }
 .palette-empty {
-  padding: 10px;
+  padding: var(--space-3);
   color: var(--muted);
 }
 
 /* ─── 11단계: 사이드바 접기 · 한 줄 · 이름 바꾸기 · 메뉴 ─── */
 .sidebar-head-actions {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .group-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   padding: 0;
   border: 0;
   background: transparent;
@@ -867,20 +920,20 @@ select {
   width: 10px;
 }
 .group-count {
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   border-radius: 8px;
   background: var(--raised);
   color: var(--muted);
 }
 .sidebar.compact .task-main {
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
 }
 .task-rename {
   flex: 1;
   min-width: 0;
-  margin: 4px 6px;
-  padding: 6px 8px;
+  margin: var(--space-1) var(--space-1);
+  padding: var(--space-2) var(--space-2);
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--bg);
@@ -897,7 +950,7 @@ select {
   min-width: 200px;
   max-height: calc(100vh - 8px);
   overflow-y: auto;
-  padding: 4px;
+  padding: var(--space-1);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -906,10 +959,10 @@ select {
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   height: 28px;
-  padding: 0 10px 0 6px;
+  padding: 0 var(--space-3) 0 var(--space-2);
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -943,17 +996,17 @@ select {
   box-shadow: inset 0 0 0 1px var(--muted);
 }
 .menu-heading {
-  padding: 6px 10px 2px 28px;
+  padding: var(--space-2) var(--space-3) var(--space-half) var(--space-8);
   color: var(--muted);
   font-size: 12px;
 }
 .menu-sep {
   height: 1px;
-  margin: 4px 6px;
+  margin: var(--space-1) var(--space-1);
   background: var(--line);
 }
 
-/* ─── 11단계: 설정 창 ─── */
+/* ─── 11단계: 설정 창 — 28단계 Orca 설정 모양(왼쪽 묶음 · 경로 머리 · 칸 제목 · 묶음 카드 · 가운데 720px) ─── */
 .settings {
   position: fixed;
   inset: 0;
@@ -964,44 +1017,102 @@ select {
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 220px;
+  width: 248px;
   flex-shrink: 0;
-  padding: 16px 12px;
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
+.settings-back {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--row-h);
+  margin: var(--space-3) var(--space-3) 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-back:hover {
+  background: var(--raised);
+  color: var(--fg);
+}
+.settings-search-wrap {
+  position: relative;
+  margin: var(--space-2) var(--space-3) 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+.settings-search-icon {
+  position: absolute;
+  top: calc((var(--row-h) - 16px) / 2);
+  left: var(--space-3);
+  color: var(--muted);
+  pointer-events: none;
+}
 .settings-search {
-  height: 32px;
-  margin-bottom: 10px;
-  padding: 0 10px;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--row-h);
+  padding: 0 var(--space-3) 0 var(--space-8);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
+  font-size: 13px;
+}
+.settings-nav-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-3);
+}
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+}
+.settings-nav-group-title {
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px;
+  gap: var(--space-2);
+  height: var(--row-h);
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition: background 120ms, color 120ms;
 }
 .settings-nav-item:hover {
+  background: color-mix(in srgb, var(--raised) 60%, transparent);
   color: var(--fg);
 }
 .settings-nav-item.current {
   background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--fg);
+  font-weight: 500;
 }
 .badge {
   margin-left: auto;
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-2);
   border-radius: 8px;
   background: var(--failed);
   color: #fff;
@@ -1016,79 +1127,148 @@ select {
 .settings-head {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 28px;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  height: var(--head-h);
+  flex-shrink: 0;
+  padding: 0 var(--space-4) 0 var(--settings-gutter);
   border-bottom: 1px solid var(--line);
-}
-.settings-head h1 {
-  margin: 0;
-  font-size: 16px;
-}
-.settings-saved {
-  margin-left: auto;
-  color: var(--muted);
   font-size: 13px;
+}
+.settings-crumbs {
+  display: flex;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.settings-crumb-current {
+  color: var(--fg);
+}
+.settings-close {
+  margin-left: auto;
 }
 .settings-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 28px 40px;
+  padding: var(--space-8) var(--settings-gutter) var(--space-16);
 }
+.settings-column {
+  min-width: 0;
+}
+.settings-page-head {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.settings-page-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.settings-page-head p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+/* 묶음 사이 32 > 묶음 안(제목↔카드 12 · 줄 12/12) — 가까운 것은 가깝게, 다른 절은 멀게 */
 .settings-section {
-  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.settings-section + .settings-section {
+  margin-top: var(--space-8);
 }
 .settings-section:not(:has(.setting-row)) {
   display: none;
 }
 .settings-section-title {
-  margin: 20px 0 4px;
+  margin: 0 0 -16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-none {
+  margin: 0;
+  color: var(--muted);
+}
+/* 묶음: 제목은 카드 밖(15px), 줄은 카드 안 · 줄 사이 선. 찾기로 줄이 다 빠진 묶음은 숨긴다 */
+.setting-group:not(:has(.setting-row)) {
+  display: none;
+}
+.setting-group-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.setting-group-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.setting-group-desc {
+  margin: var(--space-half) 0 0;
   color: var(--muted);
   font-size: 13px;
 }
-.settings-none {
-  color: var(--muted);
-}
-.settings-body:has(.setting-row) .settings-none {
-  display: none;
+.setting-card {
+  padding: 0 var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--panel) 70%, var(--bg));
 }
 .setting-row {
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--setting-row-h);
+  box-sizing: border-box;
+  padding: var(--space-3) 0;
+}
+.setting-row + .setting-row {
+  border-top: 1px solid var(--line);
 }
 .setting-head {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
 .setting-text {
   flex: 1;
   min-width: 0;
 }
 .setting-title {
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 .setting-desc {
-  margin-top: 2px;
+  margin-top: var(--space-half);
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .setting-row > :not(.setting-head) {
-  margin-top: 10px;
+  margin-top: var(--space-2);
 }
 .setting-controls {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .setting-input,
 .setting-select {
-  height: 30px;
+  height: 28px;
   min-width: 180px;
-  padding: 0 8px;
+  box-sizing: border-box;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
+  font-size: 13px;
 }
 .setting-input.short {
   min-width: 0;
@@ -1105,60 +1285,87 @@ select {
 .switch {
   display: inline-flex;
   flex-shrink: 0;
-  width: 40px;
-  height: 24px;
-  padding: 2px;
+  width: 36px;
+  height: 20px;
+  padding: var(--space-half);
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--line);
   cursor: pointer;
+  transition: background 120ms;
 }
 .switch.on {
   background: var(--accent);
 }
 .switch-knob {
-  width: 20px;
-  height: 20px;
-  border-radius: 10px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
   background: #f4f5f6;
   transition: transform 120ms;
 }
 .switch.on .switch-knob {
   transform: translateX(16px);
 }
-.choices {
+/* 짧은 값 고르기 — 테두리 한 상자 안에서 고른 칸만 바탕 (Orca segmented) */
+.choices.segment {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: var(--space-half);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+.choices.segment .choice {
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.choices.segment .choice:hover {
+  color: var(--fg);
+}
+.choices.segment .choice.selected {
+  background: var(--raised);
+  color: var(--fg);
+  font-weight: 500;
+}
+.choices.card {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
-.choice {
+.choices.card .choice {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 14px;
-  border: 1.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
+  gap: var(--space-half);
+  min-width: 180px;
+  padding: var(--space-3) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
   text-align: left;
   cursor: pointer;
 }
-.choices.card .choice {
-  flex: 1;
-  min-width: 180px;
-  padding: 12px 14px;
-}
-.choice.selected {
+.choices.card .choice.selected {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+.choice-title {
+  font-size: 14px;
 }
 .choice-desc {
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .font-preview {
-  margin: 10px 0 0;
-  padding: 12px 14px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
@@ -1167,7 +1374,7 @@ select {
 .key-field {
   min-width: 96px;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
@@ -1188,7 +1395,7 @@ select {
 }
 .notify-table th,
 .notify-table td {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   text-align: left;
   font-weight: normal;
 }
@@ -1200,15 +1407,15 @@ select {
   width: 110px;
 }
 .manage-list {
-  margin: 10px 0;
+  margin: var(--space-2) 0;
   padding: 0;
   list-style: none;
 }
 .manage-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
 .manage-item input[type='color'] {
   width: 28px;
@@ -1244,7 +1451,7 @@ input[type='checkbox'] {
 .template-json {
   min-height: 300px;
   resize: vertical;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
@@ -1288,8 +1495,8 @@ input[type='checkbox'] {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px 0 10px;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) 0 var(--space-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -1327,7 +1534,7 @@ input[type='checkbox'] {
   cursor: pointer;
   border-radius: 4px;
   font-size: 13px;
-  padding: 2px 5px;
+  padding: var(--space-half) var(--space-1);
 }
 
 .find-step:hover:not(:disabled),
@@ -1350,7 +1557,7 @@ input[type='checkbox'] {
 .field > .check-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: 13px;
   color: var(--fg);
 }
@@ -1376,8 +1583,8 @@ input[type='checkbox'] {
 .host-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   font-size: 13px;
   border-bottom: 1px solid var(--line);
   background: var(--raised);
@@ -1399,7 +1606,7 @@ input[type='checkbox'] {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: var(--space-1) var(--space-2);
   align-items: baseline;
 }
 .host-banner-text span {
@@ -1407,7 +1614,7 @@ input[type='checkbox'] {
 }
 .host-banner-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   flex: none;
 }
 
@@ -1420,18 +1627,18 @@ input[type='checkbox'] {
 
 .host-orphans {
   list-style: none;
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
   padding: 0;
 }
 .host-orphan {
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   border-top: 1px solid var(--line);
   color: var(--muted);
 }
 .host-orphan-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-size: 13px;
 }
 .host-orphan-name {
@@ -1445,8 +1652,8 @@ input[type='checkbox'] {
   white-space: nowrap;
 }
 .host-tail {
-  margin: 6px 0 0;
-  padding: 8px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
   max-height: 240px;
   overflow: auto;
   font-size: 12px;
@@ -1458,8 +1665,8 @@ input[type='checkbox'] {
 .host-confirm {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
   font-size: 13px;
 }
 .host-confirm span {
@@ -1468,7 +1675,7 @@ input[type='checkbox'] {
 
 /* ─── 17단계 데이터 안전: 알림 · 백업 · 비밀값 가리기 ─── */
 .link {
-  margin-left: 8px;
+  margin-left: var(--space-2);
   padding: 0;
   border: 0;
   background: none;
@@ -1480,7 +1687,7 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 .button.small {
-  padding: 2px 8px;
+  padding: var(--space-half) var(--space-2);
   font-size: 13px;
 }
 .button.danger-outline {
@@ -1490,7 +1697,7 @@ input[type='checkbox'] {
 }
 .row-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .dialog.wide {
   width: 560px;
@@ -1507,9 +1714,9 @@ input[type='checkbox'] {
   z-index: 50;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   max-width: calc(100vw - 32px);
-  padding: 8px 8px 8px 14px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--raised);
@@ -1528,8 +1735,8 @@ input[type='checkbox'] {
 
 /* 백업 목록 · 미리 보기 */
 .backup-message {
-  margin: 0 0 10px;
-  padding: 6px 10px;
+  margin: 0 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: 7px;
   font-size: 13px;
 }
@@ -1546,29 +1753,29 @@ input[type='checkbox'] {
 .backup-pane {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 .backup-list {
   max-height: 360px;
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 4px;
+  padding: var(--space-1);
 }
 .backup-list:focus-visible {
   outline: 2px solid var(--accent);
 }
 .backup-group-title {
-  padding: 6px 8px 2px;
+  padding: var(--space-2) var(--space-2) var(--space-half);
   font-size: 12px;
   color: var(--muted);
 }
 .backup-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
@@ -1580,7 +1787,7 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
 }
 .reason-chip {
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-2);
   border-radius: 9px;
   border: 1px solid var(--line);
   font-size: 12px;
@@ -1599,11 +1806,11 @@ input[type='checkbox'] {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
   align-items: flex-start;
 }
 .backup-diff h3 {
-  margin: 4px 0;
+  margin: var(--space-1) 0;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1615,8 +1822,8 @@ input[type='checkbox'] {
 .backup-diff li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
 .diff-add {
   color: var(--done);
@@ -1630,7 +1837,7 @@ input[type='checkbox'] {
 
 /* 개인정보 */
 .secret-kinds {
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -1638,8 +1845,8 @@ input[type='checkbox'] {
   display: grid;
   grid-template-columns: 200px 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
 .pill-toggle {
   width: 76px;
@@ -1660,8 +1867,8 @@ input[type='checkbox'] {
 }
 .secret-add {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 .setting-input.invalid {
   border-color: var(--danger);
@@ -1669,8 +1876,8 @@ input[type='checkbox'] {
 .warn-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
   color: #f0b866;
 }
 
@@ -1681,7 +1888,7 @@ input[type='checkbox'] {
   right: 14px;
   z-index: 4;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid #2a2e35;
   border-radius: 11px;
   background: #1a1c20;
@@ -1696,9 +1903,9 @@ input[type='checkbox'] {
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   max-width: calc(100% - 28px);
-  padding: 6px 8px 6px 10px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 1px solid #2b3a52;
   border-radius: 8px;
   background: #141c2a;
@@ -1721,13 +1928,13 @@ input[type='checkbox'] {
   width: 300px;
   max-height: 60%;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--space-2);
 }
 .secret-list-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
 }
 .secret-list ul {
   margin: 0;
@@ -1736,7 +1943,7 @@ input[type='checkbox'] {
 }
 .secret-list-item {
   width: 100%;
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: 5px;
   background: none;
@@ -1752,13 +1959,13 @@ input[type='checkbox'] {
 .secret-menu {
   display: flex;
   flex-direction: column;
-  padding: 4px;
+  padding: var(--space-1);
   min-width: 220px;
 }
 .secret-menu button {
   display: flex;
   justify-content: space-between;
-  padding: 5px 8px;
+  padding: var(--space-1) var(--space-2);
   border: 0;
   border-radius: 5px;
   background: none;
@@ -1785,7 +1992,7 @@ input[type='checkbox'] {
 .sidebar-foot {
   position: sticky;
   bottom: 0;
-  padding: 8px 12px 0;
+  padding: var(--space-2) var(--space-3) 0;
   background: var(--panel);
 }
 .sidebar-update {
@@ -1797,7 +2004,7 @@ input[type='checkbox'] {
   color: var(--accent);
   font-size: 13px;
   text-align: left;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   cursor: pointer;
 }
 .update-status.ok {
@@ -1812,16 +2019,16 @@ input[type='checkbox'] {
 .errlog {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 .errlog-filters {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .errlog-filters .chip {
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border: 1px solid var(--line);
   border-radius: 12px;
   background: transparent;
@@ -1843,8 +2050,8 @@ input[type='checkbox'] {
 .errlog-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   font-size: 13px;
 }
 .errlog-row + .errlog-row {
@@ -1865,7 +2072,7 @@ input[type='checkbox'] {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .errlog-msg code {
   color: var(--muted);
@@ -1882,8 +2089,8 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 14px;
+  gap: var(--space-1);
+  padding: var(--space-4);
   border: 1px dashed var(--line);
   border-radius: 8px;
   font-size: 13px;
@@ -1900,13 +2107,13 @@ input[type='checkbox'] {
   line-height: 1.6;
 }
 .first-run h2 {
-  margin: 4px 0 8px;
+  margin: var(--space-1) 0 var(--space-2);
   font-size: 16px;
 }
 .first-run-steps {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .first-run-step {
   width: 18px;
@@ -1925,15 +2132,15 @@ input[type='checkbox'] {
 .first-run-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
 }
 .first-run-option {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 8px 12px;
+  gap: var(--space-half);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: transparent;
@@ -1952,9 +2159,9 @@ input[type='checkbox'] {
 .first-run-code {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
@@ -1969,7 +2176,7 @@ input[type='checkbox'] {
 /* ─── 19단계: 명령 기록 칸 ⌘Y (History 보드) — 오른쪽 칸, 본문을 좁힌다 ─── */
 .tab-action.history {
   /* 글자 폭(소수 px)에 맡기면 탭 줄 폭이 소수가 되어 끝 탭이 1px 덜 보인다(tabs.spec 넘침 시험) — 정수 폭으로 */
-  width: 60px;
+  width: 64px;
   padding: 0;
   font-size: 12px;
   white-space: nowrap;
@@ -1980,15 +2187,23 @@ input[type='checkbox'] {
   background: var(--accent-soft);
 }
 /* 24단계 '✎ 메모 · 할 일 n' · '↺ 요약' — 기록 단추처럼 정수 폭 (할 일이 있으면 넓게) */
+.tab-action.history,
 .tab-action.notes,
 .tab-action.resume {
-  width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+.tab-action.notes,
+.tab-action.resume {
+  width: 60px;
   padding: 0;
   font-size: 12px;
   white-space: nowrap;
 }
 .tab-action.notes.has-todo {
-  width: 96px;
+  width: 104px;
 }
 .palette-item[data-kind='history'] .palette-label {
   font-family: Menlo, monospace;
@@ -2001,9 +2216,9 @@ input[type='checkbox'] {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 0;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   border-left: 1px solid var(--line);
   background: var(--panel);
   font-size: 13px;
@@ -2023,16 +2238,16 @@ input[type='checkbox'] {
   background: none;
   color: var(--muted);
   font-size: 12px;
-  padding: 1px 6px;
+  padding: var(--space-half) var(--space-2);
 }
 .history-fail {
   margin: 0;
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   border-radius: 6px;
   background: color-mix(in srgb, var(--failed) 14%, transparent);
   color: var(--failed);
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -2040,7 +2255,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   font-size: 13px;
   outline: none;
 }
@@ -2058,7 +2273,7 @@ input[type='checkbox'] {
   border: 0;
   background: none;
   color: var(--muted);
-  padding: 4px 0;
+  padding: var(--space-1) 0;
   font-size: 12px;
 }
 .history-scopes .seg.on {
@@ -2069,7 +2284,7 @@ input[type='checkbox'] {
 .history-chips,
 .gf-chips {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -2079,7 +2294,7 @@ input[type='checkbox'] {
   border-radius: 999px;
   background: none;
   color: var(--muted);
-  padding: 2px 9px;
+  padding: var(--space-half) var(--space-2);
   font-size: 12px;
 }
 .history-chips .chip.on,
@@ -2098,7 +2313,7 @@ input[type='checkbox'] {
   color: var(--muted);
   font-size: 12px;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
 }
 .history-note {
@@ -2114,20 +2329,20 @@ input[type='checkbox'] {
 }
 .history-empty {
   color: var(--muted);
-  padding: 16px 4px;
+  padding: var(--space-4) var(--space-1);
   margin: 0;
 }
 .history-day h3 {
-  margin: 10px 0 4px;
+  margin: var(--space-2) 0 var(--space-1);
   font-size: 12px;
   color: var(--muted);
   font-weight: 600;
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
 }
 .tag {
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   border-radius: 4px;
   background: var(--raised);
   color: var(--muted);
@@ -2137,7 +2352,7 @@ input[type='checkbox'] {
 .history-row {
   border-left: 2px solid transparent;
   border-radius: 5px;
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-2);
   cursor: default;
 }
 .history-row.failed {
@@ -2148,13 +2363,13 @@ input[type='checkbox'] {
 }
 .history-row.running {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   color: var(--running);
 }
 .history-line {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   min-width: 0;
 }
@@ -2190,7 +2405,7 @@ input[type='checkbox'] {
 .history-task {
   flex: none;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
   font-size: 12px;
   color: var(--muted);
@@ -2202,10 +2417,10 @@ input[type='checkbox'] {
   margin-top: 0;
 }
 .history-detail {
-  margin: 6px 0 2px 42px;
+  margin: var(--space-1) 0 var(--space-half) var(--space-10);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   position: relative;
 }
 .history-where {
@@ -2218,7 +2433,7 @@ input[type='checkbox'] {
   margin: 0;
   max-height: 140px;
   overflow: auto;
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   border-radius: 5px;
   background: var(--bg);
   font-size: 12px;
@@ -2228,12 +2443,12 @@ input[type='checkbox'] {
 }
 .history-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 .history-actions .button {
   font-size: 12px;
-  padding: 3px 7px;
+  padding: var(--space-1) var(--space-2);
 }
 .history-actions kbd {
   color: var(--muted);
@@ -2246,7 +2461,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--raised);
-  padding: 4px;
+  padding: var(--space-1);
   min-width: 160px;
 }
 .history-menu button {
@@ -2254,7 +2469,7 @@ input[type='checkbox'] {
   background: none;
   color: var(--fg);
   text-align: left;
-  padding: 5px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: 5px;
   display: flex;
   justify-content: space-between;
@@ -2265,7 +2480,7 @@ input[type='checkbox'] {
   background: var(--accent-soft);
 }
 .history-more {
-  margin: 4px 0 0 6px;
+  margin: var(--space-1) 0 0 var(--space-1);
   font-size: 12px;
 }
 .history-keys {
@@ -2280,7 +2495,7 @@ input[type='checkbox'] {
   max-height: 72vh;
 }
 .global-find .gf-chips {
-  padding: 8px 12px 0;
+  padding: var(--space-2) var(--space-3) 0;
 }
 .gf-fold {
   margin-left: auto;
@@ -2288,8 +2503,8 @@ input[type='checkbox'] {
 }
 .gf-progress {
   position: relative;
-  margin: 8px 12px 0;
-  padding-bottom: 4px;
+  margin: var(--space-2) var(--space-3) 0;
+  padding-bottom: var(--space-1);
   font-size: 12px;
   color: var(--muted);
 }
@@ -2303,11 +2518,11 @@ input[type='checkbox'] {
 }
 .gf-error,
 .gf-note {
-  margin: 8px 12px 0;
+  margin: var(--space-2) var(--space-3) 0;
   font-size: 12px;
   color: var(--muted);
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -2316,13 +2531,13 @@ input[type='checkbox'] {
 }
 .gf-list {
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--space-2);
   flex: 1;
   min-height: 0;
 }
 .gf-task-head {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
   width: 100%;
   border: 0;
@@ -2330,7 +2545,7 @@ input[type='checkbox'] {
   color: var(--fg);
   font-weight: 600;
   font-size: 13px;
-  padding: 6px 4px;
+  padding: var(--space-2) var(--space-1);
   text-align: left;
 }
 .gf-task-head .task-dot {
@@ -2344,16 +2559,16 @@ input[type='checkbox'] {
 }
 .gf-pane-head {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
-  padding: 2px 4px 2px 18px;
+  padding: var(--space-half) var(--space-1) var(--space-half) var(--space-5);
   color: var(--muted);
   font-size: 12px;
 }
 .gf-row {
   display: flex;
-  gap: 10px;
-  padding: 4px 8px 4px 18px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
   border-radius: 6px;
   min-width: 0;
   cursor: default;
@@ -2383,20 +2598,20 @@ input[type='checkbox'] {
   font-size: 12px;
 }
 .gf-context {
-  margin: 0 8px 4px 72px;
+  margin: 0 var(--space-2) var(--space-1) 72px;
   color: var(--muted);
   font-size: 12px;
   white-space: pre;
   overflow: hidden;
 }
 .gf-more {
-  margin: 2px 0 6px 18px;
+  margin: var(--space-half) 0 var(--space-1) var(--space-4);
   font-size: 12px;
 }
 .global-find .history-keys {
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--line);
-  margin-top: 6px;
+  margin-top: var(--space-1);
 }
 
 /* ─── 빠른 명령 (20단계, 보드 QuickCmd) ─── */
@@ -2405,15 +2620,15 @@ input[type='checkbox'] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 .quick-empty {
-  margin: 8px 12px;
-  padding: 8px 12px;
+  margin: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px dashed var(--line);
   border-radius: 8px;
   background: transparent;
@@ -2434,8 +2649,8 @@ input[type='checkbox'] {
   height: 26px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 10px;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--raised);
@@ -2485,7 +2700,7 @@ input[type='checkbox'] {
 .quick-more,
 .quick-add {
   height: 26px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
@@ -2497,7 +2712,7 @@ input[type='checkbox'] {
   border-style: dashed;
 }
 .button.small {
-  padding: 3px 10px;
+  padding: var(--space-1) var(--space-3);
   font-size: 13px;
 }
 .button.warn {
@@ -2512,8 +2727,8 @@ input[type='checkbox'] {
 }
 .dialog-code {
   display: block;
-  margin: 8px 0;
-  padding: 8px 10px;
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
@@ -2525,7 +2740,7 @@ input[type='checkbox'] {
   flex: 1;
 }
 .menu-key {
-  margin-left: 16px;
+  margin-left: var(--space-4);
   color: var(--muted);
   font-family: inherit;
   font-size: 12px;
@@ -2535,14 +2750,14 @@ input[type='checkbox'] {
 .port-chips {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 4px;
+  gap: var(--space-1);
+  margin-right: var(--space-1);
 }
 .port-chip {
   height: 18px;
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
   border: 0;
   border-radius: 9px;
   background: #1f2227;
@@ -2575,16 +2790,16 @@ input[type='checkbox'] {
 .task-ports {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 3px;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 .port-conflict {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 8px 12px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  margin: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-3);
   border: 1px solid #5c4a24;
   border-radius: 10px;
   background: #2a2214;
@@ -2609,9 +2824,10 @@ input[type='checkbox'] {
 .chat-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 12px;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  height: var(--head-h);
+  padding: 0 var(--chat-gutter);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -2619,7 +2835,7 @@ input[type='checkbox'] {
   height: 18px;
   display: inline-flex;
   align-items: center;
-  padding: 0 7px;
+  padding: 0 var(--space-2);
   border-radius: 9px;
   font-size: 12px;
   font-weight: 600;
@@ -2640,7 +2856,7 @@ input[type='checkbox'] {
   color: var(--waiting);
   border: 1px solid var(--waiting);
   border-radius: 9px;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
 }
 .chat-status {
   font-size: 12px;
@@ -2666,7 +2882,7 @@ input[type='checkbox'] {
 }
 .chat-switch {
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: transparent;
@@ -2678,19 +2894,19 @@ input[type='checkbox'] {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* 26단계: 넓은 창에서 줄이 끝없이 길지 않게 — 가운데 760px 기둥(Orca 처럼). 좁으면 16px 여백 */
-  padding: 16px max(16px, calc((100% - 760px) / 2));
+  /* 26단계: 넓은 창에서 줄이 끝없이 길지 않게 — 가운데 760px 기둥(Orca 처럼). 28단계: 머리 · 입력과 같은 --chat-gutter */
+  padding: var(--space-4) var(--chat-gutter);
   font-size: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 .chat-user {
   align-self: flex-end;
   max-width: 80%;
   background: var(--raised);
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.55;
@@ -2707,10 +2923,10 @@ input[type='checkbox'] {
 .chat-tools-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   height: 30px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border: 0;
   background: transparent;
   color: var(--fg);
@@ -2732,7 +2948,7 @@ input[type='checkbox'] {
 .chat-tools-items {
   list-style: none;
   margin: 0;
-  padding: 4px 10px 8px 28px;
+  padding: var(--space-1) var(--space-3) var(--space-2) var(--space-8);
   font-size: 13px;
   color: var(--muted);
   font-family: var(--mono, 'JetBrains Mono', monospace);
@@ -2744,17 +2960,17 @@ input[type='checkbox'] {
   color: var(--fg);
 }
 .chat-tool-tail {
-  margin: 2px 0 4px;
+  margin: var(--space-half) 0 var(--space-1);
   white-space: pre-wrap;
   font-size: 12px;
 }
 .chat-card,
 .chat-band {
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .chat-card.perm {
   background: #2a2214;
@@ -2780,7 +2996,7 @@ input[type='checkbox'] {
 }
 .chat-card-cmd {
   margin: 0;
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   background: #0006;
   border-radius: 6px;
   white-space: pre-wrap;
@@ -2790,14 +3006,14 @@ input[type='checkbox'] {
 .chat-card-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .chat-card-actions button,
 .chat-examples button,
 .chat-ask-option {
   height: 28px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border-radius: 6px;
   border: 1px solid var(--line);
   background: transparent;
@@ -2827,7 +3043,7 @@ input[type='checkbox'] {
 .chat-ask-options {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .chat-ask-option {
   height: auto;
@@ -2872,7 +3088,7 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   text-align: center;
   max-width: 460px;
   line-height: 1.45;
@@ -2884,40 +3100,53 @@ input[type='checkbox'] {
 .chat-examples {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   align-self: stretch;
 }
 .chat-input-box {
   flex-shrink: 0;
-  border-top: 1px solid var(--line);
-  padding: 10px max(12px, calc((100% - 760px) / 2)) 12px;
+  padding: var(--space-3) var(--chat-gutter);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .chat-hint {
   font-size: 12.5px;
   color: var(--waiting);
 }
+/* 28단계(Orca 작성칸): 입력과 도구 줄이 테두리 카드 하나 — 테두리는 늘 같은 굵기, 포커스는 색만 은은하게 */
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* 안쪽 글 · 도구 줄의 왼쪽 끝 = 카드(허락 · 도구)의 안쪽 글과 같은 12px(+테두리 1px) */
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  transition: border-color 120ms;
+}
+.chat-composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
 .chat-input {
   resize: none;
   width: 100%;
   box-sizing: border-box;
-  background: var(--panel);
+  background: transparent;
   color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: var(--space-1) 0;
   font: inherit;
 }
 .chat-input:focus {
   outline: none;
-  border-color: var(--accent);
 }
 .chat-input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   font-size: 12px;
 }
 .chat-perm-wrap {
@@ -2925,7 +3154,7 @@ input[type='checkbox'] {
 }
 .chat-perm {
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: 11px;
   border: 1px solid var(--line);
   background: transparent;
@@ -2946,7 +3175,7 @@ input[type='checkbox'] {
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 4px;
+  padding: var(--space-1);
   z-index: 20;
   min-width: 150px;
 }
@@ -2956,7 +3185,7 @@ input[type='checkbox'] {
   background: transparent;
   color: var(--fg);
   text-align: left;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: 4px;
   font-size: 13px;
   cursor: pointer;
@@ -2989,7 +3218,7 @@ input[type='checkbox'] {
 }
 .chat-send {
   height: 24px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border: 0;
   border-radius: 6px;
   font-size: 12px;
@@ -3011,15 +3240,15 @@ input[type='checkbox'] {
 /* 21b 사이드바 흐름 보기 — 거르기 · 보기 전환 · 개수 띠 · 상태 구역 · 끌어 놓기 · 마지막 한 줄 */
 .sidebar-tools {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: center;
-  padding: 0 10px 6px;
+  padding: 0 var(--space-3) var(--space-2);
 }
 .sidebar-filter {
   flex: 1;
   min-width: 0;
   height: 26px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--raised);
@@ -3040,7 +3269,7 @@ input[type='checkbox'] {
 }
 .sidebar-views button {
   height: 24px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -3054,15 +3283,15 @@ input[type='checkbox'] {
 }
 .sidebar-bar {
   display: flex;
-  gap: 2px;
-  padding: 0 14px 4px;
+  gap: var(--space-half);
+  padding: 0 var(--space-4) var(--space-1);
   font-size: 12px;
   color: var(--muted);
 }
 /* 칸 너비가 개수에 비례하는 쌓인 막대 — 위 3px 띠가 비율을 보인다 */
 .sidebar-bar-item {
   min-width: 0;
-  padding-top: 5px;
+  padding-top: var(--space-1);
   border-top: 3px solid var(--line);
   white-space: nowrap;
   overflow: hidden;
@@ -3075,7 +3304,7 @@ input[type='checkbox'] {
 .flow-section .sidebar-section-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .flow-dot {
   width: 7px;
@@ -3084,20 +3313,20 @@ input[type='checkbox'] {
   flex: none;
 }
 .flow-section.attention-section {
-  margin: 4px 8px;
+  margin: var(--space-1) var(--space-2);
   border: 1px solid var(--waiting);
   border-radius: 8px;
 }
 .flow-section.attention-section ul {
-  padding: 0 2px 4px;
+  padding: 0 var(--space-half) var(--space-1);
 }
 .flow-section.drop {
   background: var(--accent-soft);
   border-radius: 8px;
 }
 .flow-empty {
-  margin: 0 8px 4px;
-  padding: 6px 8px;
+  margin: 0 var(--space-2) var(--space-1);
+  padding: var(--space-2) var(--space-2);
   border: 1px dashed var(--line);
   border-radius: 6px;
   font-size: 12px;
@@ -3108,7 +3337,7 @@ input[type='checkbox'] {
 .task-line1 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   min-width: 0;
 }
 .task-line1 .task-name {
@@ -3166,15 +3395,15 @@ input[type='checkbox'] {
 .chat-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 .chat-image-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 11px;
   font-size: 12.5px;
@@ -3185,7 +3414,7 @@ input[type='checkbox'] {
   border: none;
   color: var(--muted);
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 var(--space-half);
 }
 /* 말풍선 왼쪽 바깥에 띄운다 — 올렸다 내릴 때 목록 높이가 바뀌지 않게 */
 .chat-user-actions {
@@ -3193,7 +3422,7 @@ input[type='checkbox'] {
   right: calc(100% + 6px);
   top: 4px;
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   visibility: hidden;
   white-space: nowrap;
 }
@@ -3204,8 +3433,11 @@ input[type='checkbox'] {
 .chat-user-actions button,
 .chat-queue button,
 .chat-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   font-size: 12.5px;
   border-radius: 6px;
   border: 1px solid var(--line);
@@ -3216,8 +3448,8 @@ input[type='checkbox'] {
 .chat-queue {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
   border: 1px dashed var(--line);
   border-radius: 8px;
   font-size: 13px;
@@ -3274,9 +3506,9 @@ input[type='checkbox'] {
 .review-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   height: 36px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
   min-width: 0;
@@ -3296,7 +3528,7 @@ input[type='checkbox'] {
 .review-fresh {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -3314,7 +3546,7 @@ input[type='checkbox'] {
 }
 .review-pane button {
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 5px;
   background: transparent;
@@ -3341,8 +3573,8 @@ input[type='checkbox'] {
 }
 .review-seg {
   display: inline-flex;
-  gap: 2px;
-  padding: 2px;
+  gap: var(--space-half);
+  padding: var(--space-half);
   border-radius: 6px;
   background: var(--panel);
 }
@@ -3369,15 +3601,15 @@ input[type='checkbox'] {
 }
 .review-list-tools {
   display: flex;
-  gap: 6px;
-  padding: 8px;
+  gap: var(--space-1);
+  padding: var(--space-2);
   align-items: center;
 }
 .review-filter {
   flex: 1;
   min-width: 0;
   height: 24px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
@@ -3388,16 +3620,16 @@ input[type='checkbox'] {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 6px 6px;
+  padding: 0 var(--space-2) var(--space-2);
 }
 .review-pane .review-file,
 .review-pane .review-folder {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   width: 100%;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 0;
   border-radius: 6px;
   text-align: left;
@@ -3414,7 +3646,7 @@ input[type='checkbox'] {
   height: 16px;
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   border-radius: 4px;
   font-size: 12px;
   background: var(--raised);
@@ -3470,7 +3702,7 @@ input[type='checkbox'] {
   color: #fff;
 }
 .review-pane .review-dock {
-  margin: 8px;
+  margin: var(--space-2);
   height: 28px;
 }
 .review-diff,
@@ -3483,9 +3715,9 @@ input[type='checkbox'] {
 .review-file-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   height: 34px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
   min-width: 0;
@@ -3506,14 +3738,14 @@ input[type='checkbox'] {
 }
 .review-hunk-head,
 .review-gap {
-  padding: 0 14px;
+  padding: 0 var(--space-4);
   color: var(--muted);
   background: var(--panel);
 }
 .review-line {
   position: relative;
   display: flex;
-  padding: 0 14px 0 0;
+  padding: 0 var(--space-4) 0 0;
   white-space: pre;
 }
 .review-line.tadd {
@@ -3536,7 +3768,7 @@ input[type='checkbox'] {
 .review-no {
   flex-shrink: 0;
   width: 44px;
-  padding-right: 8px;
+  padding-right: var(--space-2);
   text-align: right;
   color: var(--muted);
   opacity: 0.7;
@@ -3558,20 +3790,20 @@ input[type='checkbox'] {
   visibility: visible;
 }
 .review-fold {
-  margin: 14px;
-  padding: 12px;
+  margin: var(--space-3);
+  padding: var(--space-3);
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--muted);
   display: flex;
-  gap: 10px;
+  gap: var(--space-2);
   align-items: center;
 }
 .review-revert-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--line);
   background: #2a2214;
   color: var(--waiting);
@@ -3585,7 +3817,7 @@ input[type='checkbox'] {
   min-width: 160px;
 }
 .review-hint {
-  padding: 6px 12px;
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
@@ -3595,14 +3827,14 @@ input[type='checkbox'] {
   flex-shrink: 0;
 }
 .review-commit {
-  padding: 12px;
-  gap: 10px;
+  padding: var(--space-3);
+  gap: var(--space-2);
   overflow: auto;
 }
 .review-commit-head {
   font-weight: 600;
   display: flex;
-  gap: 10px;
+  gap: var(--space-2);
   align-items: baseline;
 }
 .review-commit-head .dim {
@@ -3612,7 +3844,7 @@ input[type='checkbox'] {
 .review-msg {
   min-height: 90px;
   resize: vertical;
-  padding: 8px;
+  padding: var(--space-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--panel);
@@ -3622,9 +3854,9 @@ input[type='checkbox'] {
 }
 .review-band {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
-  padding: 7px 10px;
+  padding: var(--space-2) var(--space-3);
   border-radius: 6px;
   background: var(--panel);
 }
@@ -3648,44 +3880,44 @@ input[type='checkbox'] {
 .review-fail {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: flex-start;
 }
 .review-fail .err {
   color: var(--failed);
 }
 .review-fail pre {
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
   max-height: 220px;
   overflow: auto;
-  padding: 8px;
+  padding: var(--space-2);
   border-radius: 6px;
   background: var(--panel);
   font-size: 12px;
 }
 .review-commit-acts {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 .review-pane .review-commit-acts button {
   height: 28px;
-  padding: 0 14px;
+  padding: 0 var(--space-4);
 }
 .review-done {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
   color: var(--done);
 }
 .review-empty {
-  margin: 24px;
-  padding: 16px;
+  margin: var(--space-6);
+  padding: var(--space-4);
   border: 1px solid var(--line);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .review-empty-title {
   font-weight: 600;
@@ -3696,7 +3928,7 @@ input[type='checkbox'] {
 }
 .review-empty-acts {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 .review-reverted {
@@ -3707,16 +3939,16 @@ input[type='checkbox'] {
   flex-direction: column;
 }
 .review-reverted-head {
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   color: var(--muted);
 }
 .review-rev-row {
   display: grid;
   grid-template-columns: 90px 1fr auto auto auto;
-  gap: 10px;
+  gap: var(--space-2);
   align-items: center;
   height: 32px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
 }
 .review-rev-row.current {
   background: var(--raised);
@@ -3724,9 +3956,9 @@ input[type='checkbox'] {
 .chat-diff-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 10px 8px;
-  padding: 6px 10px;
+  gap: var(--space-2);
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 13px;
@@ -3751,7 +3983,7 @@ input[type='checkbox'] {
   width: min(560px, calc(100% - 32px));
   max-height: calc(100% - 96px);
   overflow: auto;
-  padding: 12px 14px 10px;
+  padding: var(--space-3) var(--space-4) var(--space-3);
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--raised);
@@ -3764,7 +3996,7 @@ input[type='checkbox'] {
 .resume-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .resume-head strong {
   font-size: 14px;
@@ -3775,28 +4007,28 @@ input[type='checkbox'] {
   font-size: 13px;
 }
 .resume-tip {
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--muted);
   font-size: 13px;
 }
 .resume-list {
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
 }
 .resume-fact {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   min-height: 36px;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: 6px;
 }
 .resume-fact.sel {
   background: var(--accent-soft);
 }
 .resume-fact.top {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   border: 1px solid var(--line);
 }
 .resume-fact.top.attention {
@@ -3840,8 +4072,8 @@ input[type='checkbox'] {
   font-size: 13px;
 }
 .resume-more {
-  margin-top: 4px;
-  padding: 2px 8px;
+  margin-top: var(--space-1);
+  padding: var(--space-half) var(--space-2);
   border: 0;
   background: none;
   color: var(--accent);
@@ -3849,7 +4081,7 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 .resume-keys {
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--muted);
   font-size: 12px;
   text-align: right;
@@ -3861,9 +4093,9 @@ input[type='checkbox'] {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 0;
-  padding: 10px 12px;
+  padding: var(--space-3) var(--space-3);
   border-left: 1px solid var(--line);
   background: var(--panel);
 }
@@ -3888,8 +4120,8 @@ input[type='checkbox'] {
 .note {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  padding: 4px 0;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
   border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
@@ -3897,7 +4129,7 @@ input[type='checkbox'] {
   flex: 1;
   min-width: 0;
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
   align-items: flex-start;
   overflow-wrap: anywhere;
 }
@@ -3911,7 +4143,7 @@ input[type='checkbox'] {
   font-size: 12px;
 }
 .notes-input {
-  padding: 6px 8px;
+  padding: var(--space-2) var(--space-2);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
@@ -3920,14 +4152,18 @@ input[type='checkbox'] {
 
 /* ─── 보관함 · 주간 정리 · 원격 (25단계) ─── */
 .sidebar-foot {
-  padding-bottom: 8px;
+  padding-bottom: var(--space-2);
 }
 .sidebar-foot-row {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 .sidebar-foot-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
   flex: 1;
   height: 26px;
   border: 1px solid var(--line);
@@ -3949,7 +4185,7 @@ input[type='checkbox'] {
   background: var(--raised);
   color: var(--muted);
   font-size: 12px;
-  padding: 1px 8px;
+  padding: var(--space-half) var(--space-2);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -3959,7 +4195,7 @@ input[type='checkbox'] {
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   white-space: nowrap;
 }
 .task-host.up {
@@ -3978,11 +4214,11 @@ input[type='checkbox'] {
   max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .archive-tabs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .archive-tabs button[aria-selected='true'] {
   background: var(--accent-soft);
@@ -3995,7 +4231,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
-  padding: 0 10px;
+  padding: 0 var(--space-3);
 }
 .archive-list {
   list-style: none;
@@ -4008,8 +4244,8 @@ input[type='checkbox'] {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: 6px;
 }
 .archive-row[aria-selected='true'] {
@@ -4035,7 +4271,7 @@ input[type='checkbox'] {
 }
 .archive-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .archive-hint {
   color: var(--muted);
@@ -4043,13 +4279,13 @@ input[type='checkbox'] {
 }
 .archive-empty {
   color: var(--muted);
-  padding: 24px 10px;
+  padding: var(--space-6) var(--space-3);
   text-align: center;
 }
 .weekly-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .weekly-head h2 {
   margin: 0;
@@ -4063,12 +4299,12 @@ input[type='checkbox'] {
 .weekly-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--space-2);
 }
 .weekly-kpi {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
 }
 .weekly-kpi b {
   display: block;
@@ -4081,7 +4317,7 @@ input[type='checkbox'] {
 .weekly-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: var(--space-1);
   align-items: end;
   height: 90px;
 }
@@ -4109,7 +4345,7 @@ input[type='checkbox'] {
 .weekly-table th,
 .weekly-table td {
   text-align: left;
-  padding: 5px 6px;
+  padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--line);
 }
 .weekly-table td.num,
@@ -4122,8 +4358,8 @@ input[type='checkbox'] {
 .remote-band {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--line);
   background: var(--raised);
   font-size: 13px;
@@ -4147,7 +4383,7 @@ input[type='checkbox'] {
 .new-task-where,
 .new-task-start {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1);
 }
 .new-task-where button[aria-pressed='true'],
 .new-task-start button[aria-pressed='true'] {

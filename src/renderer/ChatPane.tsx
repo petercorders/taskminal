@@ -19,6 +19,7 @@ import {
   type ChatImage,
   type ChatPermission,
 } from '../shared/chat'
+import { Icon } from './icons'
 
 interface Props {
   paneId: string
@@ -759,6 +760,7 @@ export function ChatPane(p: Props) {
             ))}
           </div>
         )}
+        <div className="chat-composer">
         <textarea
           ref={inputRef}
           className="chat-input"
@@ -772,7 +774,8 @@ export function ChatPane(p: Props) {
         />
         <div className="chat-input-row">
           <button type="button" className="chat-attach" data-testid="chat-attach" onClick={() => void pickImages()} title="그림 붙이기 (⌘V · 끌어 놓기도 돼요)">
-            📎 그림
+            <Icon name="clip" size={14} />
+            그림
           </button>
           <span className="chat-perm-wrap">
             <button type="button" className={`chat-perm${p.permission === 'auto' ? ' auto' : ''}`} data-testid="chat-perm" aria-haspopup="menu" aria-expanded={permMenu} onClick={() => setPermMenu((v) => !v)}>
@@ -815,6 +818,7 @@ export function ChatPane(p: Props) {
               보내기 ↩
             </button>
           )}
+        </div>
         </div>
       </footer>
     </div>

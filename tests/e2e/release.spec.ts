@@ -89,7 +89,7 @@ test.describe('업데이트 (로컬 피드)', () => {
     seedState(userData, [{ id: 't', name: '업데이트', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
     await menu('update-check')
-    await expect(win.getByRole('heading', { name: '설정 — 정보' })).toBeVisible()
+    await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible()
     await expect(banner('downloaded')).toContainText('Taskminal 0.1.1 을 내려받았어요', { timeout: 15_000 })
     await expect(banner('downloaded')).toContainText('대화 pane · 변경 검토 · 고친 것 12개 · 외 2개')
     await expect(banner('downloaded')).toContainText('다시 시작해도 셸은 그대로 이어져요')
@@ -106,7 +106,7 @@ test.describe('업데이트 (로컬 피드)', () => {
     await expect(banner('downloaded')).toHaveCount(0)
     await expect(win.getByTestId('update-chip')).toHaveText('● 0.1.1 설치 가능')
     await win.getByTestId('update-chip').click()
-    await expect(win.getByRole('heading', { name: '설정 — 정보' })).toBeVisible()
+    await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible()
     await win.screenshot({ path: 'test-results/release-chip-about.png' })
   })
 
@@ -116,7 +116,7 @@ test.describe('업데이트 (로컬 피드)', () => {
     seedState(userData, [{ id: 't', name: '건너뛰기', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
     await menu('update-check')
-    await expect(win.getByRole('heading', { name: '설정 — 정보' })).toBeVisible() // 열린 뒤에 닫는다 — 먼저 누르면 늦게 열린 설정이 줄을 가린다
+    await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible() // 열린 뒤에 닫는다 — 먼저 누르면 늦게 열린 설정이 줄을 가린다
     await win.keyboard.press('Escape')
     await expect(win.getByTestId('settings')).toHaveCount(0)
     await banner('downloaded').getByRole('button', { name: '이 버전 건너뛰기' }).click()
@@ -140,7 +140,7 @@ test.describe('업데이트 (로컬 피드)', () => {
     seedState(userData, [{ id: 't', name: '설치', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
     await menu('update-check')
-    await expect(win.getByRole('heading', { name: '설정 — 정보' })).toBeVisible() // 열린 뒤에 닫는다 — 먼저 누르면 늦게 열린 설정이 줄을 가린다
+    await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible() // 열린 뒤에 닫는다 — 먼저 누르면 늦게 열린 설정이 줄을 가린다
     await win.keyboard.press('Escape')
     await expect(win.getByTestId('settings')).toHaveCount(0)
     await banner('downloaded').getByRole('button', { name: '다시 시작해서 설치' }).click()

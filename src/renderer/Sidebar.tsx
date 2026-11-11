@@ -8,6 +8,7 @@ import type { Branches } from '../shared/git'
 import { TaskMenu } from './TaskMenu'
 import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
 import { SidebarPorts } from './ports-ui'
+import { Icon } from './icons'
 
 interface Props {
   state: AppState
@@ -253,7 +254,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
         <span>일감</span>
         <span className="sidebar-head-actions">
           <button type="button" className="icon-button" onClick={onSettings} aria-label="설정" title="설정 (⌘,)" disabled={loading}>
-            ⚙
+            <Icon name="gear" />
           </button>
           <button type="button" className="icon-button" onClick={onNew} aria-label="새 일감" title="새 일감" disabled={loading}>
             +
@@ -425,10 +426,12 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
         )}
         <div className="sidebar-foot-row">
           <button type="button" className="sidebar-foot-button" onClick={onWeekly} data-testid="weekly-open" title="이번 주 정리">
-            📊 이번 주
+            <Icon name="chart" />
+            이번 주
           </button>
           <button type="button" className="sidebar-foot-button" onClick={onOpenArchive} data-testid="archive-open" title="보관함 (⇧⌘E)">
-            🗄 보관함 {archivedCount > 0 ? archivedCount : ''}
+            <Icon name="archive" />
+            보관함 {archivedCount > 0 ? archivedCount : ''}
           </button>
         </div>
       </footer>

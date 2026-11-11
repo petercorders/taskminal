@@ -6,6 +6,7 @@ import type { Id, SplitDir, Task, Template } from '../shared/types'
 import { TemplateMenu } from './TemplateMenu'
 import type { PortChip } from '../shared/ports'
 import { PortChips } from './ports-ui'
+import { Icon } from './icons'
 
 interface Props {
   task: Task
@@ -192,7 +193,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
           </button>
         ))}
         <button type="button" className={`tab-action history${historyOpen ? ' on' : ''}`} aria-pressed={historyOpen} title="명령 기록 (⌘Y)" data-testid="history-button" onClick={onHistory}>
-          🕘 기록
+          <Icon name="history" size={14} />
+          기록
         </button>
         {notes?.onResume && (
           <button type="button" className="tab-action resume" title="이어받기 요약 다시 보기 (⌥⌘R)" data-testid="resume-button" onClick={notes.onResume}>
@@ -201,7 +203,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
         )}
         {notes && (
           <button type="button" className={`tab-action notes${notes.todo > 0 ? ' has-todo' : ''}${notes.open ? ' on' : ''}`} aria-pressed={notes.open} title="메모 · 할 일 (⌥⌘M)" data-testid="notes-button" onClick={notes.onToggle}>
-            ✎ 메모{notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}
+            <Icon name="note" size={14} />
+            메모{notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}
           </button>
         )}
       </div>

@@ -70,7 +70,7 @@ test('⌘, 로 열고 찾기 · Esc 는 찾기 글자부터 지우고 다음 Esc
   await expect(win.getByTestId('state-notice')).toHaveCount(0) // 새 설정 칸이 없는 옛 파일이어도 '일부를 읽지 못함' 경고 · 백업 없음
   await openSettings()
   await expect(settings().getByRole('searchbox', { name: '설정 찾기' })).toBeFocused()
-  await expect(settings().getByRole('heading', { level: 1 })).toHaveText('설정 — 일반')
+  await expect(settings().getByRole('heading', { level: 1 })).toHaveText('일반')
   await win.keyboard.type('커서')
   await expect.poll(rowTitles).toEqual(['커서', '커서 깜빡임'])
   await win.keyboard.type('zzz')

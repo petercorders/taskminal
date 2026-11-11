@@ -1,4 +1,5 @@
 // 명령 기록 칸 ⌘Y (19단계, History 보드) — 오른쪽에서 밀려 나오는 칸. 본문을 가리지 않고 좁힌다.
+import { Icon } from './icons'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { formatDuration, type PaneActivity } from '../shared/activity'
 import { isDangerous } from '../shared/danger'
@@ -308,7 +309,8 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
                               onSaveQuick(e)
                             }}
                           >
-                            ⚡ 빠른 명령으로 저장…
+                            <Icon name="bolt" size={14} />
+                            빠른 명령으로 저장…
                           </button>
                           <button
                             type="button"
