@@ -138,7 +138,7 @@ select {
   width: 24px;
   height: 24px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font-size: 16px;
@@ -173,7 +173,7 @@ select {
   position: relative;
   display: flex;
   align-items: center;
-  border-radius: 7px;
+  border-radius: var(--r-md);
 }
 .task-row:hover {
   background: var(--raised);
@@ -267,7 +267,7 @@ select {
   height: 22px;
   margin-right: var(--space-1);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -508,7 +508,7 @@ select {
   height: 20px;
   margin-right: var(--space-1);
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--muted);
   line-height: 1;
@@ -528,7 +528,7 @@ select {
   margin: 0 var(--space-1) 0 var(--space-2);
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--bg);
   outline: none;
 }
@@ -605,7 +605,7 @@ select {
 .button {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--raised);
   cursor: pointer;
 }
@@ -653,7 +653,7 @@ select {
   gap: var(--space-3);
   padding: var(--space-5) var(--space-5);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--panel);
   box-shadow: 0 20px 60px #00000080;
 }
@@ -708,7 +708,7 @@ select {
 .field select {
   padding: var(--space-2) var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--bg);
   min-width: 0;
 }
@@ -775,7 +775,7 @@ select {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--panel);
   box-shadow: 0 20px 60px #00000080;
   overflow: hidden;
@@ -823,7 +823,7 @@ select {
   min-height: var(--row-h);
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   cursor: default;
   min-width: 0;
 }
@@ -921,7 +921,7 @@ select {
 }
 .group-count {
   padding: 0 var(--space-2);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--raised);
   color: var(--muted);
 }
@@ -935,7 +935,7 @@ select {
   margin: var(--space-1) var(--space-1);
   padding: var(--space-2) var(--space-2);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--fg);
 }
@@ -952,7 +952,7 @@ select {
   overflow-y: auto;
   padding: var(--space-1);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--panel);
   box-shadow: 0 12px 32px #00000066;
 }
@@ -964,7 +964,7 @@ select {
   height: 28px;
   padding: 0 var(--space-3) 0 var(--space-2);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -1113,7 +1113,7 @@ select {
 .badge {
   margin-left: auto;
   padding: var(--space-half) var(--space-2);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--failed);
   color: #fff;
   font-size: 12px;
@@ -1289,7 +1289,7 @@ select {
   height: 20px;
   padding: var(--space-half);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--line);
   cursor: pointer;
   transition: background 120ms;
@@ -1300,7 +1300,7 @@ select {
 .switch-knob {
   width: 16px;
   height: 16px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #f4f5f6;
   transition: transform 120ms;
 }
@@ -1367,7 +1367,7 @@ select {
   margin: var(--space-2) 0 0;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
   white-space: pre-wrap;
 }
@@ -1376,7 +1376,7 @@ select {
   height: 30px;
   padding: 0 var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   font-family: 'JetBrains Mono', Menlo, monospace;
   font-size: 13px;
@@ -1453,7 +1453,7 @@ input[type='checkbox'] {
   resize: vertical;
   padding: var(--space-3) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--fg);
   font: 12px/1.5 ui-monospace, Menlo, monospace;
@@ -1498,7 +1498,7 @@ input[type='checkbox'] {
   gap: var(--space-1);
   padding: 0 var(--space-2) 0 var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--muted);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -1532,7 +1532,7 @@ input[type='checkbox'] {
   background: transparent;
   color: inherit;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-size: 13px;
   padding: var(--space-half) var(--space-1);
 }
@@ -1659,7 +1659,7 @@ input[type='checkbox'] {
   font-size: 12px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   white-space: pre-wrap;
 }
 .host-confirm {
@@ -1718,7 +1718,7 @@ input[type='checkbox'] {
   max-width: calc(100vw - 32px);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--raised);
   box-shadow: 0 10px 30px #00000066;
 }
@@ -1737,7 +1737,7 @@ input[type='checkbox'] {
 .backup-message {
   margin: 0 0 var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 .backup-message.ok {
@@ -1760,7 +1760,7 @@ input[type='checkbox'] {
   max-height: 360px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: var(--space-1);
 }
 .backup-list:focus-visible {
@@ -1776,7 +1776,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   cursor: pointer;
   font-size: 13px;
 }
@@ -1907,7 +1907,7 @@ input[type='checkbox'] {
   max-width: calc(100% - 28px);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 1px solid #2b3a52;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: #141c2a;
   color: #79b8ff;
   font-size: 13px;
@@ -1917,7 +1917,7 @@ input[type='checkbox'] {
   position: absolute;
   z-index: 6;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--panel);
   box-shadow: 0 10px 30px #00000066;
   font-size: 13px;
@@ -1945,7 +1945,7 @@ input[type='checkbox'] {
   width: 100%;
   padding: var(--space-1) var(--space-2);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: none;
   text-align: left;
   cursor: pointer;
@@ -1967,7 +1967,7 @@ input[type='checkbox'] {
   justify-content: space-between;
   padding: var(--space-1) var(--space-2);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: none;
   text-align: left;
   cursor: pointer;
@@ -1999,7 +1999,7 @@ input[type='checkbox'] {
   width: 100%;
   height: 28px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 13px;
@@ -2030,7 +2030,7 @@ input[type='checkbox'] {
   height: 24px;
   padding: 0 var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
@@ -2045,7 +2045,7 @@ input[type='checkbox'] {
   margin: 0;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 .errlog-row {
   display: flex;
@@ -2092,7 +2092,7 @@ input[type='checkbox'] {
   gap: var(--space-1);
   padding: var(--space-4);
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 .errlog-empty span {
@@ -2142,7 +2142,7 @@ input[type='checkbox'] {
   gap: var(--space-half);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--fg);
   cursor: pointer;
@@ -2163,7 +2163,7 @@ input[type='checkbox'] {
   margin-top: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
 }
 .first-run-code code {
@@ -2234,7 +2234,7 @@ input[type='checkbox'] {
 .history-close {
   margin-left: auto;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: none;
   color: var(--muted);
   font-size: 12px;
@@ -2243,7 +2243,7 @@ input[type='checkbox'] {
 .history-fail {
   margin: 0;
   padding: var(--space-2) var(--space-2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: color-mix(in srgb, var(--failed) 14%, transparent);
   color: var(--failed);
   display: flex;
@@ -2253,7 +2253,7 @@ input[type='checkbox'] {
 }
 .history-search {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   padding: var(--space-2) var(--space-2);
   font-size: 13px;
@@ -2265,7 +2265,7 @@ input[type='checkbox'] {
 .history-scopes {
   display: flex;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 .history-scopes .seg {
@@ -2343,7 +2343,7 @@ input[type='checkbox'] {
 }
 .tag {
   padding: 0 var(--space-2);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: var(--raised);
   color: var(--muted);
   font-size: 12px;
@@ -2351,7 +2351,7 @@ input[type='checkbox'] {
 }
 .history-row {
   border-left: 2px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: var(--space-1) var(--space-2);
   cursor: default;
 }
@@ -2434,7 +2434,7 @@ input[type='checkbox'] {
   max-height: 140px;
   overflow: auto;
   padding: var(--space-2) var(--space-2);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: var(--bg);
   font-size: 12px;
   line-height: 1.4;
@@ -2459,7 +2459,7 @@ input[type='checkbox'] {
   flex-direction: column;
   align-self: flex-end;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: var(--raised);
   padding: var(--space-1);
   min-width: 160px;
@@ -2470,7 +2470,7 @@ input[type='checkbox'] {
   color: var(--fg);
   text-align: left;
   padding: var(--space-1) var(--space-2);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   display: flex;
   justify-content: space-between;
   font-size: 13px;
@@ -2569,7 +2569,7 @@ input[type='checkbox'] {
   display: flex;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   min-width: 0;
   cursor: default;
 }
@@ -2630,7 +2630,7 @@ input[type='checkbox'] {
   margin: var(--space-2) var(--space-3);
   padding: var(--space-2) var(--space-3);
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font-size: 13.5px;
@@ -2652,7 +2652,7 @@ input[type='checkbox'] {
   gap: var(--space-1);
   padding: 0 var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--raised);
   color: var(--fg);
   font-size: 13px;
@@ -2702,7 +2702,7 @@ input[type='checkbox'] {
   height: 26px;
   padding: 0 var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
@@ -2730,7 +2730,7 @@ input[type='checkbox'] {
   margin: var(--space-2) 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
@@ -2801,7 +2801,7 @@ input[type='checkbox'] {
   margin: var(--space-2) var(--space-3);
   padding: var(--space-3) var(--space-3);
   border: 1px solid #5c4a24;
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: #2a2214;
   flex-shrink: 0;
 }
@@ -2884,7 +2884,7 @@ input[type='checkbox'] {
   height: 22px;
   padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--fg);
   font-size: 12px;
@@ -2905,7 +2905,7 @@ input[type='checkbox'] {
   align-self: flex-end;
   max-width: 80%;
   background: var(--raised);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: var(--space-2) var(--space-3);
   white-space: pre-wrap;
   word-break: break-word;
@@ -2918,7 +2918,7 @@ input[type='checkbox'] {
 }
 .chat-tools {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 .chat-tools-head {
   display: flex;
@@ -2966,7 +2966,7 @@ input[type='checkbox'] {
 }
 .chat-card,
 .chat-band {
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   padding: var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
@@ -2998,7 +2998,7 @@ input[type='checkbox'] {
   margin: 0;
   padding: var(--space-2) var(--space-2);
   background: #0006;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   white-space: pre-wrap;
   word-break: break-all;
   font-size: 13px;
@@ -3014,7 +3014,7 @@ input[type='checkbox'] {
 .chat-ask-option {
   height: 28px;
   padding: 0 var(--space-3);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--fg);
@@ -3174,7 +3174,7 @@ input[type='checkbox'] {
   flex-direction: column;
   background: var(--raised);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: var(--space-1);
   z-index: 20;
   min-width: 150px;
@@ -3186,7 +3186,7 @@ input[type='checkbox'] {
   color: var(--fg);
   text-align: left;
   padding: 0 var(--space-2);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-size: 13px;
   cursor: pointer;
 }
@@ -3220,7 +3220,7 @@ input[type='checkbox'] {
   height: 24px;
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   font-size: 12px;
   font-weight: 600;
   background: #8b6cf0;
@@ -3250,7 +3250,7 @@ input[type='checkbox'] {
   height: 26px;
   padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--raised);
   color: inherit;
   font: inherit;
@@ -3264,7 +3264,7 @@ input[type='checkbox'] {
   display: flex;
   flex: none;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 .sidebar-views button {
@@ -3315,20 +3315,20 @@ input[type='checkbox'] {
 .flow-section.attention-section {
   margin: var(--space-1) var(--space-2);
   border: 1px solid var(--waiting);
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 .flow-section.attention-section ul {
   padding: 0 var(--space-half) var(--space-1);
 }
 .flow-section.drop {
   background: var(--accent-soft);
-  border-radius: 8px;
+  border-radius: var(--r-md);
 }
 .flow-empty {
   margin: 0 var(--space-2) var(--space-1);
   padding: var(--space-2) var(--space-2);
   border: 1px dashed var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   font-size: 12px;
   color: var(--muted);
   list-style: none;
@@ -3439,7 +3439,7 @@ input[type='checkbox'] {
   height: 22px;
   padding: 0 var(--space-2);
   font-size: 12.5px;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--fg);
@@ -3451,7 +3451,7 @@ input[type='checkbox'] {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2);
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 .chat-queue.paused {
@@ -3535,7 +3535,7 @@ input[type='checkbox'] {
 .review-fresh .dot {
   width: 6px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: var(--done);
 }
 .review-fresh.busy .dot {
@@ -3548,7 +3548,7 @@ input[type='checkbox'] {
   height: 22px;
   padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--fg);
   font-size: 12px;
@@ -3575,7 +3575,7 @@ input[type='checkbox'] {
   display: inline-flex;
   gap: var(--space-half);
   padding: var(--space-half);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--panel);
 }
 .review-pane .review-seg button {
@@ -3611,7 +3611,7 @@ input[type='checkbox'] {
   height: 24px;
   padding: 0 var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--fg);
   font-size: 12.5px;
@@ -3631,7 +3631,7 @@ input[type='checkbox'] {
   height: 28px;
   padding: 0 var(--space-2);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   text-align: left;
   font-size: 13px;
 }
@@ -3647,7 +3647,7 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   padding: 0 var(--space-1);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   font-size: 12px;
   background: var(--raised);
   color: var(--muted);
@@ -3692,7 +3692,7 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--line);
   font-size: 12px;
 }
@@ -3793,7 +3793,7 @@ input[type='checkbox'] {
   margin: var(--space-3);
   padding: var(--space-3);
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--muted);
   display: flex;
   gap: var(--space-2);
@@ -3846,7 +3846,7 @@ input[type='checkbox'] {
   resize: vertical;
   padding: var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--panel);
   color: var(--fg);
   font-family: inherit;
@@ -3857,7 +3857,7 @@ input[type='checkbox'] {
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--panel);
 }
 .review-band.warn {
@@ -3891,7 +3891,7 @@ input[type='checkbox'] {
   max-height: 220px;
   overflow: auto;
   padding: var(--space-2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--panel);
   font-size: 12px;
 }
@@ -3914,7 +3914,7 @@ input[type='checkbox'] {
   margin: var(--space-6);
   padding: var(--space-4);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -3960,7 +3960,7 @@ input[type='checkbox'] {
   margin: 0 var(--space-2) var(--space-2);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 .chat-diff-path {
@@ -3985,7 +3985,7 @@ input[type='checkbox'] {
   overflow: auto;
   padding: var(--space-3) var(--space-4) var(--space-3);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--raised);
   box-shadow: 0 10px 30px #0006;
   outline: none;
@@ -4022,7 +4022,7 @@ input[type='checkbox'] {
   gap: var(--space-2);
   min-height: 36px;
   padding: var(--space-1) var(--space-2);
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .resume-fact.sel {
   background: var(--accent-soft);
@@ -4145,7 +4145,7 @@ input[type='checkbox'] {
 .notes-input {
   padding: var(--space-2) var(--space-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--fg);
 }
@@ -4167,7 +4167,7 @@ input[type='checkbox'] {
   flex: 1;
   height: 26px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
@@ -4181,7 +4181,7 @@ input[type='checkbox'] {
 .archive-suggest {
   margin-left: auto;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   background: var(--raised);
   color: var(--muted);
   font-size: 12px;
@@ -4194,7 +4194,7 @@ input[type='checkbox'] {
   font-size: 12px;
   color: var(--muted);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 0 var(--space-1);
   white-space: nowrap;
 }
@@ -4228,7 +4228,7 @@ input[type='checkbox'] {
   width: 100%;
   height: 30px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--fg);
   padding: 0 var(--space-3);
@@ -4246,7 +4246,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-radius: 6px;
+  border-radius: var(--r-md);
 }
 .archive-row[aria-selected='true'] {
   background: var(--raised);
@@ -4303,7 +4303,7 @@ input[type='checkbox'] {
 }
 .weekly-kpi {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: var(--space-2) var(--space-3);
 }
 .weekly-kpi b {

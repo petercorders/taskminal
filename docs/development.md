@@ -206,6 +206,8 @@
 - 대화 머리 · 글 · 입력의 바깥 여백은 `--chat-gutter` 하나(`% ` 는 pane 폭 전체인 자식에서만 맞다 — 새 요소가 바깥 칸에 서려면 같은 변수를 쓴다). 설정은 `--settings-gutter`.
 - 설정 화면의 `h1` 은 이제 칸 이름만('일반' · '정보') — '설정 — …' 로 찾던 시험은 고쳤다. 설정 칸은 `settings/parts.tsx`(Row · Group · Switch · Choices · TextField)를 쓴다.
 - 이모지 대신 `src/renderer/icons.tsx` 선 아이콘(`<Icon name=… />`, aria-hidden) — 단추 글자는 그대로 두어 이름으로 찾는 시험이 유지된다.
+- **CSS `:has()` 로 켜고 끄는 안내는 믿지 않는다** — 설정의 '맞는 설정이 없습니다' 가 묶음 카드 안으로 줄이 들어간 뒤 줄이 다 빠져도 다시 계산되지 않았다(computed 는 block 인데 layout 이 없음). 지금은 그린 뒤 DOM 을 세어 렌더한다(`noMatch`). 줄 · 묶음을 `:has` 로 숨기는 규칙은 그대로지만 새 안내는 JS 로.
+- 가독성 e2e 는 `[role=dialog] p` 를 '본문 14px 이상' 으로 본다 — 설정의 작은 제목 · 설명은 `p` 가 아니라 `div`.
 - 팔레트 결과의 종류 제목 줄(`.palette-group`)은 `role=presentation` — `li` 에 option 을 주면 ↑↓ 가 제목을 고른다(`layout-align.spec` 이 잡는다).
 
 ### 디자인 맞추기 (단계 아님)
