@@ -108,6 +108,21 @@ export interface PortsApi {
   kill(paneId: string, port: number, pid: number): Promise<'killed' | 'gone' | 'failed'>
 }
 
+/** 대화 pane (21단계) — main 이 claude 프로세스를 띄우고 이벤트를 가려서 보낸다 */
+export interface ChatApi {
+  /** 새 턴. 실행 중이면 'busy'(보내지 않음), claude 가 없으면 'missing' */
+  send(paneId: string, text: string, cwd: string, sessionId: string | undefined): Promise<'ok' | 'busy' | 'missing'>
+  /** 허락 · 질문 답 — 같은 요청에 두 번이면 main 이 버린다 */
+  answer(paneId: string, requestId: string, decision: import('../shared/chat').ChatDecision): void
+  interrupt(paneId: string): void
+  /** 재시작 · 새로 고침 뒤 다시 그릴 앞 대화 (가린 것) */
+  history(paneId: string): Promise<{ events: import('../shared/chat').ChatEvent[]; upTo: number }>
+  /** pane 을 닫았다 — 프로세스를 끝내고, forget 이면 화면 기록도 지운다 */
+  close(paneId: string, forget: boolean): void
+  /** (paneId, 이벤트) — 값은 renderer 가 isChatEvent 로 검사한다 */
+  onEvent(listener: (paneId: unknown, ev: unknown, n: unknown) => void): () => void
+}
+
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
@@ -140,6 +155,7 @@ export interface TaskminalApi {
   firstRunDone(): void
   history: HistoryApi
   ports: PortsApi
+  chat: ChatApi
 }
 
 declare global {

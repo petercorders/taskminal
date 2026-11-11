@@ -274,6 +274,7 @@ export function renameTab(task: Task, tabId: Id, title: string): Task {
 /** 탭에 보일 이름: 정한 이름, 없으면 활성 pane 폴더의 끝 이름 (`~` · `/` 는 그대로). */
 export function tabLabel(task: Task, tab: Tab): string {
   if (tab.title) return tab.title
+  if (task.panes[tab.activePaneId]?.kind === 'chat') return 'Claude 대화'
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd
   return cwd.slice(cwd.lastIndexOf('/') + 1)
@@ -338,6 +339,60 @@ export function markCommandSent(task: Task, paneId: Id): Task {
   if (!p || p.pendingCommand === undefined) return task
   const { pendingCommand: _sent, pendingInsert: _insert, ...rest } = p
   return { ...task, panes: { ...task.panes, [paneId]: rest } }
+}
+
+// ─── 대화 pane (21단계) ─────────────────────────────────────
+
+function chatPane(id: Id, cwd: string): Pane {
+  return { id, cwd, kind: 'chat', chat: { agent: 'claude' } }
+}
+
+/** 새 탭에 대화 pane (⌘P '새 대화') */
+export function addChatTab(task: Task, newId: NewId): Task {
+  const tabId = newId()
+  const paneId = newId()
+  const tab: Tab = { id: tabId, layout: { type: 'pane', paneId }, activePaneId: paneId }
+  return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: chatPane(paneId, activePaneCwd(task)) } }
+}
+
+/** 지금 pane 옆에 대화 pane — 시험 출력과 같이 보게 */
+export function splitActivePaneChat(task: Task, dir: SplitDir, newId: NewId): Task {
+  const next = splitActivePane(task, dir, newId)
+  if (next === task) return task
+  const tab = next.tabs.find((t) => t.id === next.activeTabId)!
+  const id = tab.activePaneId
+  return { ...next, panes: { ...next.panes, [id]: chatPane(id, next.panes[id]!.cwd) } }
+}
+
+/** 대화의 session_id 를 남긴다 — 재시작 뒤 다음 보내기가 --resume 으로 잇는다. 같으면 같은 객체 */
+export function setChatSession(task: Task, paneId: Id, sessionId: string): Task {
+  const p = task.panes[paneId]
+  if (!p || p.kind !== 'chat' || p.chat?.sessionId === sessionId) return task
+  return { ...task, panes: { ...task.panes, [paneId]: { ...p, chat: { agent: 'claude', sessionId } } } }
+}
+
+function swapPaneId(layout: Layout, from: Id, to: Id): Layout {
+  if (layout.type === 'pane') return layout.paneId === from ? { type: 'pane', paneId: to } : layout
+  return { ...layout, a: swapPaneId(layout.a, from, to), b: swapPaneId(layout.b, from, to) }
+}
+
+/**
+ * 대화 → 터미널(⇧⌘J): 같은 자리에 새 터미널 pane 을 두고 `claude --resume <id>` 를 시작 명령으로.
+ * 새 id 를 쓰는 까닭: 같은 id 면 셸 지킴이 · 스크롤 저장이 대화였던 pane 을 터미널로 착각하지 않게(16 · 13단계는 pane id 로 찾는다).
+ */
+export function chatToTerminal(task: Task, paneId: Id, newId: NewId, bin = 'claude'): { task: Task; paneId: Id } | null {
+  const p = task.panes[paneId]
+  if (!p || p.kind !== 'chat') return null
+  const id = newId()
+  const sid = p.chat?.sessionId
+  const command = sid ? `${bin} --resume ${sid}` : bin
+  const panes = { ...task.panes }
+  delete panes[paneId]
+  panes[id] = { id, cwd: p.cwd, pendingCommand: command }
+  const tabs = task.tabs.map((t) =>
+    hasPane(t.layout, paneId) ? { ...t, layout: swapPaneId(t.layout, paneId, id), activePaneId: t.activePaneId === paneId ? id : t.activePaneId } : t,
+  )
+  return { task: { ...task, tabs, panes }, paneId: id }
 }
 
 function withoutPanes(panes: Record<Id, Pane>, ids: Id[]): Record<Id, Pane> {
@@ -618,6 +673,13 @@ function parsePane(id: Id, v: unknown, taskCwd: string): Pane | null {
   if (isStr(v.command)) pane.command = v.command
   if (isStr(v.pendingCommand)) pane.pendingCommand = v.pendingCommand
   if (pane.pendingCommand !== undefined && v.pendingInsert === true) pane.pendingInsert = true
+  if (v.kind === 'chat') {
+    pane.kind = 'chat'
+    const c = isObj(v.chat) ? v.chat : {}
+    pane.chat = { agent: 'claude', ...(typeof c.sessionId === 'string' && /^[\w-]{1,100}$/.test(c.sessionId) ? { sessionId: c.sessionId } : {}) }
+    delete pane.pendingCommand
+    delete pane.pendingInsert
+  }
   return pane
 }
 

@@ -1,3 +1,4 @@
+import type { ChatPermission } from './chat'
 import type { QuickCommand } from './quick'
 
 export type Id = string
@@ -59,6 +60,10 @@ export interface Pane {
   command?: string
   /** pendingCommand 를 실행하지 않고 입력줄에 넣기만 (19단계 — 기록의 위험 명령) */
   pendingInsert?: true
+  /** pane 종류 — 없으면 터미널. '대화' 는 셸 대신 에이전트와 채팅 (21단계) */
+  kind?: 'chat'
+  /** 대화 pane 의 에이전트 · 이어 할 세션 (Claude session_id) */
+  chat?: { agent: 'claude'; sessionId?: string }
 }
 
 export interface Tab {
@@ -158,6 +163,13 @@ export interface Settings {
   hiddenPorts: number[]
   /** '서버가 떴어요 · 눌러서 열어요' 를 이미 보였다 (처음 한 번만) */
   portTipSeen: boolean
+  // 21단계
+  /** 대화 허락 방식 — 처음 'ask'(매번 묻기), 바꾸면 유지 */
+  chatPermission: ChatPermission
+  /** 사이드바 보기 — 흐름(상태별 칸, 기본) · 묶음 */
+  sidebarView: 'flow' | 'group'
+  /** 흐름 보기에서 접은 칸 (상태 id · 'need') — 처음은 마지막 상태(완료)만 */
+  sidebarClosed: string[]
 }
 
 export interface SecretAllow {

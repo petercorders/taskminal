@@ -1,3 +1,4 @@
+import { isChatPermission } from './chat'
 // 설정 창의 값 — 고를 수 있는 것 · 기본값 · 저장 파일 검증. 순수 함수(renderer · main 모두 쓴다).
 import { isObj } from './guards'
 import { isAccel, isAppCommand } from './keymap'
@@ -63,6 +64,9 @@ export function defaultExtraSettings(): ExtraSettings {
     quickCommands: [],
     hiddenPorts: [],
     portTipSeen: false,
+    chatPermission: 'ask',
+    sidebarView: 'flow',
+    sidebarClosed: [],
   }
 }
 
@@ -159,6 +163,9 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     quickCommands: parseQuickList(v['quickCommands']),
     hiddenPorts: parsePorts(v['hiddenPorts']),
     portTipSeen: bool(v['portTipSeen'], d.portTipSeen),
+    chatPermission: isChatPermission(v['chatPermission']) ? v['chatPermission'] : d.chatPermission,
+    sidebarView: oneOf<'flow' | 'group'>(v['sidebarView'], ['flow', 'group'], d.sidebarView),
+    sidebarClosed: Array.isArray(v['sidebarClosed']) ? [...new Set(v['sidebarClosed'].filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 64) : d.sidebarClosed,
   }
 }
 

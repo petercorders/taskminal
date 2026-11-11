@@ -20,6 +20,7 @@ import { useHistory } from './history-state'
 import { HistoryPanel } from './history-ui'
 import { FIND_MEMO, GlobalFind, type FindMemo, type FindTarget } from './GlobalFind'
 import type { CommandDone } from './TerminalPane'
+import type { ChatPermission } from '../shared/chat'
 import type { MaskSettings } from './secret-mask'
 import { Toast, type ToastSpec } from './Toast'
 import { dateClock } from './settings/BackupSection'
@@ -64,6 +65,7 @@ const loadState = () =>
       runtime.home = info.home
       runtime.cwdPollMs = info.cwdPollMs
       runtime.portPollMs = info.portPollMs
+      runtime.claudeTui = info.claudeTui
       runtime.renderer = info.renderer
       runtime.crashedLast = info.crashedLast
       return window.taskminal.state.load()
@@ -889,7 +891,10 @@ export function App() {
     if (busy > 0 && !confirmed) return setConfirming({ kind: 'tab', taskId: task.id, tabId, busy })
     setConfirming(null)
     // 그 탭의 셸만 끝낸다 — 다른 탭 · 일감의 셸은 그대로.
-    for (const paneId of paneIds(tab.layout)) window.taskminal.pty.kill(paneId)
+    for (const paneId of paneIds(tab.layout)) {
+      if (task.panes[paneId]?.kind === 'chat') window.taskminal.chat.close(paneId, true)
+      else window.taskminal.pty.kill(paneId)
+    }
     dispatch({ type: 'tab/close', taskId: task.id, tabId })
     // 이웃 탭이 활성이 되면 그 터미널이, 마지막 탭이었으면 '새 탭' 버튼이 포커스를 받는다
     refocus()
@@ -938,7 +943,10 @@ export function App() {
       },
       // 그 일감의 명령 기록은 되돌리기를 놓친 뒤 지운다 (되돌리면 그대로)
       onEnd: (undone) => {
-        if (!undone) history.dropTask(task.id)
+        if (undone) return
+        history.dropTask(task.id)
+        // 대화 화면 기록도 되돌리기를 놓친 뒤 지운다 (프로세스는 일감이 빠질 때 이미 끝났다)
+        for (const p of Object.values(task.panes)) if (p.kind === 'chat') window.taskminal.chat.close(p.id, true)
       },
     })
   }
@@ -977,12 +985,48 @@ export function App() {
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
   const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory
 
+  // 상태에서 빠진 대화 pane(일감 지우기 · 되돌리기 · 백업 되살리기 …)의 claude 를 끝낸다 — 화면 기록은 지우는 쪽이 정한다
+  const chatPaneIds = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (load.phase === 'loading') return
+    const now = new Set(state.tasks.flatMap((t) => Object.values(t.panes).filter((p) => p.kind === 'chat').map((p) => p.id)))
+    for (const id of chatPaneIds.current) if (!now.has(id)) window.taskminal.chat.close(id, false)
+    chatPaneIds.current = now
+  }, [state.tasks, load.phase])
+  const isChatPane = (paneId: string) => {
+    const s = stateRef.current
+    return s.tasks.find((t) => t.id === findPaneTask(s, paneId))?.panes[paneId]?.kind === 'chat'
+  }
+  /** ⇧⌘J — 같은 자리에 터미널 pane 을 두고 claude --resume. 대화 프로세스는 아래 효과가 끝낸다(화면 기록은 남겨 둠 — 지울 때 같이) */
+  const chatToTerminalPane = (paneId: string) => {
+    window.taskminal.chat.close(paneId, true)
+    dispatch({ type: 'chat/to-terminal', paneId, newPaneId: newId(), bin: runtime.claudeTui })
+    refocus()
+  }
+  /** 로그인 띠 — 같은 폴더 새 탭에서 claude (사용자가 /login) */
+  const chatLogin = (paneId: string) => {
+    const s = stateRef.current
+    const task = s.tasks.find((t) => t.id === findPaneTask(s, paneId))
+    const pane = task?.panes[paneId]
+    if (!task || !pane) return
+    dispatch({ type: 'tab/add', taskId: task.id, tabId: newId(), paneId: newId(), spec: { cwd: pane.cwd, command: runtime.claudeTui } })
+    refocus()
+  }
+  const chatProps = {
+    permission: state.settings.chatPermission,
+    onPermission: (p: ChatPermission) => dispatch({ type: 'settings/patch', patch: { chatPermission: p } }),
+    onSession: (paneId: string, sessionId: string) => dispatch({ type: 'chat/session', paneId, sessionId }),
+    onToTerminal: chatToTerminalPane,
+    onOpenLogin: chatLogin,
+  }
+
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
     if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: act.command } : {}) })
     setConfirming(null)
-    // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도
-    window.taskminal.pty.kill(paneId)
+    // 그 pane 의 셸만 끝내고 닫는다 — 마지막 pane 이면 탭도. 대화 pane 이면 claude 를 끝내고 화면 기록도 지운다(되돌리기 없음)
+    if (isChatPane(paneId)) window.taskminal.chat.close(paneId, true)
+    else window.taskminal.pty.kill(paneId)
     dispatch({ type: 'pane/exited', paneId })
     refocus()
   }
@@ -1067,6 +1111,13 @@ export function App() {
       case 'new-tab':
         addTab(task.id)
         return refocus()
+      case 'chat-new':
+        dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId() })
+        return refocus()
+      case 'chat-split':
+        if (task.tabs.length === 0) dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId() })
+        else dispatch({ type: 'chat/split', taskId: task.id, paneId: newId() })
+        return refocus()
       case 'split-right':
       case 'split-down':
         dispatch({ type: 'pane/split', taskId: task.id, dir: command === 'split-right' ? 'right' : 'down', paneId: newId() })
@@ -1103,6 +1154,9 @@ export function App() {
         // 가린 칸으로 포커스 — 그동안 키는 셸로 가지 않는다(칸이 버튼). 없으면 그대로
         terminals.get(tab.activePaneId)?.maskFocus(command === 'mask-next' ? 1 : -1)
         return
+      case 'chat-terminal':
+        if (task.panes[tab.activePaneId]?.kind !== 'chat') return showToast({ text: '대화 pane 에서만 터미널로 바꿀 수 있어요.' })
+        return chatToTerminalPane(tab.activePaneId)
     }
   }
   // 팔레트에서 고른 것을 실행한다 — 팔레트는 먼저 닫는다
@@ -1381,6 +1435,7 @@ export function App() {
                           find={findProps}
                           mask={maskSettings}
                           onAllow={allowSecret}
+                          chat={chatProps}
                         />
                       )}
                     </div>

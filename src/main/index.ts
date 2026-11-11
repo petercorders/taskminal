@@ -27,6 +27,12 @@ import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
+import { spawn as spawnChild } from 'node:child_process'
+import { ChatManager } from './chat/chat-manager'
+import { ChatStore } from './chat/chat-store'
+import { AgentBinFinder } from './chat/find-bin'
+import type { SpawnFn } from './chat/claude-adapter'
+import { isChatDecision, type ChatPermission } from '../shared/chat'
 import { StateFile } from './state-file'
 import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
@@ -110,6 +116,25 @@ const sendRedact = (s: RedactStatus) => {
 // 명령 기록(19단계) — userData 가 정해진 뒤 만든다. 디스크로 가기 전 가린다
 let historyStore: HistoryStore | null = null
 const history = () => (historyStore ??= new HistoryStore(join(app.getPath('userData'), 'history'), () => secretOpts))
+// 대화 pane (21단계) — 허락 방식은 상태 저장 때마다 갱신(떠 있는 claude 에도 바로)
+let chatPermission: ChatPermission = 'ask'
+let chatManager: ChatManager | null = null
+const chatSpawn: SpawnFn = (bin, args, o) => spawnChild(bin, args, { cwd: o.cwd, env: o.env, stdio: ['pipe', 'pipe', 'pipe'] })
+const agentBins = new AgentBinFinder()
+const chats = () =>
+  (chatManager ??= new ChatManager({
+    store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
+    redactOptions: () => secretOpts,
+    spawn: chatSpawn,
+    findBin: () => agentBins.claude(),
+    permission: () => chatPermission,
+    channel: IPC.chatEvent,
+  }))
+const setChatPermission = (p: ChatPermission) => {
+  if (p === chatPermission) return
+  chatPermission = p
+  chatManager?.setPermission(p)
+}
 // 상태 백업(17단계) — userData 가 정해진 뒤 만든다
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
@@ -226,6 +251,9 @@ function createWindow(): BrowserWindow {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
+  // 대화의 claude 는 지킴이에 남기지 않는다 — 창이 닫히면 끝내고, 다음 보내기가 --resume 으로 잇는다(새로 고침 · 충돌은 같은 webContents 라 그대로)
+  const chatSink = win.webContents
+  win.on('closed', () => chatManager?.closeSink(chatSink))
   // 종료 경로 4개 중 창에 딸린 3개 — 셸은 지킴이에 남기고 떼기만 한다(16단계). 다시 열리면 attach 로 다시 붙는다.
   const wc = win.webContents
   // renderer 가 사라지면(창 닫기 · 새로 고침 · 충돌) 그 renderer 가 알려 준 수도 버린다 — 새 페이지가 다시 보낸다
@@ -388,7 +416,7 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast }
+    return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude' }
   })
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -442,6 +470,7 @@ if (!app.requestSingleInstanceLock()) {
       lastWritten = loaded.state
       secretOpts = optsFrom(loaded.state.settings)
       updatePrefs = prefsFrom(loaded.state.settings)
+      setChatPermission(loaded.state.settings.chatPermission)
       updater?.prefsChanged()
       // 시작 백업 — 앱 버전이 바뀌었으면 '버전 올리기 전'(90일 보존). 같은 내용이면 만들지 않는다(새로 고침마다 쌓이지 않게)
       const prev = backups().lastVersion()
@@ -471,6 +500,7 @@ if (!app.requestSingleInstanceLock()) {
     if (stateFile?.canWrite) {
       secretOpts = optsFrom(state.settings)
       updatePrefs = prefsFrom(state.settings)
+      setChatPermission(state.settings.chatPermission)
       updater?.prefsChanged()
     }
     stateWriter.push(state)
@@ -615,6 +645,27 @@ if (!app.requestSingleInstanceLock()) {
     return shellPid ? killPort(shellPid, port as number, pid as number) : 'gone'
   })
 
+  // ─── 21단계: 대화 ───
+  ipcMain.handle(IPC.chatSend, async (event, paneId: unknown, text: unknown, cwd: unknown, sessionId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isPaneId(paneId) || typeof text !== 'string' || !text.trim() || text.length > 100_000 || typeof cwd !== 'string' || cwd.length > 4096) throw new Error('잘못된 대화 인자')
+    const sid = typeof sessionId === 'string' && /^[\w-]{1,100}$/.test(sessionId) ? sessionId : undefined
+    return chats().send(event.sender, paneId, text, cwd, sid)
+  })
+  ipcMain.on(IPC.chatAnswer, (event, paneId: unknown, requestId: unknown, decision: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId) && typeof requestId === 'string' && requestId.length <= 200 && isChatDecision(decision)) chats().answer(paneId, requestId, decision)
+  })
+  ipcMain.on(IPC.chatInterrupt, (event, paneId: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId)) chats().interrupt(paneId)
+  })
+  ipcMain.handle(IPC.chatHistory, (event, paneId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return isPaneId(paneId) ? chats().history(paneId) : { events: [], upTo: 0 }
+  })
+  ipcMain.on(IPC.chatClose, (event, paneId: unknown, forget: unknown) => {
+    if (fromOurWindow(event) && isPaneId(paneId)) chats().close(paneId, forget === true)
+  })
+
   // 셸 지킴이 — 설정 칸 · 위 줄
   ipcMain.handle(IPC.hostView, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -738,6 +789,7 @@ if (!app.requestSingleInstanceLock()) {
       stateWriter.flush() // 디바운스 중인 마지막 상태를 동기로 쓴다
     } finally {
       hostControl?.dispose()
+      chatManager?.killAll()
       markRunning(false) // 정상으로 끝남 — 다음 실행이 '갑자기 꺼짐' 으로 보지 않게
     }
   })

@@ -4,6 +4,7 @@ import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, ty
 import type { LogRow } from '../shared/errlog'
 import type { HistoryEntry } from '../shared/history'
 import type { ProbeResult } from '../shared/ports'
+import type { ChatEvent } from '../shared/chat'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
@@ -88,6 +89,14 @@ const api: TaskminalApi = {
     remove: (taskId, ids) => ipcRenderer.send(IPC.historyRemove, taskId, ids),
     removeTask: (taskId) => ipcRenderer.send(IPC.historyRemoveTask, taskId),
     clear: () => ipcRenderer.invoke(IPC.historyClear) as Promise<void>,
+  },
+  chat: {
+    send: (paneId, text, cwd, sessionId) => ipcRenderer.invoke(IPC.chatSend, paneId, text, cwd, sessionId) as Promise<'ok' | 'busy' | 'missing'>,
+    answer: (paneId, requestId, decision) => ipcRenderer.send(IPC.chatAnswer, paneId, requestId, decision),
+    interrupt: (paneId) => ipcRenderer.send(IPC.chatInterrupt, paneId),
+    history: (paneId) => ipcRenderer.invoke(IPC.chatHistory, paneId) as Promise<{ events: ChatEvent[]; upTo: number }>,
+    close: (paneId, forget) => ipcRenderer.send(IPC.chatClose, paneId, forget),
+    onEvent: (listener) => subscribe(IPC.chatEvent, listener),
   },
   ports: {
     probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,

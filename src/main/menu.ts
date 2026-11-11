@@ -89,6 +89,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { type: 'separator' },
         item('history'),
         { type: 'separator' },
+        item('chat-terminal'),
+        { type: 'separator' },
         item('mask-toggle'),
         item('mask-next'),
         item('mask-prev'),

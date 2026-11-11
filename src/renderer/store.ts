@@ -37,6 +37,10 @@ import {
   putBackQuick,
   saveQuick,
   type TaskEdit,
+  addChatTab,
+  chatToTerminal,
+  setChatSession,
+  splitActivePaneChat,
 } from '../shared/model'
 import type { QuickCommand } from '../shared/quick'
 import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
@@ -90,6 +94,11 @@ export type Action =
   | { type: 'task/edit'; id: Id; patch: TaskEdit }
   /** 셸 안의 cd — OSC 7 · lsof 가 알려 준 폴더 */
   | { type: 'pane/cwd'; paneId: Id; cwd: string }
+  // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
+  | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id }
+  | { type: 'chat/split'; taskId: Id; paneId: Id }
+  | { type: 'chat/session'; paneId: Id; sessionId: string }
+  | { type: 'chat/to-terminal'; paneId: Id; newPaneId: Id; bin: string }
 
 /** 일감 하나를 바꾼다. 없는 일감이거나 바뀐 것이 없으면 같은 상태 객체 (저장을 건너뛰게). */
 function updateTask(state: AppState, taskId: Id, change: (task: Task) => Task): AppState {
@@ -214,5 +223,19 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case 'task/edit':
       return editTask(state, action.id, action.patch)
+    case 'chat/add-tab': {
+      const ids = [action.tabId, action.paneId]
+      return updateTask(state, action.taskId, (t) => addChatTab(t, () => ids.shift()!))
+    }
+    case 'chat/split':
+      return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, 'right', () => action.paneId))
+    case 'chat/session': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => setChatSession(t, action.paneId, action.sessionId)) : state
+    }
+    case 'chat/to-terminal': {
+      const taskId = findPaneTask(state, action.paneId)
+      return taskId ? updateTask(state, taskId, (t) => chatToTerminal(t, action.paneId, () => action.newPaneId, action.bin)?.task ?? t) : state
+    }
   }
 }

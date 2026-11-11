@@ -9,6 +9,8 @@ import type { Shortcut } from '../shared/keymap'
 import { FindBar } from './FindBar'
 import { TerminalPane, type CommandDone } from './TerminalPane'
 import type { MaskSettings } from './secret-mask'
+import { ChatPane } from './ChatPane'
+import type { ChatPermission } from '../shared/chat'
 
 interface Props {
   tab: Tab
@@ -37,6 +39,14 @@ interface Props {
   /** 화면에서 비밀값 가리기 (17단계) */
   mask: MaskSettings
   onAllow(paneId: Id, hit: { hash: string; kind: string }): void
+  /** 대화 pane (21단계) */
+  chat: {
+    permission: ChatPermission
+    onPermission(p: ChatPermission): void
+    onSession(paneId: Id, sessionId: string): void
+    onToTerminal(paneId: Id): void
+    onOpenLogin(paneId: Id): void
+  }
 }
 
 const pct = (n: number) => `${n * 100}%`
@@ -46,7 +56,7 @@ const KEY_STEP = 0.05
  * 탭 하나의 분할 화면. pane 은 paneId key 의 평평한 목록으로 절대 위치에 그린다(layoutRects 주석 참고).
  * 분할선을 끄는 동안의 비율은 이 화면 안에만 두고, 놓을 때 한 번 onRatio — 끄는 동안 저장을 프레임마다 보내지 않게.
  */
-export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow }: Props) {
+export function SplitView({ tab, panes, visible, focusSignal, term, activity, onActivity, onFocusPane, onRatio, onClosePane, onStartSent, onCommandDone, onCwd, onDragEnd, find, mask, onAllow, chat }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ path: SplitPath; ratio: number } | null>(null)
   const dragging = useRef<{ divider: Divider; pointerId: number; el: HTMLElement } | null>(null)
@@ -133,8 +143,24 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
             // 보이는 탭에서만 — 숨은 탭 안의 포커스가 활성 탭을 바꾸지 않게
             onFocus={() => visible && onFocusPane(r.paneId)}
           >
-            {pane && <PaneHead activity={activity[pane.id]} folder={shortPath(pane.cwd)} focused={split && focused} />}
-            {pane && (
+            {pane && pane.kind !== 'chat' && <PaneHead activity={activity[pane.id]} folder={shortPath(pane.cwd)} focused={split && focused} />}
+            {pane?.kind === 'chat' && (
+              <ChatPane
+                paneId={pane.id}
+                cwd={pane.cwd}
+                sessionId={pane.chat?.sessionId}
+                active={visible && focused}
+                visible={visible}
+                focusSignal={focusSignal}
+                permission={chat.permission}
+                onPermission={chat.onPermission}
+                onSession={(id) => chat.onSession(pane.id, id)}
+                onToTerminal={() => chat.onToTerminal(pane.id)}
+                onOpenLogin={() => chat.onOpenLogin(pane.id)}
+                onActivity={(ev) => onActivity(pane.id, ev)}
+              />
+            )}
+            {pane && pane.kind !== 'chat' && (
               <TerminalPane
                 paneId={pane.id}
                 cwd={pane.cwd}

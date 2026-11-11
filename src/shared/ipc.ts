@@ -56,6 +56,13 @@ export const IPC = {
   // 20단계 포트
   portsProbe: 'ports:probe', // invoke(paneId[]) → ProbeResult — 그 창의 pane 셸 자손이 듣는 포트
   portsKill: 'ports:kill', // invoke(paneId, port, pid) → 'killed' | 'gone' | 'failed' — main 이 다시 조사한 뒤 SIGTERM
+  // 21단계 대화
+  chatSend: 'chat:send', // invoke(paneId, text, cwd, sessionId?) → 'ok' | 'busy' | 'missing'
+  chatAnswer: 'chat:answer', // send(paneId, requestId, Decision)
+  chatInterrupt: 'chat:interrupt', // send(paneId) — ⌘.
+  chatHistory: 'chat:history', // invoke(paneId) → ChatEvent[] (가린 것, 화면 다시 그리기)
+  chatClose: 'chat:close', // send(paneId, forget) — pane 을 닫음 · forget 이면 화면 기록도 지움
+  chatEvent: 'chat:event', // main → renderer: (paneId, ChatEvent) 가린 것
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const
@@ -125,6 +132,8 @@ export interface AppInfo {
   cwdPollMs: number
   /** 포트 조사 주기 (20단계, 시험은 TASKMINAL_PORT_POLL_MS 로 줄인다) */
   portPollMs: number
+  /** 대화 → 터미널 전환(⇧⌘J)에서 칠 명령 이름 — 보통 'claude', e2e 는 TASKMINAL_CLAUDE_TUI 로 가짜 경로(로그인 셸 PATH 가 진짜 claude 를 먼저 찾는다) */
+  claudeTui: string
   /** 터미널 그리기 — 보이는 pane 은 WebGL(기본), 시험은 TASKMINAL_RENDERER=dom 으로 DOM (15e) */
   renderer: RendererMode
   /** 지난번 실행이 정상으로 끝나지 않았다(18단계 — running 표시 파일) */
