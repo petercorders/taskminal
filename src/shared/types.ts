@@ -185,6 +185,8 @@ export interface Settings {
   // 21단계
   /** 대화 허락 방식 — 처음 'ask'(매번 묻기), 바꾸면 유지 */
   chatPermission: ChatPermission
+  /** 26단계: 새 일감의 시작 — 대화(Claude · Codex) 또는 터미널. 기본 Claude 대화 */
+  newTaskStart: NewTaskStart
   /** 사이드바 보기 — 흐름(상태별 칸, 기본) · 묶음 */
   sidebarView: 'flow' | 'group'
   /** 흐름 보기에서 접은 칸 (상태 id · 'need') — 처음은 마지막 상태(완료)만 */
@@ -213,6 +215,9 @@ export interface AppState {
   settings: Settings
 }
 
+/** 새 일감의 첫 칸 (26단계) */
+export type NewTaskStart = 'chat-claude' | 'chat-codex' | 'terminal'
+
 export interface NewTaskInput {
   name: string
   cwd: string
@@ -224,6 +229,8 @@ export interface NewTaskInput {
   host?: string
   /** 서버의 tmux 로 이어 붙기 — 기본 켬 */
   remoteTmux?: boolean
+  /** 26단계: 첫 칸 — 없으면 터미널(CLI · 옛 호출). 템플릿 · 원격이면 보지 않는다 */
+  start?: NewTaskStart
 }
 
 /** 렌더러 ↔ main 사이 컨텍스트 메뉴 항목 */

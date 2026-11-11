@@ -1344,6 +1344,13 @@ export function App() {
     onPermission: (p: ChatPermission) => dispatch({ type: 'settings/patch', patch: { chatPermission: p } }),
     onSession: (paneId: string, sessionId: string) => dispatch({ type: 'chat/session', paneId, sessionId }),
     onToTerminal: chatToTerminalPane,
+    // 단추를 누른 대화 pane 의 일감에서 — 그 pane 으로 먼저 포커스(다른 pane 이 활성이었어도 그 탭의 셸을 꺼낸다)
+    onShell: (paneId: string) => {
+      const taskId = findPaneTask(stateRef.current, paneId)
+      if (!taskId) return
+      dispatch({ type: 'pane/focus', taskId, paneId })
+      dispatch({ type: 'shell/toggle', taskId, paneId: newId() })
+    },
     onOpenLogin: chatLogin,
     onRewound: (paneId: string, forkAt: string | null, sessionId?: string) => dispatch({ type: 'chat/rewound', paneId, forkAt, ...(sessionId ? { sessionId } : {}) }),
     onBranch: (paneId: string, index: number, at: number) => void chatBranch(paneId, index, at),
@@ -1562,6 +1569,13 @@ export function App() {
         // 가린 칸으로 포커스 — 그동안 키는 셸로 가지 않는다(칸이 버튼). 없으면 그대로
         terminals.get(tab.activePaneId)?.maskFocus(command === 'mask-next' ? 1 : -1)
         return
+      case 'shell-toggle': {
+        // 대화가 없는 탭(터미널 일감)은 셸이 이미 보인다 — 알리기만
+        const hasChat = paneIds(tab.layout).some((id) => task.panes[id]?.kind === 'chat')
+        if (!hasChat) return showToast({ text: '대화 칸이 있는 탭에서 셸을 꺼내요. 이 탭은 이미 셸이에요.' })
+        dispatch({ type: 'shell/toggle', taskId: task.id, paneId: newId() })
+        return refocus()
+      }
       case 'chat-terminal':
         if (task.panes[tab.activePaneId]?.kind !== 'chat') return showToast({ text: '대화 pane 에서만 터미널로 바꿀 수 있어요.' })
         return chatToTerminalPane(tab.activePaneId)
@@ -1649,6 +1663,12 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       // 글을 고치는 칸(탭 이름 · 대화상자)에서는 ⌘ 키가 그 칸의 편집 몫 — ⌘W 가 뒤의 셸을 끝내지 않게. xterm 의 입력칸은 제외.
       const t = e.target
+      // 26단계: 대화 입력칸의 ⌘J(셸 꺼내기)는 앱이 받는다 — 대화에서 셸로 가는 길이 이 키라서. 그 밖의 ⌘ 키는 칸의 몫 그대로.
+      if (t instanceof HTMLTextAreaElement && t.closest('[data-testid="chat-pane"]') && commandForKey(e, shortcutsRef.current) === 'shell-toggle') {
+        e.preventDefault()
+        if (!e.repeat) runCommandRef.current('shell-toggle')
+        return
+      }
       if (t instanceof HTMLInputElement || (t instanceof HTMLTextAreaElement && !t.classList.contains('xterm-helper-textarea'))) return
       // 아래 알림의 되돌리기 — 알림이 떠 있을 때만 ⌘Z 를 앱이 받는다(17단계)
       const undo = toastRef.current?.action
@@ -1925,16 +1945,23 @@ export function App() {
           {load.phase !== 'loading' && viewState.tasks.length > 0 && !activeTask && (
             <div className="empty" data-testid="pick-view">
               <h1>Taskminal</h1>
-              <p className="hint">왼쪽에서 일감을 고르면 터미널이 시작됩니다</p>
+              <p className="hint">왼쪽에서 일감을 고르면 대화 · 터미널이 이어져요</p>
             </div>
           )}
           {load.phase !== 'loading' && viewState.tasks.length === 0 && (
             <div className="empty" data-testid="empty-view">
               <h1>Taskminal</h1>
-              <p className="hint">일감이 없습니다</p>
-              <button type="button" className="button primary" onClick={() => setCreating({})}>
-                새 일감
-              </button>
+              <p className="hint">일감이 없습니다 — 대화로 시작하고, 셸이 필요하면 ⌘J 로 꺼내요</p>
+              <div className="empty-actions">
+                <button type="button" className="button primary" onClick={() => setCreating({})} data-testid="empty-new-chat">
+                  새 일감 · {state.settings.newTaskStart === 'terminal' ? '터미널로' : state.settings.newTaskStart === 'chat-codex' ? 'Codex 대화로' : 'Claude 대화로'} 시작 <kbd>⌘N</kbd>
+                </button>
+                {state.settings.newTaskStart !== 'terminal' && (
+                  <button type="button" className="button" onClick={() => setCreating({ start: 'terminal' })} data-testid="empty-new-terminal">
+                    터미널로 시작
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </main>

@@ -1,6 +1,7 @@
 // 대화 pane (21단계) — Claude 와 채팅. 도구는 한 줄로 접고, 허락 · 질문은 카드에서 바로 답한다. 보드 'Chat'.
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react'
 import type { ActivityEvent } from '../shared/activity'
+import { shortPath } from './sidebar-model'
 import {
   AGENT_NAME,
   CHAT_PERMISSIONS,
@@ -34,6 +35,8 @@ interface Props {
   onSession(id: string): void
   /** ⇧⌘J · 실패 띠 '터미널로 열기' */
   onToTerminal(): void
+  /** 26단계 ⌘J: 이 대화 아래에 셸을 꺼낸다(있으면 그리로) */
+  onShell(): void
   /** 로그인 띠 — 같은 폴더 새 탭에서 claude (사용자가 /login) */
   onOpenLogin(): void
   onActivity(ev: ActivityEvent): void
@@ -650,12 +653,15 @@ export function ChatPane(p: Props) {
           {name}
         </span>
         <span className="chat-where" title={p.cwd}>
-          {p.cwd}
+          {shortPath(p.cwd)}
         </span>
         {p.permission === 'auto' && <span className="chat-auto">자동</span>}
         <span className={`chat-status ${statusChip.cls}`} data-testid="chat-status">
           {statusChip.text}
         </span>
+        <button type="button" className="chat-switch" onClick={p.onShell} title="이 일감 폴더의 셸을 대화 아래에 꺼내요 (⌘J)" data-testid="chat-shell">
+          셸 ⌘J
+        </button>
         <button type="button" className="chat-switch" onClick={p.onToTerminal} title="같은 세션을 터미널로 (⇧⌘J)">
           터미널 ⇧⌘J
         </button>
@@ -796,7 +802,7 @@ export function ChatPane(p: Props) {
               {name} · {model}
             </span>
           )}
-          <span className="dim small chat-keys">↩ 보내기 · ⇧↩ 줄바꿈 · ⌘↩ 지금 보내기 · ⌘. 멈춤</span>
+          <span className="dim small chat-keys" title="↩ 보내기 · ⇧↩ 줄바꿈 · ⌘↩ 지금 보내기 · ⌘. 멈춤 · ⌘J 셸">⇧↩ 줄바꿈 · ⌘J 셸</span>
           {running ? (
             <button type="button" className="chat-send stop" onClick={() => window.taskminal.chat.interrupt(p.paneId)}>
               멈춤 ⌘.

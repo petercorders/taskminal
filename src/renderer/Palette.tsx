@@ -107,7 +107,8 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
   const optionId = (i: number) => `palette-option-${i}`
   return (
     <div className="palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-label="명령 팔레트" data-testid="palette">
+      {/* aria-modal: 열린 동안 뒤의 터미널 · 대화가 늦게 포커스를 가져가지 않게(26단계 — 글자가 커져 늦어진 맞춤이 팔레트 입력을 뺏었다) */}
+      <div className="palette" role="dialog" aria-modal="true" aria-label="명령 팔레트" data-testid="palette">
         <div className="palette-input-row">
           <span className="palette-scope" data-testid="palette-scope">
             {SCOPE_LABEL[scope]}

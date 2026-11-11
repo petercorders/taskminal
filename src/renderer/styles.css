@@ -4,7 +4,7 @@
   --raised: #1a1c21;
   --line: #24262c;
   --fg: #e6e7ea;
-  --muted: #8a8f98;
+  --muted: #a1a6ae; /* 26단계: #8a8f98 은 바탕(#131418)에서 대비 5.5 지만 반투명 · 띠 바탕에서 4.5 아래로 — 올림 */
   --accent: #5b9cf5;
   --accent-soft: #5b9cf522;
   --danger: #e07a7a;
@@ -12,7 +12,7 @@
   --waiting: #e5b567;
   --done: #7cc48b;
   --failed: #e07a7a;
-  --dim-opacity: 0.62;
+  --dim-opacity: 0.82; /* 26단계: 0.62 는 흐린 pane 글자가 대비 4.5 아래 */
   color-scheme: dark;
 }
 
@@ -31,6 +31,13 @@
   color-scheme: light;
 }
 
+/* 26단계 가독성: 여러 줄이 되는 글은 줄 간격 1.45 (기본 normal ≈ 1.2 는 한글 두 줄이 붙어 보인다) */
+p,
+li,
+.hint {
+  line-height: 1.45;
+}
+
 html,
 body,
 #root {
@@ -42,7 +49,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: Inter, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -69,7 +76,7 @@ select {
 .notice {
   margin: 0;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: #f2c46d;
   background: #2a2312;
   border-bottom: 1px solid #4a3c1c;
@@ -90,7 +97,7 @@ select {
   align-items: center;
   justify-content: space-between;
   padding: 12px 10px 6px 14px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -114,7 +121,7 @@ select {
 
 .sidebar-empty {
   margin: 8px 14px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -126,7 +133,7 @@ select {
 
 .sidebar-section-title {
   margin: 12px 14px 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -181,11 +188,11 @@ select {
 }
 
 .task-name {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .task-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   gap: 6px;
@@ -218,7 +225,7 @@ select {
 }
 .attention-section kbd {
   font-family: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
 }
@@ -300,7 +307,7 @@ select {
   gap: 8px;
   height: 22px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
@@ -557,6 +564,10 @@ select {
   margin: 0 0 6px;
   color: var(--muted);
 }
+.empty-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* ─── 버튼 · 대화상자 ─── */
 .button {
@@ -584,8 +595,12 @@ select {
 .button kbd {
   margin-left: 6px;
   font-family: inherit;
-  font-size: 11px;
-  opacity: 0.7;
+  font-size: 12px;
+  opacity: 0.85; /* 26단계: 0.7 은 주 단추 · 눌린 단추 위에서 대비 3.4~3.9 */
+}
+.button.primary kbd,
+.button[aria-pressed='true'] kbd {
+  opacity: 1;
 }
 
 .dialog-backdrop {
@@ -632,7 +647,7 @@ select {
 .field-error {
   margin: -6px 0 0;
   min-height: 1.4em;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--danger);
 }
 
@@ -648,7 +663,7 @@ select {
 .field > span,
 .field > label,
 .field > legend {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   padding: 0;
@@ -750,12 +765,12 @@ select {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .palette-help {
   flex: none;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .palette-list {
@@ -779,7 +794,7 @@ select {
 .palette-kind {
   flex: none;
   width: 42px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -804,14 +819,14 @@ select {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .palette-hint {
   margin-left: auto;
   flex: none;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .palette-detail + .palette-hint,
@@ -926,7 +941,7 @@ select {
 .menu-heading {
   padding: 6px 10px 2px 28px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .menu-sep {
   height: 1px;
@@ -986,7 +1001,7 @@ select {
   border-radius: 8px;
   background: var(--failed);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
 }
 .settings-main {
   display: flex;
@@ -1008,7 +1023,7 @@ select {
 .settings-saved {
   margin-left: auto;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .settings-body {
   flex: 1;
@@ -1024,7 +1039,7 @@ select {
 .settings-section-title {
   margin: 20px 0 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .settings-none {
   color: var(--muted);
@@ -1051,7 +1066,8 @@ select {
 .setting-desc {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 .setting-row > :not(.setting-head) {
   margin-top: 10px;
@@ -1133,7 +1149,8 @@ select {
 }
 .choice-desc {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 .font-preview {
   margin: 10px 0 0;
@@ -1151,7 +1168,7 @@ select {
   border-radius: 6px;
   background: var(--bg);
   font-family: 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .key-field.bad {
@@ -1173,7 +1190,7 @@ select {
 }
 .notify-table thead th {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .notify-table td {
   width: 110px;
@@ -1199,7 +1216,7 @@ select {
 .manage-count {
   min-width: 56px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .manage-empty {
   color: var(--muted);
@@ -1212,13 +1229,13 @@ input[type='checkbox'] {
 /* ─── 템플릿 (12단계) ─────────────────────────────── */
 .tab-add.more {
   width: 22px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .dialog.wide {
   width: 640px;
 }
 .template-help {
-  font-size: 12px;
+  font-size: 13px;
 }
 .template-json {
   min-height: 300px;
@@ -1243,7 +1260,7 @@ input[type='checkbox'] {
   padding: 0;
   list-style: none;
   color: var(--danger);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .template-errors:empty {
@@ -1284,13 +1301,13 @@ input[type='checkbox'] {
   background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .find-count {
   flex: none;
   font-family: 'JetBrains Mono', Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .find-count.none {
@@ -1305,7 +1322,7 @@ input[type='checkbox'] {
   color: inherit;
   cursor: pointer;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   padding: 2px 5px;
 }
 
@@ -1321,7 +1338,7 @@ input[type='checkbox'] {
 
 .find-esc {
   font-family: 'JetBrains Mono', Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
   border: 1px solid var(--line);
 }
 
@@ -1330,13 +1347,13 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg);
 }
 
 .field-hint {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.5;
 }
@@ -1357,7 +1374,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 12px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   border-bottom: 1px solid var(--line);
   background: var(--raised);
 }
@@ -1411,7 +1428,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .host-orphan-name {
   font-family: ui-monospace, monospace;
@@ -1428,7 +1445,7 @@ input[type='checkbox'] {
   padding: 8px;
   max-height: 240px;
   overflow: auto;
-  font-size: 11px;
+  font-size: 12px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -1439,7 +1456,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .host-confirm span {
   flex: 1;
@@ -1460,7 +1477,7 @@ input[type='checkbox'] {
 }
 .button.small {
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .button.danger-outline {
   border-color: var(--danger);
@@ -1510,7 +1527,7 @@ input[type='checkbox'] {
   margin: 0 0 10px;
   padding: 6px 10px;
   border-radius: 7px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .backup-message.ok {
   background: #132017;
@@ -1540,7 +1557,7 @@ input[type='checkbox'] {
 }
 .backup-group-title {
   padding: 6px 8px 2px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .backup-row {
@@ -1550,7 +1567,7 @@ input[type='checkbox'] {
   padding: 5px 8px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
 }
 .backup-row.selected {
   background: var(--accent-soft);
@@ -1562,7 +1579,7 @@ input[type='checkbox'] {
   padding: 1px 6px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
 }
 .reason-chip.reason-delete,
 .reason-chip.reason-restore,
@@ -1583,7 +1600,7 @@ input[type='checkbox'] {
 }
 .backup-diff h3 {
   margin: 4px 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 .backup-diff ul {
@@ -1625,7 +1642,7 @@ input[type='checkbox'] {
   height: 22px;
   border: 0;
   border-radius: 11px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   background: var(--raised);
   color: var(--muted);
@@ -1665,7 +1682,7 @@ input[type='checkbox'] {
   border-radius: 11px;
   background: #1a1c20;
   color: #c9ccd1;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .secret-notice {
@@ -1682,7 +1699,7 @@ input[type='checkbox'] {
   border-radius: 8px;
   background: #141c2a;
   color: #79b8ff;
-  font-size: 12px;
+  font-size: 13px;
 }
 .secret-list,
 .secret-menu {
@@ -1692,7 +1709,7 @@ input[type='checkbox'] {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 10px 30px #00000066;
-  font-size: 12px;
+  font-size: 13px;
 }
 .secret-list {
   top: 56px;
@@ -1774,7 +1791,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
   padding: 0 10px;
   cursor: pointer;
@@ -1805,7 +1822,7 @@ input[type='checkbox'] {
   border-radius: 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .errlog-filters .chip.on {
@@ -1824,7 +1841,7 @@ input[type='checkbox'] {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .errlog-row + .errlog-row {
   border-top: 1px solid var(--line);
@@ -1848,7 +1865,7 @@ input[type='checkbox'] {
 }
 .errlog-msg code {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1865,7 +1882,7 @@ input[type='checkbox'] {
   padding: 14px;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .errlog-empty span {
   color: var(--muted);
@@ -1899,7 +1916,7 @@ input[type='checkbox'] {
 .first-run-count {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .first-run-options {
   display: flex;
@@ -1926,7 +1943,7 @@ input[type='checkbox'] {
 }
 .first-run-option span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .first-run-code {
   display: flex;
@@ -1941,7 +1958,7 @@ input[type='checkbox'] {
 .first-run-code code {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -1950,7 +1967,7 @@ input[type='checkbox'] {
   /* 글자 폭(소수 px)에 맡기면 탭 줄 폭이 소수가 되어 끝 탭이 1px 덜 보인다(tabs.spec 넘침 시험) — 정수 폭으로 */
   width: 60px;
   padding: 0;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .tab-action.history.on,
@@ -1963,7 +1980,7 @@ input[type='checkbox'] {
 .tab-action.resume {
   width: 56px;
   padding: 0;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .tab-action.notes.has-todo {
@@ -1985,7 +2002,7 @@ input[type='checkbox'] {
   padding: 10px 12px;
   border-left: 1px solid var(--line);
   background: var(--panel);
-  font-size: 12px;
+  font-size: 13px;
 }
 .history-head {
   display: flex;
@@ -1993,7 +2010,7 @@ input[type='checkbox'] {
 }
 .history-head h2 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 .history-close {
   margin-left: auto;
@@ -2001,7 +2018,7 @@ input[type='checkbox'] {
   border-radius: 5px;
   background: none;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   padding: 1px 6px;
 }
 .history-fail {
@@ -2020,7 +2037,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--bg);
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
 }
 .history-search:focus {
@@ -2038,7 +2055,7 @@ input[type='checkbox'] {
   background: none;
   color: var(--muted);
   padding: 4px 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-scopes .seg.on {
   background: var(--accent-soft);
@@ -2059,7 +2076,7 @@ input[type='checkbox'] {
   background: none;
   color: var(--muted);
   padding: 2px 9px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-chips .chip.on,
 .gf-chips .chip.on {
@@ -2075,7 +2092,7 @@ input[type='checkbox'] {
 .history-short {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   gap: 4px;
   align-items: center;
@@ -2083,7 +2100,7 @@ input[type='checkbox'] {
 .history-note {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-list {
   flex: 1;
@@ -2098,7 +2115,7 @@ input[type='checkbox'] {
 }
 .history-day h3 {
   margin: 10px 0 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 600;
   display: flex;
@@ -2110,7 +2127,7 @@ input[type='checkbox'] {
   border-radius: 4px;
   background: var(--raised);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 .history-row {
@@ -2140,7 +2157,7 @@ input[type='checkbox'] {
 .history-badge {
   flex: none;
   min-width: 34px;
-  font-size: 10px;
+  font-size: 12px;
   font-family: Menlo, monospace;
   color: var(--done);
 }
@@ -2155,7 +2172,7 @@ input[type='checkbox'] {
 .history-pane {
   flex: none;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .history-cmd {
   flex: 1;
@@ -2164,14 +2181,14 @@ input[type='checkbox'] {
   white-space: nowrap;
   text-overflow: ellipsis;
   font-family: Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-task {
   flex: none;
   display: flex;
   gap: 4px;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   max-width: 90px;
   overflow: hidden;
@@ -2190,7 +2207,7 @@ input[type='checkbox'] {
 .history-where {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-family: Menlo, monospace;
 }
 .history-tail {
@@ -2200,7 +2217,7 @@ input[type='checkbox'] {
   padding: 6px 8px;
   border-radius: 5px;
   background: var(--bg);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-all;
@@ -2211,12 +2228,12 @@ input[type='checkbox'] {
   flex-wrap: wrap;
 }
 .history-actions .button {
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 7px;
 }
 .history-actions kbd {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .history-menu {
   display: flex;
@@ -2237,7 +2254,7 @@ input[type='checkbox'] {
   border-radius: 5px;
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
 }
 .history-menu button:hover,
 .history-menu button:focus-visible {
@@ -2245,12 +2262,12 @@ input[type='checkbox'] {
 }
 .history-more {
   margin: 4px 0 0 6px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .history-keys {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* ─── 19단계: 모든 출력 찾기 ⇧⌘F (GlobalFind 보드) — 팔레트 모양 ─── */
@@ -2263,13 +2280,13 @@ input[type='checkbox'] {
 }
 .gf-fold {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
 }
 .gf-progress {
   position: relative;
   margin: 8px 12px 0;
   padding-bottom: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .gf-bar {
@@ -2283,7 +2300,7 @@ input[type='checkbox'] {
 .gf-error,
 .gf-note {
   margin: 8px 12px 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   display: flex;
   gap: 8px;
@@ -2308,7 +2325,7 @@ input[type='checkbox'] {
   background: none;
   color: var(--fg);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
   padding: 6px 4px;
   text-align: left;
 }
@@ -2319,7 +2336,7 @@ input[type='checkbox'] {
   margin-left: auto;
   color: var(--muted);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 12px;
 }
 .gf-pane-head {
   display: flex;
@@ -2327,7 +2344,7 @@ input[type='checkbox'] {
   align-items: center;
   padding: 2px 4px 2px 18px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .gf-row {
   display: flex;
@@ -2346,7 +2363,7 @@ input[type='checkbox'] {
   white-space: nowrap;
   text-overflow: ellipsis;
   font-family: Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 .gf-row mark {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
@@ -2359,18 +2376,18 @@ input[type='checkbox'] {
   text-align: right;
   color: var(--muted);
   font-family: Menlo, monospace;
-  font-size: 10px;
+  font-size: 12px;
 }
 .gf-context {
   margin: 0 8px 4px 72px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   white-space: pre;
   overflow: hidden;
 }
 .gf-more {
   margin: 2px 0 6px 18px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .global-find .history-keys {
   padding: 8px 12px;
@@ -2397,7 +2414,7 @@ input[type='checkbox'] {
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 .quick-empty b {
   color: var(--fg);
@@ -2419,7 +2436,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--raised);
   color: var(--fg);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .quick-button.running {
@@ -2446,10 +2463,10 @@ input[type='checkbox'] {
 .quick-src,
 .quick-key {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 .quick-state {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
 }
 .quick-state.running {
@@ -2469,7 +2486,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .quick-add {
@@ -2477,7 +2494,7 @@ input[type='checkbox'] {
 }
 .button.small {
   padding: 3px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .button.warn {
   background: #f0b866;
@@ -2497,7 +2514,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--bg);
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
+  font-size: 13px;
   word-break: break-all;
 }
 .menu-label {
@@ -2507,7 +2524,7 @@ input[type='checkbox'] {
   margin-left: 16px;
   color: var(--muted);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ─── 포트 칩 (20단계, 보드 Ports) — 중립색, 닫힘은 회색 취소선. 파랑 · 초록 · 빨강은 실행 상태 전용 ─── */
@@ -2527,7 +2544,7 @@ input[type='checkbox'] {
   background: #1f2227;
   color: #c4c8ce;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2548,7 +2565,7 @@ input[type='checkbox'] {
 }
 .port-chip.small {
   height: 16px;
-  font-size: 10px;
+  font-size: 12px;
   cursor: default;
 }
 .task-ports {
@@ -2583,7 +2600,7 @@ input[type='checkbox'] {
   flex-direction: column;
   background: var(--bg);
   color: var(--fg);
-  font-size: 13px;
+  font-size: 14px;
 }
 .chat-head {
   display: flex;
@@ -2600,14 +2617,14 @@ input[type='checkbox'] {
   align-items: center;
   padding: 0 7px;
   border-radius: 9px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   background: #2a2238;
   color: #d4b8ff;
 }
 .chat-where {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2615,14 +2632,14 @@ input[type='checkbox'] {
   flex: 1;
 }
 .chat-auto {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--waiting);
   border: 1px solid var(--waiting);
   border-radius: 9px;
   padding: 0 6px;
 }
 .chat-status {
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .chat-status.run,
@@ -2650,14 +2667,16 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: transparent;
   color: var(--fg);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .chat-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px;
+  /* 26단계: 넓은 창에서 줄이 끝없이 길지 않게 — 가운데 760px 기둥(Orca 처럼). 좁으면 16px 여백 */
+  padding: 16px max(16px, calc((100% - 760px) / 2));
+  font-size: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2670,11 +2689,12 @@ input[type='checkbox'] {
   padding: 8px 12px;
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.55;
 }
 .chat-text {
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .chat-tools {
   border: 1px solid var(--line);
@@ -2690,7 +2710,7 @@ input[type='checkbox'] {
   border: 0;
   background: transparent;
   color: var(--fg);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   text-align: left;
 }
@@ -2703,13 +2723,13 @@ input[type='checkbox'] {
   font-family: var(--mono, 'JetBrains Mono', monospace);
 }
 .chat-tools-state {
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-tools-items {
   list-style: none;
   margin: 0;
   padding: 4px 10px 8px 28px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   font-family: var(--mono, 'JetBrains Mono', monospace);
 }
@@ -2722,7 +2742,7 @@ input[type='checkbox'] {
 .chat-tool-tail {
   margin: 2px 0 4px;
   white-space: pre-wrap;
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-card,
 .chat-band {
@@ -2752,7 +2772,7 @@ input[type='checkbox'] {
   font-weight: 400;
 }
 .chat-pane .small {
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-card-cmd {
   margin: 0;
@@ -2761,7 +2781,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-all;
-  font-size: 12px;
+  font-size: 13px;
 }
 .chat-card-actions {
   display: flex;
@@ -2778,7 +2798,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   background: transparent;
   color: var(--fg);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .chat-card-actions button.primary {
@@ -2797,7 +2817,7 @@ input[type='checkbox'] {
 }
 .chat-card-note,
 .chat-card-done {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 .chat-ask-options {
@@ -2820,7 +2840,7 @@ input[type='checkbox'] {
   min-width: 16px;
   text-align: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-band.err {
   background: #2a1517;
@@ -2833,15 +2853,15 @@ input[type='checkbox'] {
 .chat-band-body {
   white-space: pre-wrap;
   color: var(--fg);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 .chat-done {
   color: var(--done);
-  font-size: 12px;
+  font-size: 13px;
 }
 .chat-stopped {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .chat-empty {
   margin: auto;
@@ -2851,6 +2871,7 @@ input[type='checkbox'] {
   gap: 10px;
   text-align: center;
   max-width: 460px;
+  line-height: 1.45;
 }
 .chat-empty-title {
   font-size: 16px;
@@ -2865,13 +2886,13 @@ input[type='checkbox'] {
 .chat-input-box {
   flex-shrink: 0;
   border-top: 1px solid var(--line);
-  padding: 8px 12px 10px;
+  padding: 10px max(12px, calc((100% - 760px) / 2)) 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 .chat-hint {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--waiting);
 }
 .chat-input {
@@ -2893,7 +2914,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-perm-wrap {
   position: relative;
@@ -2905,7 +2926,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   background: transparent;
   color: var(--fg);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .chat-perm.auto {
@@ -2933,7 +2954,7 @@ input[type='checkbox'] {
   text-align: left;
   padding: 0 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .chat-perm-menu button[aria-checked='true'],
@@ -2967,7 +2988,7 @@ input[type='checkbox'] {
   padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   background: #8b6cf0;
   color: #fff;
@@ -3000,7 +3021,7 @@ input[type='checkbox'] {
   background: var(--raised);
   color: inherit;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 .sidebar-filter:focus-visible {
   outline: 2px solid var(--accent);
@@ -3020,7 +3041,7 @@ input[type='checkbox'] {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 .sidebar-views button[aria-checked='true'] {
@@ -3031,7 +3052,7 @@ input[type='checkbox'] {
   display: flex;
   gap: 2px;
   padding: 0 14px 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 /* 칸 너비가 개수에 비례하는 쌓인 막대 — 위 3px 띠가 비율을 보인다 */
@@ -3075,7 +3096,7 @@ input[type='checkbox'] {
   padding: 6px 8px;
   border: 1px dashed var(--line);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   list-style: none;
 }
@@ -3102,21 +3123,21 @@ input[type='checkbox'] {
 .task-ago {
   margin-left: auto;
   flex: none;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .task-last {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 11px;
+  font-size: 12px;
   font-family: 'JetBrains Mono', Menlo, monospace;
   color: var(--muted);
 }
 .task-last.err { color: var(--failed); }
 .task-last.wait { color: var(--waiting); }
 .task-last.run { color: var(--running); }
-.task-last.dim { opacity: 0.75; }
+.task-last.dim { opacity: 0.9; } /* 26단계: 0.75 는 대비 4.15 */
 .task-group,
 .task-terms {
   flex: none;
@@ -3152,7 +3173,7 @@ input[type='checkbox'] {
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 .chat-image-chip button {
@@ -3181,7 +3202,7 @@ input[type='checkbox'] {
 .chat-attach {
   height: 22px;
   padding: 0 8px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--panel);
@@ -3195,7 +3216,7 @@ input[type='checkbox'] {
   padding: 6px 8px;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .chat-queue.paused {
   border-color: var(--waiting);
@@ -3236,7 +3257,7 @@ input[type='checkbox'] {
   flex-direction: column;
   background: var(--bg);
   color: var(--fg);
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
 }
 :root[data-theme='light'] .review-pane {
@@ -3294,7 +3315,7 @@ input[type='checkbox'] {
   border-radius: 5px;
   background: transparent;
   color: var(--fg);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -3357,7 +3378,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: var(--panel);
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 .review-files {
   flex: 1;
@@ -3376,7 +3397,7 @@ input[type='checkbox'] {
   border: 0;
   border-radius: 6px;
   text-align: left;
-  font-size: 12px;
+  font-size: 13px;
 }
 .review-pane .review-folder {
   color: var(--muted);
@@ -3391,7 +3412,7 @@ input[type='checkbox'] {
   align-items: center;
   padding: 0 5px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   background: var(--raised);
   color: var(--muted);
 }
@@ -3412,7 +3433,7 @@ input[type='checkbox'] {
 }
 .review-counts {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 .review-pane .add {
   color: var(--rv-add-fg);
@@ -3437,7 +3458,7 @@ input[type='checkbox'] {
   justify-content: center;
   border-radius: 3px;
   border: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 12px;
 }
 .review-box.on {
   background: var(--rv-violet);
@@ -3469,14 +3490,14 @@ input[type='checkbox'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
 }
 .review-lines {
   flex: 1;
   min-height: 0;
   overflow: auto;
   font-family: var(--mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 19px;
 }
 .review-hunk-head,
@@ -3563,7 +3584,7 @@ input[type='checkbox'] {
   padding: 6px 12px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3582,7 +3603,7 @@ input[type='checkbox'] {
 }
 .review-commit-head .dim {
   font-weight: 400;
-  font-size: 11px;
+  font-size: 12px;
 }
 .review-msg {
   min-height: 90px;
@@ -3593,7 +3614,7 @@ input[type='checkbox'] {
   background: var(--panel);
   color: var(--fg);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 .review-band {
   display: flex;
@@ -3636,7 +3657,7 @@ input[type='checkbox'] {
   padding: 8px;
   border-radius: 6px;
   background: var(--panel);
-  font-size: 11px;
+  font-size: 12px;
 }
 .review-commit-acts {
   display: flex;
@@ -3664,7 +3685,7 @@ input[type='checkbox'] {
 }
 .review-empty-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
 }
 .review-empty-body {
   color: var(--muted);
@@ -3704,7 +3725,7 @@ input[type='checkbox'] {
   padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .chat-diff-path {
   flex: 1;
@@ -3742,17 +3763,17 @@ input[type='checkbox'] {
   gap: 8px;
 }
 .resume-head strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 .resume-away {
   flex: 1;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .resume-tip {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .resume-list {
   margin: 8px 0 0;
@@ -3808,11 +3829,11 @@ input[type='checkbox'] {
   text-overflow: ellipsis;
 }
 .resume-main {
-  font-size: 13px;
+  font-size: 14px;
 }
 .resume-sub {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .resume-more {
   margin-top: 4px;
@@ -3820,13 +3841,13 @@ input[type='checkbox'] {
   border: 0;
   background: none;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .resume-keys {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: right;
 }
 .notes-panel {
@@ -3850,7 +3871,7 @@ input[type='checkbox'] {
 .notes-empty {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .notes-list {
   flex: 1;
@@ -3866,7 +3887,7 @@ input[type='checkbox'] {
   gap: 6px;
   padding: 4px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 14px;
 }
 .note label {
   flex: 1;
@@ -3883,7 +3904,7 @@ input[type='checkbox'] {
 .note-by {
   flex: none;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
 }
 .notes-input {
   padding: 6px 8px;
@@ -3909,7 +3930,7 @@ input[type='checkbox'] {
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -3923,14 +3944,14 @@ input[type='checkbox'] {
   border-radius: 10px;
   background: var(--raised);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 8px;
   cursor: pointer;
   white-space: nowrap;
 }
 .task-host {
   flex: none;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -3998,14 +4019,14 @@ input[type='checkbox'] {
 }
 .archive-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .archive-when {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .archive-actions {
@@ -4014,7 +4035,7 @@ input[type='checkbox'] {
 }
 .archive-hint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .archive-empty {
   color: var(--muted);
@@ -4033,7 +4054,7 @@ input[type='checkbox'] {
 }
 .weekly-insight {
   color: var(--failed);
-  font-size: 13px;
+  font-size: 14px;
 }
 .weekly-kpis {
   display: grid;
@@ -4051,7 +4072,7 @@ input[type='checkbox'] {
 }
 .weekly-kpi span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .weekly-days {
   display: grid;
@@ -4066,7 +4087,7 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: flex-end;
   height: 100%;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .weekly-day i {
@@ -4079,7 +4100,7 @@ input[type='checkbox'] {
 .weekly-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
 .weekly-table th,
 .weekly-table td {
@@ -4101,7 +4122,7 @@ input[type='checkbox'] {
   padding: 6px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--raised);
-  font-size: 12px;
+  font-size: 13px;
 }
 .remote-band.warn {
   border-left: 3px solid var(--waiting);
@@ -4119,11 +4140,13 @@ input[type='checkbox'] {
 .remote-band button {
   white-space: nowrap;
 }
-.new-task-where {
+.new-task-where,
+.new-task-start {
   display: flex;
   gap: 6px;
 }
-.new-task-where button[aria-pressed='true'] {
+.new-task-where button[aria-pressed='true'],
+.new-task-start button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
 }

@@ -47,6 +47,8 @@ const defaultSettings = (groups: Array<{ id: string; name: string }>) => ({
   shell: null,
   // 실행 중인 명령이 있으면 끄기 전에 묻는 설정(기본 켜짐)은 시험 정리(app.close)를 대화상자에서 멈추게 한다 → 그것을 보는 시험만 켠다
   confirmQuit: false,
+  // 26단계부터 새 일감 기본은 대화 — 그 전에 쓴 시험은 '새 일감 = 셸' 을 전제한다. 대화 시작은 chat-first.spec 이 따로 본다
+  newTaskStart: 'terminal',
 })
 
 export function seedState(userData: string, tasks: SeedTask[], groups: Array<{ id: string; name: string }> = [], settings: Record<string, unknown> = {}): void {

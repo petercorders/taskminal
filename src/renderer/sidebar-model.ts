@@ -205,3 +205,15 @@ export function lastActive(task: Task, activity: Readonly<Record<Id, PaneActivit
   }
   return at || null
 }
+
+/** 사이드바 둘째 줄의 칸 수 (26단계): 대화가 있으면 '대화 N · 셸 M', 셸만이면 예전처럼 '터미널 N'. 검토 칸은 세지 않는다. */
+export function paneCountLabel(task: Task): string {
+  let chat = 0
+  let shell = 0
+  for (const p of Object.values(task.panes)) {
+    if (p.kind === 'chat') chat++
+    else if (p.kind !== 'review') shell++
+  }
+  if (chat === 0) return `터미널 ${shell}`
+  return shell ? `대화 ${chat} · 셸 ${shell}` : `대화 ${chat}`
+}

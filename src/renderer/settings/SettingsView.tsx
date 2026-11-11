@@ -216,6 +216,19 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
             ]}
           />
         </Row>
+        <Row title="새 일감 시작" desc="새 일감을 만들면 처음 여는 칸. 셸은 대화 칸에서 ⌘J 로 꺼내요" keywords="대화 채팅 터미널 셸 claude codex 기본">
+          <Choices
+            kind="card"
+            label="새 일감 시작"
+            value={s.newTaskStart}
+            onChange={(v) => patch({ newTaskStart: v })}
+            options={[
+              { value: 'chat-claude', title: 'Claude 대화', desc: '대화로 시작, 셸은 ⌘J' },
+              { value: 'chat-codex', title: 'Codex 대화', desc: '대화로 시작, 셸은 ⌘J' },
+              { value: 'terminal', title: '터미널', desc: '셸 하나로 시작' },
+            ]}
+          />
+        </Row>
         <Row
           title="새 일감 기본 폴더"
           desc="비워 두면 마지막에 만든 일감의 폴더"
@@ -239,7 +252,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
           title="새 일감 기본 템플릿"
           control={
             <select aria-label="새 일감 기본 템플릿" className="setting-select" value={s.defaultTemplateId ?? ''} onChange={(e) => patch({ defaultTemplateId: e.target.value || null })}>
-              <option value="">없음 — 셸 하나</option>
+              <option value="">없음 — ‘새 일감 시작’ 대로</option>
               {s.templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}

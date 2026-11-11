@@ -5,7 +5,13 @@ import { cwdLike } from '../shared/cwd'
 import { checkBranchName } from '../shared/worktree'
 import { isRemotePath, isSshHost } from '../shared/remote'
 import { runtime } from './runtime'
-import type { AppState, NewTaskInput } from '../shared/types'
+import type { AppState, NewTaskInput, NewTaskStart } from '../shared/types'
+
+const START_CHOICES: readonly (readonly [NewTaskStart, string])[] = [
+  ['chat-claude', 'Claude 대화'],
+  ['chat-codex', 'Codex 대화'],
+  ['terminal', '터미널'],
+]
 
 export const TASK_COLORS = ['#5b9cf5', '#7ccf8a', '#e5b567', '#e07a7a', '#b48ef0', '#5ec4c4']
 
@@ -13,6 +19,8 @@ export const TASK_COLORS = ['#5b9cf5', '#7ccf8a', '#e5b567', '#e07a7a', '#b48ef0
 export interface NewTaskInitial {
   name?: string
   templateId?: string
+  /** 빈 화면의 '터미널로 시작' — 없으면 설정의 새 일감 시작 */
+  start?: NewTaskStart
 }
 
 interface Props {
@@ -48,6 +56,8 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
   const [tmux, setTmux] = useState(true)
   const [hosts, setHosts] = useState<string[]>([])
   const remote = where === 'remote'
+  // 26단계: 무엇으로 시작 — 처음 값은 설정(일반 › 새 일감 시작)을 연 순간에 떠 둔다. 템플릿을 고르면 템플릿대로.
+  const [start, setStart] = useState<NewTaskStart>(initial?.start ?? settings.newTaskStart)
 
   useEffect(() => nameRef.current?.focus(), [])
   useEffect(() => {
@@ -87,7 +97,7 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
       submitted.current = true
       return onCreate({ name: name.trim() || h, cwd: dir, templateId: null, statusId, groupId: groupId || null, color, host: h, remoteTmux: tmux })
     }
-    const input = { name, cwd, templateId: template?.id ?? null, statusId, groupId: groupId || null, color }
+    const input = { name, cwd, templateId: template?.id ?? null, statusId, groupId: groupId || null, color, start }
     if (!worktreeOn) {
       submitted.current = true
       return onCreate(input)
@@ -228,11 +238,24 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
             </p>
           )}
 
+          {!remote && !template && (
+            <div className="field">
+              <span>시작</span>
+              <div className="new-task-start" role="group" aria-label="시작">
+                {START_CHOICES.map(([value, label]) => (
+                  <button key={value} type="button" className="button" aria-pressed={start === value} onClick={() => setStart(value)} data-testid={`start-${value}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {!remote && (
             <label className="field">
               <span>템플릿</span>
               <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} data-testid="new-task-template">
-                <option value="">없음 — 셸 하나</option>
+                <option value="">없음 — 위 ‘시작’ 대로</option>
                 {settings.templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}

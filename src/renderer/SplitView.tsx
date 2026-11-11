@@ -50,6 +50,8 @@ interface Props {
     onPermission(p: ChatPermission): void
     onSession(paneId: Id, sessionId: string): void
     onToTerminal(paneId: Id): void
+    /** 26단계 ⌘J 셸 꺼내기 */
+    onShell(paneId: Id): void
     onOpenLogin(paneId: Id): void
     onRewound(paneId: Id, forkAt: string | null, sessionId?: string): void
     onBranch(paneId: Id, index: number, at: number): void
@@ -178,6 +180,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onPermission={chat.onPermission}
                 onSession={(id) => chat.onSession(pane.id, id)}
                 onToTerminal={() => chat.onToTerminal(pane.id)}
+                onShell={() => chat.onShell(pane.id)}
                 onOpenLogin={() => chat.onOpenLogin(pane.id)}
                 onRewound={(forkAt, sid) => chat.onRewound(pane.id, forkAt, sid)}
                 onBranch={(index, at) => chat.onBranch(pane.id, index, at)}

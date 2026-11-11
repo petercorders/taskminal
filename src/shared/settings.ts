@@ -4,7 +4,10 @@ import { isObj } from './guards'
 import { isAccel, isAppCommand } from './keymap'
 import { parseQuickList } from './quick'
 import { customPatternError, SECRET_TOGGLES } from './redact'
-import type { CursorStyle, NotifyKind, NotifyWay, SecretAllow, Settings, SidebarDensity, StartupMode, Theme } from './types'
+import type { CursorStyle, NewTaskStart, NotifyKind, NotifyWay, SecretAllow, Settings, SidebarDensity, StartupMode, Theme } from './types'
+
+/** 새 일감의 시작 (26단계) — 설정 › 일반 · 새 일감 대화상자 */
+export const NEW_TASK_STARTS: readonly NewTaskStart[] = ['chat-claude', 'chat-codex', 'terminal']
 
 export const ACCENTS = [
   { color: '#5b9cf5', name: '파랑' },
@@ -67,6 +70,7 @@ export function defaultExtraSettings(): ExtraSettings {
     hiddenPorts: [],
     portTipSeen: false,
     chatPermission: 'ask',
+    newTaskStart: 'chat-claude',
     sidebarView: 'flow',
     sidebarClosed: ['done'], // 흐름 보기에서 기본 마지막 상태(완료)는 접어 둔다 (21b 보드)
     resumeCard: true,
@@ -169,6 +173,7 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     hiddenPorts: parsePorts(v['hiddenPorts']),
     portTipSeen: bool(v['portTipSeen'], d.portTipSeen),
     chatPermission: isChatPermission(v['chatPermission']) ? v['chatPermission'] : d.chatPermission,
+    newTaskStart: oneOf<NewTaskStart>(v['newTaskStart'], NEW_TASK_STARTS, d.newTaskStart),
     sidebarView: oneOf<'flow' | 'group'>(v['sidebarView'], ['flow', 'group'], d.sidebarView),
     sidebarClosed: Array.isArray(v['sidebarClosed']) ? [...new Set(v['sidebarClosed'].filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 64) : d.sidebarClosed,
     resumeCard: bool(v['resumeCard'], d.resumeCard),

@@ -3,7 +3,7 @@ import { taskActivity, type PaneActivity } from '../shared/activity'
 import type { TaskEdit } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 import { ActivityIcon, ACTIVITY_LABEL } from './activity-ui'
-import { countBar, filterTasks, flowSections, lastActive, lastLine, shortPath, sidebarSections, timeAgo } from './sidebar-model'
+import { countBar, filterTasks, flowSections, lastActive, lastLine, paneCountLabel, shortPath, sidebarSections, timeAgo } from './sidebar-model'
 import type { Branches } from '../shared/git'
 import { TaskMenu } from './TaskMenu'
 import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
@@ -203,7 +203,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
                       </span>
                     )
                   )}
-                  <span className="task-terms">터미널 {Object.keys(task.panes).length}</span>
+                  <span className="task-terms">{paneCountLabel(task)}</span>
                 </span>
               )}
               {portsOf && <SidebarPorts {...chipSummary(portsOf(task), SIDEBAR_CHIPS)} />}

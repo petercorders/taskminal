@@ -43,7 +43,8 @@ describe('앱 메뉴 ↔ 키 표', () => {
   it('키 없는 메뉴 항목은 키 표에서 키 없는 명령만 — 업데이트 확인… 은 앱 메뉴에 (18단계)', () => {
     const unkeyed = itemsOf().filter((i) => i.accelerator === undefined)
     // 25단계: 이번 주 정리도 키가 없다(사이드바 '📊 이번 주' · ⌘P · 메뉴로)
-    expect(unkeyed.map((i) => i.id)).toEqual(['update-check', 'cli-install', 'weekly'])
+    // 26단계: 새 대화 · 대화 나누기도 키가 없다(파일 메뉴 · 탭 줄 ▾ · ⌘P 로)
+    expect(unkeyed.map((i) => i.id)).toEqual(['update-check', 'cli-install', 'chat-new', 'chat-new-codex', 'chat-split', 'chat-split-codex', 'weekly'])
     expect(unkeyed[0]!.label).toBe('업데이트 확인…')
     expect(SHORTCUTS.find((s) => s.command === 'update-check')!.accel).toBeFalsy()
     expect(SHORTCUTS.find((s) => s.command === 'weekly')!.accel).toBeFalsy()

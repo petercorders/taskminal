@@ -26,6 +26,7 @@ import {
   setPaneCwd,
   tabLabel,
   taskToTemplate,
+  shellToggle,
 } from '../../src/shared/model'
 import type { AppState, NewTaskInput, Settings, Task, Template } from '../../src/shared/types'
 
@@ -673,5 +674,55 @@ describe('변경 pane (23단계)', () => {
     const o = openReviewPane(flutterTask(), () => 'rv')
     const st = { ...emptyState(), tasks: [{ ...o, panes: { ...o.panes, rv: { ...o.panes.rv!, pendingCommand: 'x' } } }], activeTaskId: o.id }
     expect(normalizeState(JSON.parse(JSON.stringify(st)), ids()).tasks[0]!.panes.rv).toEqual({ id: 'rv', cwd: o.cwd, kind: 'review' })
+  })
+})
+
+describe('대화 중심 (26단계)', () => {
+  test('start 가 대화면 첫 pane 이 그 에이전트의 대화 · 터미널이거나 없으면 셸', () => {
+    const c = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    expect(Object.values(c.panes)).toEqual([{ id: expect.any(String), cwd: '/Users/me/app', kind: 'chat', chat: { agent: 'claude' } }])
+    const x = createTask(input({ start: 'chat-codex' }), defaultSettings(), ids(), 0)
+    expect(Object.values(x.panes)[0]).toMatchObject({ kind: 'chat', chat: { agent: 'codex' } })
+    expect(Object.values(createTask(input({ start: 'terminal' }), defaultSettings(), ids(), 0).panes)[0]).toEqual({ id: expect.any(String), cwd: '/Users/me/app' })
+    expect(Object.values(createTask(input(), defaultSettings(), ids(), 0).panes)[0]!.kind).toBeUndefined()
+  })
+  test('템플릿 · 원격이면 start 를 보지 않는다(템플릿이 정한 칸 · 원격은 셸)', () => {
+    const t = createTask(input({ start: 'chat-claude', templateId: 'tpl-flutter' }), settingsWith(flutterTemplate), ids(), 0)
+    expect(Object.values(t.panes).some((p) => p.kind === 'chat')).toBe(false)
+    const r = createTask(input({ start: 'chat-claude', host: 'nas' }), defaultSettings(), ids(), 0)
+    expect(Object.values(r.panes)[0]!.kind).toBeUndefined()
+  })
+  test('shellToggle: 터미널이 없으면 아래로 나눠 셸 · 있으면 그 셸로 · 셸에 있으면 대화로', () => {
+    const chat = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    const chatId = chat.tabs[0]!.activePaneId
+    const opened = shellToggle(chat, () => 'sh')
+    const tab = opened.tabs[0]!
+    expect(tab.activePaneId).toBe('sh')
+    expect(tab.layout).toMatchObject({ type: 'split', dir: 'down', ratio: 0.65, a: { type: 'pane', paneId: chatId }, b: { type: 'pane', paneId: 'sh' } })
+    expect(opened.panes.sh).toEqual({ id: 'sh', cwd: '/Users/me/app' })
+    // 셸에서 다시 → 대화로 (새 pane 없음)
+    const back = shellToggle(opened, () => 'never')
+    expect(back.tabs[0]!.activePaneId).toBe(chatId)
+    expect(Object.keys(back.panes)).toHaveLength(2)
+    // 대화에서 또 → 있는 셸로 (새 pane 없음)
+    const again = shellToggle(back, () => 'never')
+    expect(again.tabs[0]!.activePaneId).toBe('sh')
+    expect(Object.keys(again.panes)).toHaveLength(2)
+  })
+  test('shellToggle: 탭이 없으면 그대로 · 터미널만 있는 탭에서는 그대로', () => {
+    const none = { ...flutterTask(), tabs: [], activeTabId: null, panes: {} }
+    expect(shellToggle(none, () => 'x')).toBe(none)
+    const term = createTask(input(), defaultSettings(), ids(), 0)
+    expect(shellToggle(term, () => 'x')).toBe(term)
+    // 셸 둘로 나뉜 터미널 탭(둘째에 포커스)도 그대로 — 첫 셸로 포커스를 옮기지 않는다
+    const two = splitActivePane(term, 'right', () => 'b')
+    expect(shellToggle(two, () => 'x')).toBe(two)
+  })
+  test('저장 · 읽기: newTaskStart 기본은 Claude 대화 · 모르는 값은 기본', () => {
+    expect(defaultSettings().newTaskStart).toBe('chat-claude')
+    const st = { ...emptyState(), settings: { ...emptyState().settings, newTaskStart: 'chat-codex' } }
+    expect(normalizeState(JSON.parse(JSON.stringify(st)), ids()).settings.newTaskStart).toBe('chat-codex')
+    const bad = { ...emptyState(), settings: { ...emptyState().settings, newTaskStart: 'vim' } }
+    expect(normalizeState(JSON.parse(JSON.stringify(bad)), ids()).settings.newTaskStart).toBe('chat-claude')
   })
 })

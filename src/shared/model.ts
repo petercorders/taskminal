@@ -134,6 +134,11 @@ export function createTask(input: NewTaskInput, settings: Settings, newId: NewId
   const tabSpecs: TemplateTab[] = template && template.tabs.length ? template.tabs : [{ layout: { pane: {} } }]
   const panes: Record<Id, Pane> = {}
   const tabs = tabSpecs.map((tt) => expandTab(tt, cwd, newId, panes))
+  // 26단계: 대화로 시작 — 템플릿 · 원격이 아니면 첫 pane 을 대화로 (셸은 ⌃` 로 꺼낸다)
+  if (!template && !host && (input.start === 'chat-claude' || input.start === 'chat-codex')) {
+    const first = tabs[0]!.activePaneId
+    panes[first] = chatPane(first, cwd, input.start === 'chat-codex' ? 'codex' : 'claude')
+  }
   const statusOk = settings.statuses.some((s) => s.id === input.statusId)
   const groupOk = input.groupId !== null && settings.groups.some((g) => g.id === input.groupId)
   return {
@@ -361,6 +366,36 @@ export function addChatTab(task: Task, newId: NewId, agent: ChatAgent = 'claude'
   const paneId = newId()
   const tab: Tab = { id: tabId, layout: { type: 'pane', paneId }, activePaneId: paneId }
   return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: chatPane(paneId, activePaneCwd(task), agent) } }
+}
+
+/**
+ * 셸 꺼내기 ⌘J (26단계) — 대화 중심 일감에서 셸은 숨겨 두고 필요할 때 꺼낸다.
+ * 활성 탭에 터미널 pane 이 없으면 활성 pane 아래로 나눠 셸(일감 폴더) · 있으면 그 셸로 · 이미 셸에 있으면 대화 pane 으로 돌아간다.
+ * 활성 pane 이 터미널이고 대화가 없는 탭(옛 터미널 일감)은 그대로 — 거기서는 셸이 이미 보인다.
+ */
+export function shellToggle(task: Task, newId: NewId): Task {
+  const tab = activeTab(task)
+  if (!tab) return task
+  const ids = paneIds(tab.layout)
+  const isTerm = (id: Id) => !task.panes[id]?.kind
+  const shell = ids.find(isTerm)
+  const chat = ids.find((id) => task.panes[id]?.kind === 'chat')
+  if (!chat) return task
+  if (shell === undefined) {
+    // 대화 pane 아래로 — 활성이 대화가 아니면(변경 칸 등) 먼저 대화를 골라 둔다
+    const base = tab.activePaneId === chat ? task : focusPane(task, chat)
+    const split = splitActivePane(base, 'down', newId)
+    const t2 = activeTab(split)!
+    // 대화 하나뿐인 탭이면 대화를 크게(65%) — 이미 나뉜 탭은 splitPane 의 기본 비율 그대로
+    const tabs = ids.length === 1 ? split.tabs.map((x) => (x.id === t2.id ? { ...x, layout: setRatio(x.layout, 0.65) } : x)) : split.tabs
+    return { ...split, tabs, panes: { ...split.panes, [t2.activePaneId]: makePane(t2.activePaneId, task.cwd) } }
+  }
+  return focusPane(task, tab.activePaneId === shell ? chat : shell)
+}
+
+/** 바깥 분할의 비율만 (셸 서랍 높이) */
+function setRatio(layout: Layout, ratio: number): Layout {
+  return layout.type === 'split' ? { ...layout, ratio } : layout
 }
 
 /** 지금 pane 옆에 대화 pane — 시험 출력과 같이 보게 */

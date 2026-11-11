@@ -43,6 +43,7 @@ import {
   chatToTerminal,
   setChatSession,
   splitActivePaneChat,
+  shellToggle,
   openReviewPane,
   addNote,
   removeNote,
@@ -113,6 +114,7 @@ export type Action =
   | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string; sessionId?: string }
   | { type: 'chat/session'; paneId: Id; sessionId: string }
   | { type: 'chat/to-terminal'; paneId: Id; newPaneId: Id; bin: string }
+  | { type: 'shell/toggle'; taskId: Id; paneId: Id }
   // 24단계 일감 메모 · 이어받기
   | { type: 'note/add'; taskId: Id; note: Note }
   | { type: 'note/toggle'; taskId: Id; id: Id }
@@ -252,6 +254,8 @@ export function reducer(state: AppState, action: Action): AppState {
       const ids = [...action.ids]
       return updateTask(state, action.taskId, (t) => openReviewPane(t, () => ids.shift()!))
     }
+    case 'shell/toggle':
+      return updateTask(state, action.taskId, (t) => shellToggle(t, () => action.paneId))
     case 'chat/split':
       return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, action.dir ?? 'right', () => action.paneId, action.agent))
     case 'chat/rewound': {

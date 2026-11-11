@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTask, emptyState } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
-import { adjacentTask, nextAttention, shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
+import { adjacentTask, nextAttention, paneCountLabel, shortPath, sidebarSections } from '../../src/renderer/sidebar-model'
 
 let n = 0
 const newId = () => `id${++n}`
@@ -226,5 +226,20 @@ describe('stepStatus', () => {
     expect(stepStatus(s, 'nope', 1)).toBeNull()
     s.settings.statuses = [s.settings.statuses[0]!]
     expect(stepStatus(s, s.tasks[0]!.id, 1)).toBeNull()
+  })
+})
+
+describe('paneCountLabel (26단계 대화 중심)', () => {
+  const mk = (start: 'chat-claude' | 'terminal') => createTask({ name: 'a', cwd: '~', templateId: null, statusId: 'doing', groupId: null, color: null, start }, emptyState().settings, newId, 0)
+  it('셸만 있으면 터미널 N — 예전 그대로', () => {
+    expect(paneCountLabel(mk('terminal'))).toBe('터미널 1')
+  })
+  it('대화만이면 대화 N · 둘 다면 대화 · 셸 · 검토는 세지 않는다', () => {
+    const t = mk('chat-claude')
+    expect(paneCountLabel(t)).toBe('대화 1')
+    t.panes['x'] = { id: 'x', cwd: '~' }
+    expect(paneCountLabel(t)).toBe('대화 1 · 셸 1')
+    t.panes['r'] = { id: 'r', cwd: '~', kind: 'review' } as never
+    expect(paneCountLabel(t)).toBe('대화 1 · 셸 1')
   })
 })
