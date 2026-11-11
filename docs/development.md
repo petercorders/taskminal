@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (19단계 기록과 찾기 병합 — 단위 615 · e2e 144 + 패키지 1, 다음은 20단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (20단계 빠른 명령 · 포트 병합 — 단위 669 · e2e 157, 다음은 21단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -16,7 +16,8 @@
 | 17 데이터 안전 | main 에 병합(브랜치 `stage-17-safety`). 백업 · 되돌리기 · 손상 복구 · 내보내기/가져오기 · `redact()` · 화면 가림. 계획 · 결과 `docs/stages/17-safety.md` |
 | 18 출시 기본기 | main 에 병합(브랜치 `stage-18-release`). 자동 업데이트(GitHub Releases) · 오류 기록 · 지난번 꺼짐 · 첫 실행 안내 · `npm run release`(서명 · 공증 — Developer ID 인증서 · 공증 프로필 `taskminal-notary` 를 사용자가 만든 뒤). 계획 · 결과 `docs/stages/18-release.md` |
 | 19 기록과 찾기 | main 에 병합(브랜치 `stage-19-history`). 명령 기록 ⌘Y(`<userData>/history/*.jsonl`, 가린 뒤) · 모든 출력 찾기 ⇧⌘F · ⌘P 기록 · 설정 › 개인정보 모두 지우기. 계획 · 결과 `docs/stages/19-history.md` |
-| 20~25 1차 출시 | 20 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 20 빠른 명령 · 포트 | main 에 병합(브랜치 `stage-20-quick-ports`). 빠른 명령 단추 줄(일감 · 템플릿 · 모든 일감, ⌥1~9, ⌘P) · 포트 칩(탭 · 사이드바 · ⌘P · 끄기 · 숨기기 · 겹침 막대). 계획 · 결과 `docs/stages/20-quick-ports.md` |
+| 21~25 1차 출시 | 21 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -116,6 +117,16 @@
 - 터미널의 가린 칸 꾸밈(xterm z-index 7)이 좁아진 본문 밖으로 넘친다 → 옆 칸은 `z-index` 를 더 높게.
 - 셸 지킴이에 다시 붙은 셸은 새 프롬프트 전에 133 신호가 없다 — '통합 없음' 을 133 만으로 판정하지 않는다.
 - 알림(Toast)의 `onEnd(undone)` — 되돌리기를 놓친 뒤 할 일(파일 지우기)은 여기서. 창이 내려갈 때도 부른다.
+
+### 20 빠른 명령 · 포트
+계획 · 결과 `docs/stages/20-quick-ports.md`. 구조: `src/shared/quick.ts`(검증 · 단추 순서 · `advanceRun` / `closeRun` / `quickStatus` · `decideRun`) · `src/shared/ports.ts`(ps · lsof 읽기 · `portsByPane` · `mergePorts` · `portConflict` · `createPortPoller`) · `src/main/port-probe.ts`(`probePorts` · `killPort`) · `src/renderer/quick-ui.tsx` · `ports-ui.tsx` · `ports-state.ts`(usePorts) · `PopupMenu.tsx`(HTML 메뉴 — Playwright 가 누를 수 있게). 짚어 둔 함정:
+- 단추 상태는 실행마다 시작 · 끝을 처음 본 순간에 굳힌다 — pane 활동만 보면 같은 pane 의 다음 명령이 앞 단추를 ✗ 로 바꾼다(스크린샷으로 찾음). pane 이 닫히면 `closeRun`.
+- 알림(Toast)의 단추는 ⌘Z 를 받는다(되돌리기 자리) — 되돌리기가 아닌 단추(열기 등)를 알림에 두지 않는다.
+- 포트 조사: 셸 자손 pid 를 ps 로 먼저 모으고 `lsof -a -p` 로 좁힌다(자손이 없으면 안 부름). 같은 포트를 주인 · 일꾼이 들으면 주인 pid. 조사는 한 번에 하나 · 세대(`invalidate`) · 끄기 뒤 다시 묻기는 `afterCurrent`.
+- e2e 포트 주기는 `TASKMINAL_PORT_POLL_MS`(기본 3000), openExternal 은 main 에서 가짜로 바꿔 받은 주소를 센다 — 주소 끝에 `/` 가 붙는다.
+- ⌥숫자는 물리 키(`e.code` DigitN)로 잡는다. 'Option 을 Meta 로' 면 가로채지 않는다. 한글 입력기 켠 실제 키는 미확인.
+- 단위 시험에서 '다른 pane' 의 pid 로 1 을 쓰지 않는다(모든 프로세스의 조상) — 형제 `sleep` 을 띄운다. 없는 pid 는 `process.kill` 이 던져 검사 없이도 통과한다(변이에서 드러남).
+- 템플릿 JSON 편집(`replaceTemplate`)은 칸을 펼쳐 담는다 — 골라 담으면 새 칸(quickCommands)이 지워진다.
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
