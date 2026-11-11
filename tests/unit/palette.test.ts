@@ -62,9 +62,29 @@ describe('paletteItems', () => {
     const items = paletteItems(input({ query: '일감', outputs }))
     const out = items.filter((i) => i.kind === 'output')
     expect(out).toHaveLength(20)
-    expect(items.filter((i) => i.kind !== 'create').at(-1)!.kind).toBe('output') // 새 일감 줄만 그 뒤
+    expect(items.filter((i) => i.kind !== 'create' && i.kind !== 'find-all').at(-1)!.kind).toBe('output') // '모두 보기' · 새 일감 줄만 그 뒤
     expect(out[0]).toMatchObject({ paneId: 'p', line: 0, detail: 'A 일감' })
     expect(out[0]!.marks).toEqual([0, 1])
+  })
+
+  it('출력 범위에서 두 글자부터 "모두 보기 ⇧⌘F" — 출력 뒤 · 새 일감 앞 (19단계)', () => {
+    const outputs = [{ paneId: 'p', taskName: 'A 일감', line: 0, text: 'npm 로그' }]
+    const kinds = paletteItems(input({ query: 'npm', outputs })).map((i) => i.kind)
+    expect(kinds.slice(-3)).toEqual(['output', 'find-all', 'create'])
+    expect(paletteItems(input({ query: 'n', outputs })).some((i) => i.kind === 'find-all')).toBe(false)
+    expect(paletteItems(input({ query: 'npm', scope: 'command' })).some((i) => i.kind === 'find-all')).toBe(false)
+  })
+
+  it('기록: 명령 글자에 맞는 최근 것부터 · 같은 명령은 한 번 · 8개까지 · 빈 찾기에는 없음 (19단계)', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `h${i}`, cmd: `npm run t${i}`, taskName: 'A 일감' }))
+    const history = [many[0]!, { id: 'dup', cmd: 'npm run t0', taskName: 'B 일감' }, ...many.slice(1)]
+    const items = paletteItems(input({ query: 'npm run', history })).filter((i) => i.kind === 'history')
+    expect(items).toHaveLength(8)
+    expect(items[0]).toMatchObject({ id: 'h0', label: 'npm run t0', detail: 'A 일감', marks: [0, 1, 2, 3, 4, 5, 6] })
+    expect(new Set(items.map((i) => i.label)).size).toBe(8)
+    expect(items.some((i) => i.id === 'dup')).toBe(false)
+    expect(paletteItems(input({ query: '', history })).some((i) => i.kind === 'history')).toBe(false)
+    expect(paletteItems(input({ query: 'npm', history, scope: 'task' })).some((i) => i.kind === 'history')).toBe(false)
   })
 
   it('아무것도 안 맞으면 ‘그 이름으로 새 일감’ 하나 (명령 · 템플릿 · 출력 범위에서는 없음)', () => {

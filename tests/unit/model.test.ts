@@ -181,6 +181,22 @@ describe('addTab · splitActivePane · markCommandSent', () => {
     expect(splitActivePane(lost, 'right', ids())).toBe(lost)
   })
 
+  test('19단계 기록의 ⌥↩: 그 기록 폴더에서 분할 · 실행할 명령(템플릿 command 는 남기지 않음) · 위험 명령은 넣기만', () => {
+    const t = flutterTask()
+    const run = splitActivePane(t, 'right', () => 'r1', { cwd: '/srv', command: 'npm test' })
+    expect(run.panes.r1).toEqual({ id: 'r1', cwd: '/srv', pendingCommand: 'npm test' })
+    const ins = splitActivePane(t, 'right', () => 'r2', { cwd: '/srv', command: 'git push', insert: true })
+    expect(ins.panes.r2).toEqual({ id: 'r2', cwd: '/srv', pendingCommand: 'git push', pendingInsert: true })
+    // 보낸 뒤에는 둘 다 지운다 — 복원 때 다시 넣지 않게
+    expect(markCommandSent(ins, 'r2').panes.r2).toEqual({ id: 'r2', cwd: '/srv' })
+  })
+
+  test('pendingInsert 는 저장 · 읽기를 거쳐도 남는다', () => {
+    const t = splitActivePane(flutterTask(), 'right', () => 'r2', { cwd: '/srv', command: 'git push', insert: true })
+    const st = { ...emptyState(), tasks: [t], activeTaskId: t.id }
+    expect(normalizeState(JSON.parse(JSON.stringify(st)), ids()).tasks[0]!.panes.r2).toEqual({ id: 'r2', cwd: '/srv', pendingCommand: 'git push', pendingInsert: true })
+  })
+
   test('시작 명령을 보내면 pendingCommand 만 지우고 command 는 남긴다 (템플릿 저장용)', () => {
     const t = flutterTask()
     const pid = t.tabs[0].activePaneId

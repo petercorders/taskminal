@@ -14,6 +14,7 @@ interface Props {
   patch(p: SettingsPatch): void
   Row: RowComp
   Switch: SwitchComp
+  onClearHistory(): void
 }
 
 /** 이미 남은 스크롤 파일 정리 상태 (main 이 알려 준다) */
@@ -32,7 +33,7 @@ function useRedactStatus(): RedactStatus | null {
 }
 
 /** 설정 › 개인정보 (17단계 Secrets) — 디스크 가리기는 늘 켜져 있고, 화면 가리기와 종류별 화면 표시만 고른다 */
-export function PrivacySection({ s, patch, Row, Switch }: Props) {
+export function PrivacySection({ s, patch, Row, Switch, onClearHistory }: Props) {
   const [name, setName] = useState('')
   const [pattern, setPattern] = useState('')
   const status = useRedactStatus()
@@ -156,6 +157,11 @@ export function PrivacySection({ s, patch, Row, Switch }: Props) {
             </button>
           </div>
         ))}
+      </Row>
+      <Row title="명령 기록" desc="⌘Y 기록은 일감마다 최근 5,000개 · 90일까지, 비밀값을 가려 이 Mac 에만 남아요. 셸의 history 는 건드리지 않아요." keywords="history 기록 지우기">
+        <button type="button" className="button danger" data-testid="history-clear" onClick={onClearHistory}>
+          명령 기록 모두 지우기…
+        </button>
       </Row>
     </>
   )

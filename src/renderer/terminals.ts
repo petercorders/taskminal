@@ -4,6 +4,14 @@ export interface TerminalHandle {
   clear(): void
   /** ⌥⌘→ · ⌥⌘← 다음 · 이전 가린 칸으로 (17단계) — 가린 칸이 없으면 false */
   maskFocus(step: 1 | -1): boolean
+  /** 스크롤 버퍼의 줄(접힌 행을 이은 것) — 모든 출력 찾기 (19단계) */
+  lines(): Array<{ line: number; text: string }>
+  /** 명령 기록 줄의 출력 위치가 아직 버퍼에 있나 */
+  hasMarker(id: string): boolean
+  /** 그 명령의 출력 첫 줄로 스크롤 — 마커가 사라졌으면 false */
+  gotoMarker(id: string): boolean
+  /** 입력줄에 넣기(괄호 붙여넣기 — 실행하지 않음) */
+  insert(text: string): void
   /** 스크롤 저장용 글 (색 · 줄 포함) */
   serialize(): string
   /** 스크롤 버퍼에서 찾기 글자가 든 줄 (대소문자 무시) — 최근 줄부터 limit 개 */

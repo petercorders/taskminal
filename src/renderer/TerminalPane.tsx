@@ -4,7 +4,7 @@ import { SerializeAddon } from '@xterm/addon-serialize'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type IMarker } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef, useState } from 'react'
 import { groupHits, SecretMasker, type MaskHit, type MaskSettings } from './secret-mask'
@@ -14,8 +14,9 @@ import { linkToOpen } from '../shared/links'
 import { cleanExit, splitForWrite } from '../shared/pty'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
+import { tailLines } from '../shared/history'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
-import { dirtyPanes, findingPanes, osc7Panes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
+import { dirtyPanes, findingPanes, integratedPanes, osc7Panes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
 import { terminals } from './terminals'
 
 interface Props {
@@ -37,12 +38,26 @@ interface Props {
   startCommand?: string | undefined
   /** 시작 명령을 보냈다 — 저장된 pendingCommand 를 지워 다시 돌지 않게 */
   onStartSent?(): void
+  /** 시작 명령을 실행하지 않고 입력줄에 넣기만 (19단계 — 기록의 위험 명령) */
+  startInsert?: boolean | undefined
+  /** 셸 통합이 알려 준 명령이 끝났다 (19단계 명령 기록) — id 로 그 출력 위치(마커)를 다시 찾는다 */
+  onCommandDone?(done: CommandDone): void
   /** 셸이 OSC 7 로 알려 준 지금 폴더 (셸 안의 cd) */
   onCwd?(cwd: string): void
   /** 화면에서 비밀값 가리기 (17단계) */
   mask?: MaskSettings | undefined
   /** 칸 메뉴 '비밀값 아님' — 그 값(해시)을 다시 가리지 않기 */
   onAllow?(hit: { hash: string; kind: string }): void
+}
+
+export interface CommandDone {
+  id: string
+  cmd: string
+  startedAt: number
+  endedAt: number
+  code: number | null
+  /** 끝날 때 뜬 마지막 출력 (가리기 전 — 저장은 main 이 가린다) */
+  tail: string[]
 }
 
 /** 가린 칸 안내를 이미 본 pane — 이번 실행에서 pane 마다 한 번 */
@@ -92,15 +107,17 @@ function logicalLines(term: Terminal): Array<{ line: number; text: string }> {
   return out
 }
 
-export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, onCwd, mask = NO_MASK, onAllow }: Props) {
+export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settings, onClosed, onActivity, startCommand, onStartSent, startInsert, onCommandDone, onCwd, mask = NO_MASK, onAllow }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const onClosedRef = useRef(onClosed)
   onClosedRef.current = onClosed
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
-  const startRef = useRef({ command: startCommand, onSent: onStartSent })
-  startRef.current = { command: startCommand, onSent: onStartSent }
+  const startRef = useRef({ command: startCommand, onSent: onStartSent, insert: startInsert })
+  startRef.current = { command: startCommand, onSent: onStartSent, insert: startInsert }
+  const onDoneRef = useRef(onCommandDone)
+  onDoneRef.current = onCommandDone
   // 셸을 띄울 때의 설정 — 그 뒤 바뀌는 것은 아래 effect 가 맞춘다
   const settingsRef = useRef(settings)
   settingsRef.current = settings
@@ -204,17 +221,58 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     // 셸 지킴이에 다시 붙었는지 답을 받기 전에는 보내지 않는다 — 되돌려 받은 화면 · 프롬프트 신호가 시작 명령을 부르지 않게 (16단계)
     let startBlocked = true
     const sendStart = () => {
-      const { command, onSent } = startRef.current
+      const { command, onSent, insert } = startRef.current
       clearTimeout(startTimer)
       if (startBlocked || !command || sentStarts.has(paneId)) return
       sentStarts.add(paneId)
-      pty.write(paneId, command + '\r')
+      // 넣기만(위험 명령): 괄호 붙여넣기로 — 셸이 받아도 실행하지 않는다
+      if (insert) term.paste(command)
+      else pty.write(paneId, command + '\r')
       onSent?.()
+    }
+
+    // 명령 기록 (19단계): C(시작)에 출력 위치 마커 · D(끝)에 마지막 출력 20줄. 글자는 6973 이 C 앞에 알려 준다
+    const markers = new Map<string, IMarker>()
+    let running: { cmd: string; startedAt: number; marker: IMarker | undefined } | null = null
+    let lastCommand = ''
+    const record = (ev: ActivityEvent) => {
+      if (ev.type === 'command') lastCommand = ev.text
+      else if (ev.type === 'start') {
+        running = { cmd: lastCommand, startedAt: Date.now(), marker: term.registerMarker(0) }
+        lastCommand = ''
+      } else if (ev.type === 'end' && running) {
+        const { cmd, startedAt, marker } = running
+        running = null
+        if (!cmd.trim()) {
+          marker?.dispose()
+          return
+        }
+        const id = crypto.randomUUID()
+        const buf = term.buffer.active
+        const rows: string[] = []
+        if (marker && !marker.isDisposed) {
+          const end = buf.baseY + buf.cursorY
+          for (let i = Math.max(marker.line + 1, end - 200); i <= end; i++) {
+            const row = buf.getLine(i)
+            if (!row) continue
+            const text = row.translateToString(true)
+            if (row.isWrapped && rows.length > 0) rows[rows.length - 1] += text
+            else rows.push(text)
+          }
+          markers.set(id, marker)
+          marker.onDispose(() => markers.delete(id))
+        }
+        onDoneRef.current?.({ id, cmd, startedAt, endedAt: Date.now(), code: ev.code, tail: tailLines(rows) })
+      }
     }
 
     // 활동 신호 — 처리했다고(true) 알려 xterm 이 화면에 아무것도 하지 않게
     const emit = (ev: ActivityEvent | null) => {
-      if (ev) onActivityRef.current(ev)
+      if (ev) {
+        onActivityRef.current(ev)
+        if (ev.type === 'prompt' || ev.type === 'start' || ev.type === 'end') integratedPanes.add(paneId)
+        record(ev)
+      }
       if (ev?.type === 'prompt') sendStart()
       return true
     }
@@ -342,6 +400,15 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       },
       maskFocus: (step) => masker.focusNext(step),
       // 전체 화면 프로그램(vim · less · Claude)의 화면 · 커서 모드는 빼고 일반 화면만
+      lines: () => logicalLines(term),
+      hasMarker: (id) => markers.has(id),
+      gotoMarker: (id) => {
+        const m = markers.get(id)
+        if (!m || m.isDisposed) return false
+        term.scrollToLine(Math.max(0, m.line - 1))
+        return true
+      },
+      insert: (text) => term.paste(text),
       serialize: () => serializer.serialize({ scrollback: saveLines(settingsRef.current.scrollback), excludeAltBuffer: true, excludeModes: true }),
       search: (query, limit) => {
         const q = query.toLowerCase()

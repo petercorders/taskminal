@@ -28,3 +28,5 @@ export const restoredWithText = new Set<string>()
 
 /** ⌘F 찾기 막대가 열린 pane — 찾기가 만드는 선택은 '선택하면 복사' 로 클립보드에 넣지 않는다 (15d) */
 export const findingPanes = new Set<string>()
+/** 셸 통합 신호(OSC 133)를 한 번이라도 보낸 pane — 명령 기록이 비어 있는 이유를 알릴 때 (19단계) */
+export const integratedPanes = new Set<string>()

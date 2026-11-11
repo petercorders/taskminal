@@ -1,6 +1,6 @@
 // 명령 팔레트(⌘P)의 찾기 · 순위. 순수 함수 — 무엇을 찾을지(일감 · 명령 · 템플릿 · 출력)는 부르는 쪽이 모아 넘긴다.
 
-export type PaletteKind = 'task' | 'command' | 'template' | 'output' | 'create'
+export type PaletteKind = 'task' | 'command' | 'template' | 'history' | 'output' | 'find-all' | 'create'
 export type PaletteScope = 'all' | 'task' | 'command' | 'template' | 'output'
 
 export const SCOPES: readonly PaletteScope[] = ['all', 'task', 'command', 'template', 'output']
@@ -12,6 +12,8 @@ export interface PaletteInput {
   templates: Array<{ id: string; name: string }>
   /** 터미널 출력에서 찾은 줄 (부르는 쪽이 찾기 글자로 이미 거른 것) */
   outputs: Array<{ paneId: string; taskName: string; line: number; text: string }>
+  /** 명령 기록 (19단계) — 최근 것부터. 고르면 입력줄에 넣는다 */
+  history?: Array<{ id: string; cmd: string; taskName: string }>
   query: string
   scope: PaletteScope
 }
@@ -32,6 +34,7 @@ export interface PaletteItem {
 
 const OUTPUT_MIN_QUERY = 2
 const OUTPUT_LIMIT = 20
+const HISTORY_LIMIT = 8
 
 const range = (from: number, n: number) => Array.from({ length: n }, (_, i) => from + i)
 
@@ -80,7 +83,20 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
   // 점수순 — 같으면 넣은 순서(일감 > 명령 > 템플릿, 일감은 사이드바 순서). sort 는 안정 정렬이다
   const items = out.sort((a, b) => b.score - a.score)
 
-  // 출력은 다른 것 뒤에 — 찾은 줄의 맞은 자리를 강조한다
+  // 기록: 명령 글자 그대로 맞은 것(퍼지는 거의 모든 명령에 맞는다) — 최근 것부터, 같은 명령은 한 번. 전체 범위에서만
+  if (input.scope === 'all' && query !== '' && input.history) {
+    const q = query.toLowerCase()
+    const seen = new Set<string>()
+    for (const h of input.history) {
+      if (seen.size >= HISTORY_LIMIT) break
+      const at = h.cmd.toLowerCase().indexOf(q)
+      if (at < 0 || seen.has(h.cmd)) continue
+      seen.add(h.cmd)
+      items.push({ kind: 'history', id: h.id, label: h.cmd, detail: h.taskName, marks: range(at, q.length), score: 0 })
+    }
+  }
+
+  // 출력은 다른 것 뒤에 — 찾은 줄의 맞은 자리를 강조한다. 찾은 줄이 있으면 맨 아래 '모두 보기 ⇧⌘F' (같은 낱말로 모든 출력 찾기)
   if (want('output') && query.length >= OUTPUT_MIN_QUERY) {
     const q = query.toLowerCase()
     for (const o of input.outputs.slice(0, OUTPUT_LIMIT)) {
@@ -88,6 +104,7 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
       if (at < 0) continue
       items.push({ kind: 'output', id: `${o.paneId}:${o.line}`, label: o.text, detail: o.taskName, marks: range(at, q.length), score: 0, paneId: o.paneId, line: o.line })
     }
+    if (items.at(-1)?.kind === 'output') items.push({ kind: 'find-all', id: 'find-all', label: '모든 출력에서 찾기', hint: '⇧⌘F', marks: [], score: 0 })
   }
 
   // 글자 순서(퍼지)는 거의 무엇이든 맞으므로 '아무것도 안 맞을 때' 만으로는 새 일감에 닿기 어렵다 →

@@ -292,15 +292,26 @@ export function findPaneTask(state: AppState, paneId: Id): Id | null {
   return state.tasks.find((t) => Object.hasOwn(t.panes, paneId))?.id ?? null
 }
 
-export function splitActivePane(task: Task, dir: SplitDir, newId: NewId): Task {
+/** 새 pane 을 다른 폴더 · 명령으로 (19단계 기록의 ⌥↩) — insert: 실행하지 않고 입력줄에 넣기만(위험 명령) */
+export interface SplitSpec {
+  cwd: string
+  command: string
+  insert?: boolean
+}
+
+export function splitActivePane(task: Task, dir: SplitDir, newId: NewId, spec?: SplitSpec): Task {
   const tab = activeTab(task)
   if (!tab || !hasPane(tab.layout, tab.activePaneId)) return task
   const paneId = newId()
   const next: Tab = { ...tab, layout: splitPane(tab.layout, tab.activePaneId, dir, paneId), activePaneId: paneId }
+  // 기록에서 다시 돌리는 명령은 템플릿의 시작 명령(command)이 아니다 — 보낼 것만 남긴다
+  const pane: Pane = spec
+    ? { id: paneId, cwd: spec.cwd, pendingCommand: spec.command, ...(spec.insert ? { pendingInsert: true as const } : {}) }
+    : makePane(paneId, activePaneCwd(task))
   return {
     ...task,
     tabs: task.tabs.map((t) => (t.id === tab.id ? next : t)),
-    panes: { ...task.panes, [paneId]: makePane(paneId, activePaneCwd(task)) },
+    panes: { ...task.panes, [paneId]: pane },
   }
 }
 
@@ -315,7 +326,7 @@ export function setPaneCwd(task: Task, paneId: Id, cwd: string): Task {
 export function markCommandSent(task: Task, paneId: Id): Task {
   const p = task.panes[paneId]
   if (!p || p.pendingCommand === undefined) return task
-  const { pendingCommand: _sent, ...rest } = p
+  const { pendingCommand: _sent, pendingInsert: _insert, ...rest } = p
   return { ...task, panes: { ...task.panes, [paneId]: rest } }
 }
 
@@ -594,6 +605,7 @@ function parsePane(id: Id, v: unknown, taskCwd: string): Pane | null {
   const pane: Pane = { id, cwd: isId(v.cwd) ? v.cwd : taskCwd }
   if (isStr(v.command)) pane.command = v.command
   if (isStr(v.pendingCommand)) pane.pendingCommand = v.pendingCommand
+  if (pane.pendingCommand !== undefined && v.pendingInsert === true) pane.pendingInsert = true
   return pane
 }
 

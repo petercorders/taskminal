@@ -24,6 +24,7 @@ import type { WorktreeResult } from '../shared/worktree'
 import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
+import { HistoryStore } from './history-store'
 import { StateFile } from './state-file'
 import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
@@ -104,6 +105,9 @@ let redactStarted = false
 const sendRedact = (s: RedactStatus) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.redactStatus, s)
 }
+// 명령 기록(19단계) — userData 가 정해진 뒤 만든다. 디스크로 가기 전 가린다
+let historyStore: HistoryStore | null = null
+const history = () => (historyStore ??= new HistoryStore(join(app.getPath('userData'), 'history'), () => secretOpts))
 // 상태 백업(17단계) — userData 가 정해진 뒤 만든다
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
@@ -518,6 +522,31 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(IPC.redactFix, (event, action: unknown, name: unknown) => {
     if (!fromOurWindow(event) || !isRedactFix(action) || typeof name !== 'string') return
     saving = saving.then(() => scrollback().fixRedact(action, name, redactMarker(), sendRedact)).catch((e: unknown) => report('error', 'scrollback-redact', '스크롤 정리에 실패했어요', e))
+  })
+
+  // 명령 기록 — 값 검사 · 가리기는 HistoryStore. 쓰기 실패는 renderer 가 '저장하지 못했어요' 줄로 보인다
+  ipcMain.handle(IPC.historyList, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return history().list()
+  })
+  ipcMain.handle(IPC.historyAppend, async (event, entries: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    try {
+      return await history().append(entries)
+    } catch (e) {
+      report('warn', 'history-save', '명령 기록을 저장하지 못했어요', e)
+      throw e
+    }
+  })
+  ipcMain.on(IPC.historyRemove, (event, taskId: unknown, ids: unknown) => {
+    if (fromOurWindow(event)) history().remove(taskId, ids).catch((e: unknown) => report('warn', 'history-save', '명령 기록을 지우지 못했어요', e))
+  })
+  ipcMain.on(IPC.historyRemoveTask, (event, taskId: unknown) => {
+    if (fromOurWindow(event)) history().removeTask(taskId).catch((e: unknown) => report('warn', 'history-save', '명령 기록을 지우지 못했어요', e))
+  })
+  ipcMain.handle(IPC.historyClear, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return history().clear()
   })
 
   // 스크롤 저장 — renderer 를 믿지 않는다: paneId 검사 · pane 당 바이트 상한은 ScrollbackStore, live 수 상한은 여기

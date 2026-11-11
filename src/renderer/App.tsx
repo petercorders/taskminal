@@ -11,7 +11,13 @@ import { createTask, emptyState, findPaneTask, tabLabel, tabToTemplate, taskToTe
 import type { BackupMark, LoadedState } from '../shared/ipc'
 import type { AppState, NewTaskInput, NotifyKind, Task, Template } from '../shared/types'
 import { restoreTask, type Restored } from '../shared/backup'
-import { SECRET_TOGGLES, type SecretToggleId } from '../shared/redact'
+import { redact, SECRET_TOGGLES, type SecretOptions, type SecretToggleId } from '../shared/redact'
+import { CMD_MAX, type HistoryEntry } from '../shared/history'
+import { isDangerous } from '../shared/danger'
+import { useHistory } from './history-state'
+import { HistoryPanel } from './history-ui'
+import { FIND_MEMO, GlobalFind, type FindMemo, type FindTarget } from './GlobalFind'
+import type { CommandDone } from './TerminalPane'
 import type { MaskSettings } from './secret-mask'
 import { Toast, type ToastSpec } from './Toast'
 import { dateClock } from './settings/BackupSection'
@@ -128,7 +134,7 @@ export function App() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [branches, setBranches] = useState<Branches>({})
   // ⌘F 찾기 막대가 열린 pane (15d) — signal 은 다시 누를 때 입력칸으로 가게
-  const [finding, setFinding] = useState<{ paneId: string | null; signal: number }>({ paneId: null, signal: 0 })
+  const [finding, setFinding] = useState<{ paneId: string | null; signal: number; query?: string }>({ paneId: null, signal: 0 })
   // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -139,7 +145,39 @@ export function App() {
   const [toast, setToast] = useState<ToastSpec | null>(null)
   const toastRef = useRef(toast)
   toastRef.current = toast
-  const showToast = (t: Omit<ToastSpec, 'id'>) => setToast({ ...t, id: Date.now() + Math.random() })
+  const showToast = (t: Omit<ToastSpec, 'id'>) => {
+    // 되돌렸는지는 알림이 내려갈 때(onEnd) 알린다 — 되돌리기 · ⌘Z 둘 다 action.run 을 지난다
+    let undone = false
+    let ended = false
+    const { action, onEnd } = t
+    setToast({
+      ...t,
+      id: Date.now() + Math.random(),
+      ...(action ? { action: { ...action, run: () => ((undone = true), action.run()) } } : {}),
+      ...(onEnd
+        ? {
+            onEnd: () => {
+              if (ended) return
+              ended = true
+              onEnd(undone)
+            },
+          }
+        : {}),
+    })
+  }
+  // 알림이 바뀌거나 내려가면 앞 알림의 onEnd — 한 번만
+  const endedToast = useRef<ToastSpec | null>(null)
+  useEffect(() => {
+    const prev = endedToast.current
+    endedToast.current = toast
+    if (prev && prev !== toast) prev.onEnd?.(false)
+  }, [toast])
+  // 창이 내려가기 전(종료 · 새로 고침)에도 — 지운 기록이 다음 실행에 되살아나지 않게
+  useEffect(() => {
+    const flush = () => endedToast.current?.onEnd?.(false)
+    window.addEventListener('beforeunload', flush)
+    return () => window.removeEventListener('beforeunload', flush)
+  }, [])
   const [backupError, setBackupError] = useState<string | null>(null)
   // 셸 지킴이 (16단계): 상태 · 처음 읽힐 때 정한 줄 · 확인 창
   const hostView = useHostView()
@@ -152,6 +190,12 @@ export function App() {
   // 팔레트에서 고른 출력 줄 — 그 pane 이 보이게 그린 뒤에 스크롤 · 선택한다(숨은 터미널에서 하면 스크롤이 맞지 않는다)
   const [pendingReveal, setPendingReveal] = useState<{ paneId: string; line: number; query: string } | null>(null)
   const [removing, setRemoving] = useState<Task | null>(null)
+  // 19단계: 명령 기록 칸(signal = ⌘Y 로 열 때마다 찾기 칸으로) · 모든 출력 찾기 창 · 그 창의 기억 · 출력으로 가기
+  const [historyOpen, setHistoryOpen] = useState<{ signal: number } | null>(null)
+  const [globalFind, setGlobalFind] = useState(false)
+  const findMemo = useRef<FindMemo>(FIND_MEMO)
+  const [pendingMarker, setPendingMarker] = useState<{ paneId: string; id: string } | null>(null)
+  const [clearingHistory, setClearingHistory] = useState(false)
   // 이 일감(tabId null) · 탭을 템플릿으로 저장 — 이름을 묻는 중
   // 연 순간의 탭/일감을 템플릿으로 떠 둔다 — 대화상자가 열린 동안 그 탭이 닫혀도 본 것을 저장하고 제목도 바뀌지 않게
   const [savingTemplate, setSavingTemplate] = useState<{ what: string; initialName: string; template: Template } | null>(null)
@@ -434,6 +478,7 @@ export function App() {
   const findProps = {
     paneId: finding.paneId,
     signal: finding.signal,
+    ...(finding.query !== undefined ? { query: finding.query } : {}),
     onClose: () => {
       setFinding((f) => ({ ...f, paneId: null }))
       refocus()
@@ -474,6 +519,85 @@ export function App() {
     }),
     [settings.maskScreen, settings.maskKindsOff, settings.secretAllow, settings.secretCustom],
   )
+
+  // 기록에 넣기 전에 renderer 도 가린다(화면에 보이는 기록) — main 이 쓸 때 다시 가린다. 디스크는 종류 끄기와 상관없이 모두
+  const historyRedact = useMemo<SecretOptions>(() => ({ allow: maskSettings.allow, custom: maskSettings.custom }), [maskSettings])
+  const history = useHistory(load.phase === 'ready')
+  const onCommandDone = (paneId: string, done: CommandDone) => {
+    const s = stateRef.current
+    const taskId = findPaneTask(s, paneId)
+    const pane = s.tasks.find((t) => t.id === taskId)?.panes[paneId]
+    if (!taskId || !pane) return
+    const entry: HistoryEntry = {
+      id: done.id,
+      taskId,
+      paneId,
+      cmd: redact(done.cmd.slice(0, CMD_MAX), historyRedact),
+      cwd: redact(pane.cwd, historyRedact),
+      startedAt: done.startedAt,
+      endedAt: done.endedAt,
+      code: done.code,
+      tail: done.tail.map((l) => redact(l, historyRedact)),
+    }
+    history.add(entry)
+  }
+  const activePaneNow = activeTabNow?.activePaneId ?? null
+  /** ↩ 입력줄에 넣기 — 지금 pane, 실행하지 않는다 */
+  const historyInsert = (e: HistoryEntry) => {
+    if (!activePaneNow) return
+    terminals.get(activePaneNow)?.insert(e.cmd)
+    refocus()
+  }
+  /** ⌥↩ 그 기록의 폴더로 오른쪽 분할 — 위험 명령이면 넣기만 */
+  const historySplit = (e: HistoryEntry) => {
+    const task = stateRef.current.tasks.find((t) => t.id === stateRef.current.activeTaskId)
+    if (!task || !task.activeTabId) return
+    dispatch({ type: 'pane/split', taskId: task.id, dir: 'right', paneId: newId(), spec: { cwd: e.cwd, command: e.cmd, ...(isDangerous(e.cmd) ? { insert: true } : {}) } })
+    refocus()
+  }
+  /** ⌘O 출력으로 — 누르는 순간 paneId 로 다시 찾는다(그 사이 닫혔으면 아무 일 없음) */
+  const historyGoto = (e: HistoryEntry) => {
+    const taskId = findPaneTask(stateRef.current, e.paneId)
+    if (!taskId || !terminals.get(e.paneId)?.hasMarker(e.id)) return
+    dispatch({ type: 'task/select', id: taskId })
+    dispatch({ type: 'pane/focus', taskId, paneId: e.paneId })
+    setPendingMarker({ paneId: e.paneId, id: e.id })
+  }
+  const historyNewTab = (e: HistoryEntry) => {
+    const task = stateRef.current.tasks.find((t) => t.id === stateRef.current.activeTaskId)
+    if (!task) return
+    const paneId = newId()
+    dispatch({ type: 'tab/add', taskId: task.id, tabId: newId(), paneId })
+    dispatch({ type: 'pane/cwd', paneId, cwd: e.cwd })
+    refocus()
+  }
+  /** 이 기록 지우기 — 화면에서 바로 숨기고, 파일에서는 알림(5초 · ⌘Z)이 끝난 뒤 */
+  const historyRemove = (e: HistoryEntry) => {
+    history.hide([e.id])
+    showToast({
+      text: '기록 1개를 지웠어요.',
+      ms: 5000,
+      action: { label: '되돌리기', run: () => history.unhide([e.id]) },
+      onEnd: (undone) => {
+        if (!undone) history.drop(e.taskId, [e.id])
+      },
+    })
+  }
+  /** ⇧⌘F 결과로 — 그 일감 · 탭 · pane 을 보이게 하고 그 줄로 · ⌘F 막대에 같은 글자 */
+  const findJump = (t: FindTarget, keepOpen: boolean) => {
+    const taskId = findPaneTask(stateRef.current, t.paneId)
+    if (!taskId) {
+      showToast({ text: '그 pane 은 닫혔어요.' })
+      return
+    }
+    dispatch({ type: 'task/select', id: taskId })
+    dispatch({ type: 'pane/focus', taskId, paneId: t.paneId })
+    setPendingReveal({ paneId: t.paneId, line: t.line, query: t.text })
+    if (!keepOpen) {
+      setGlobalFind(false)
+      setFinding((f) => ({ paneId: t.paneId, signal: f.signal + 1, query: t.text }))
+    }
+  }
 
   const addTab = (taskId: string) => dispatch({ type: 'tab/add', taskId, tabId: newId(), paneId: newId() })
   const addTemplateTab = (taskId: string, templateId: string) => {
@@ -519,6 +643,8 @@ export function App() {
     setConfirming(null)
     setSavingTemplate(null)
     setPaletteOpen(false)
+    setGlobalFind(false)
+    setClearingHistory(false)
     refocus()
   }
 
@@ -541,6 +667,10 @@ export function App() {
           dispatch({ type: 'state/replace', state: r.state })
           refocus()
         },
+      },
+      // 그 일감의 명령 기록은 되돌리기를 놓친 뒤 지운다 (되돌리면 그대로)
+      onEnd: (undone) => {
+        if (!undone) history.dropTask(task.id)
       },
     })
   }
@@ -577,7 +707,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory
 
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
@@ -625,6 +755,17 @@ export function App() {
         return setSettingsOpen(true)
       case 'first-run':
         return setFirstRun('again')
+      case 'history':
+        // 다시 누르면 닫는다 — 찾기 칸에 포커스가 있을 때는 칸이 키를 받는다(onKeyDown)
+        if (historyOpen) {
+          setHistoryOpen(null)
+          return refocus()
+        }
+        return setHistoryOpen({ signal: Date.now() })
+      case 'global-find':
+        return setGlobalFind(true)
+      case 'history-clear':
+        return setClearingHistory(true)
       case 'mask-toggle': {
         const on = !state.settings.maskScreen
         dispatch({ type: 'settings/patch', patch: { maskScreen: on } })
@@ -712,6 +853,14 @@ export function App() {
         return setCreating({ templateId: item.id })
       case 'create':
         return setCreating({ name: item.label })
+      case 'history': {
+        const e = history.entries.find((h) => h.id === item.id)
+        if (e) historyInsert(e)
+        return refocus()
+      }
+      case 'find-all':
+        findMemo.current = { ...findMemo.current, query, selected: null }
+        return setGlobalFind(true)
       case 'output': {
         const paneId = item.paneId!
         const taskId = findPaneTask(state, paneId)
@@ -731,6 +880,12 @@ export function App() {
     requestAnimationFrame(() => terminals.get(paneId)?.reveal(line, query))
     setPendingReveal(null)
   }, [pendingReveal])
+  useEffect(() => {
+    if (!pendingMarker) return
+    const { paneId, id } = pendingMarker
+    requestAnimationFrame(() => terminals.get(paneId)?.gotoMarker(id))
+    setPendingMarker(null)
+  }, [pendingMarker])
 
   const runCommandRef = useRef(runCommand)
   runCommandRef.current = runCommand
@@ -852,6 +1007,8 @@ export function App() {
                   templates={state.settings.templates}
                   onAddTemplate={(id) => addTemplateTab(task.id, id)}
                   onSaveTemplate={(tabId) => openSaveTemplate(task, tabId)}
+                  historyOpen={historyOpen !== null}
+                  onHistory={() => runCommand('history')}
                 />
                 {task.tabs.map((tab) => {
                   const tabActive = tab.id === task.activeTabId
@@ -880,6 +1037,7 @@ export function App() {
                           onRatio={(path, ratio) => dispatch({ type: 'pane/ratio', taskId: task.id, tabId: tab.id, path, ratio })}
                           onClosePane={(paneId) => dispatch({ type: 'pane/exited', paneId })}
                           onStartSent={(paneId) => dispatch({ type: 'pane/command-sent', paneId })}
+                          onCommandDone={onCommandDone}
                           onCwd={(paneId, cwd) => dispatch({ type: 'pane/cwd', paneId, cwd: cwdLike(cwd, task.cwd, runtime.home) })}
                           onDragEnd={refocus}
                           find={findProps}
@@ -912,6 +1070,25 @@ export function App() {
             </div>
           )}
         </main>
+        {historyOpen && (
+          <HistoryPanel
+            view={history}
+            tasks={state.tasks}
+            activeTaskId={state.activeTaskId}
+            activePaneId={activePaneNow}
+            activity={activity}
+            signal={historyOpen.signal}
+            onInsert={historyInsert}
+            onRunSplit={historySplit}
+            onGoto={historyGoto}
+            onNewTab={historyNewTab}
+            onRemove={historyRemove}
+            onClose={() => {
+              setHistoryOpen(null)
+              refocus()
+            }}
+          />
+        )}
       </div>
       {settingsOpen && (
         <SettingsView
@@ -922,6 +1099,11 @@ export function App() {
           initialSection={settingsSection ?? undefined}
           busy={busyTotal}
           onRestore={applyRestore}
+          onClearHistory={() => {
+            setSettingsOpen(false)
+            setSettingsSection(null)
+            setClearingHistory(true)
+          }}
           update={updateView}
           onFirstRun={() => {
             setSettingsOpen(false)
@@ -952,7 +1134,32 @@ export function App() {
       )}
       {toast && <Toast toast={toast} onDone={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
       {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
-      {paletteOpen && <Palette state={state} shortcuts={shortcuts} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {paletteOpen && <Palette state={state} shortcuts={shortcuts} history={history.entries} onRun={runPaletteItem} onClose={closeDialogs} />}
+      {globalFind && (
+        <GlobalFind
+          state={state}
+          redact={historyRedact}
+          memo={findMemo.current}
+          onMemo={(m) => (findMemo.current = m)}
+          onJump={findJump}
+          onClose={closeDialogs}
+        />
+      )}
+      {clearingHistory && (
+        <ConfirmDialog
+          title="명령 기록 모두 지우기"
+          message="모든 일감의 명령 기록을 지울까요? 되돌릴 수 없어요. 셸의 history(~/.zsh_history)는 그대로예요."
+          confirmLabel="모두 지우기"
+          onConfirm={() => {
+            void history.clearAll().then(
+              () => showToast({ text: '명령 기록을 모두 지웠어요.' }),
+              () => showToast({ text: '명령 기록을 지우지 못했어요.' }),
+            )
+            closeDialogs()
+          }}
+          onCancel={closeDialogs}
+        />
+      )}
       {savingTemplate && (
         <TemplateNameDialog what={savingTemplate.what} initialName={savingTemplate.initialName} onSave={saveTemplate} onCancel={closeDialogs} />
       )}

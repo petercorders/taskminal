@@ -90,6 +90,16 @@ export interface ErrlogApi {
   openFolder(): void
 }
 
+/** 명령 기록 (19단계) — <userData>/history, main 이 가려서 쓴다 */
+export interface HistoryApi {
+  list(): Promise<import('../shared/history').HistoryEntry[]>
+  /** 끝난 명령 몇 줄(50개까지) — 쓴 줄 수. 쓰기에 실패하면 예외 */
+  append(entries: import('../shared/history').HistoryEntry[]): Promise<number>
+  remove(taskId: string, ids: string[]): void
+  removeTask(taskId: string): void
+  clear(): Promise<void>
+}
+
 export interface TaskminalApi {
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
@@ -120,6 +130,7 @@ export interface TaskminalApi {
   errlog: ErrlogApi
   /** 첫 실행 안내를 끝냈다 — 다시 띄우지 않는다 */
   firstRunDone(): void
+  history: HistoryApi
 }
 
 declare global {

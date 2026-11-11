@@ -47,6 +47,12 @@ export const IPC = {
   errlogList: 'errlog:list', // invoke(level?) → LogRow[] (최근 7일, 묶은 것)
   errlogOpen: 'errlog:open', // send — 오류 기록 폴더를 Finder 로
   firstRunDone: 'app:first-run-done', // send — 첫 실행 안내를 끝냄(다시 띄우지 않게)
+  // 19단계 명령 기록
+  historyList: 'history:list', // invoke → HistoryEntry[] (90일 · 5,000개 넘은 것은 main 이 버림)
+  historyAppend: 'history:append', // invoke(HistoryEntry[] ≤50) → 쓴 줄 수 · 실패면 예외(저장 실패 줄)
+  historyRemove: 'history:remove', // send(taskId, id[]) — 지우기 토스트가 끝난 뒤
+  historyRemoveTask: 'history:remove-task', // send(taskId) — 일감을 지울 때
+  historyClear: 'history:clear', // invoke — 설정 › 개인정보 › 명령 기록 모두 지우기
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

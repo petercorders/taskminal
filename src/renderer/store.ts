@@ -31,6 +31,7 @@ import {
   splitActivePane,
   toggleGroup,
   updateStatus,
+  type SplitSpec,
   type TaskEdit,
 } from '../shared/model'
 import type { AppState, Id, Settings, SplitDir, Task, Template } from '../shared/types'
@@ -54,7 +55,7 @@ export type Action =
   | { type: 'tab/cycle'; taskId: Id; step: 1 | -1 }
   | { type: 'pane/cycle'; taskId: Id; step: 1 | -1 }
   | { type: 'settings/font'; size: number }
-  | { type: 'pane/split'; taskId: Id; dir: SplitDir; paneId: Id }
+  | { type: 'pane/split'; taskId: Id; dir: SplitDir; paneId: Id; spec?: SplitSpec }
   | { type: 'pane/focus'; taskId: Id; paneId: Id }
   | { type: 'pane/ratio'; taskId: Id; tabId: Id; path: SplitPath; ratio: number }
   /** 셸이 스스로 끝났다 → 그 pane 을 닫는다 (마지막 pane 이면 탭도). 우리가 끝낸 셸은 main 이 알리지 않는다. */
@@ -139,7 +140,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return fontSize === state.settings.fontSize ? state : { ...state, settings: { ...state.settings, fontSize } }
     }
     case 'pane/split':
-      return updateTask(state, action.taskId, (t) => splitActivePane(t, action.dir, () => action.paneId))
+      return updateTask(state, action.taskId, (t) => splitActivePane(t, action.dir, () => action.paneId, action.spec))
     case 'pane/focus':
       return updateTask(state, action.taskId, (t) => focusPane(t, action.paneId))
     case 'pane/ratio':

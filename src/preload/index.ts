@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { BackupInfo } from '../shared/backup'
 import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type RedactStatus, type ScrollbackEntry } from '../shared/ipc'
 import type { LogRow } from '../shared/errlog'
+import type { HistoryEntry } from '../shared/history'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
@@ -80,6 +81,13 @@ const api: TaskminalApi = {
     openFolder: () => ipcRenderer.send(IPC.errlogOpen),
   },
   firstRunDone: () => ipcRenderer.send(IPC.firstRunDone),
+  history: {
+    list: () => ipcRenderer.invoke(IPC.historyList) as Promise<HistoryEntry[]>,
+    append: (entries) => ipcRenderer.invoke(IPC.historyAppend, entries) as Promise<number>,
+    remove: (taskId, ids) => ipcRenderer.send(IPC.historyRemove, taskId, ids),
+    removeTask: (taskId) => ipcRenderer.send(IPC.historyRemoveTask, taskId),
+    clear: () => ipcRenderer.invoke(IPC.historyClear) as Promise<void>,
+  },
 }
 
 contextBridge.exposeInMainWorld('taskminal', api)

@@ -39,6 +39,10 @@ export const SHORTCUTS = [
   { command: 'update-check', accel: '', label: '업데이트 확인' },
   { command: 'error-log', accel: '', label: '오류 기록 열기' },
   { command: 'first-run', accel: '', label: '첫 실행 안내 다시 보기' },
+  // 기록과 찾기(19단계)
+  { command: 'history', accel: 'Command+Y', label: '명령 기록' },
+  { command: 'global-find', accel: 'Shift+Command+F', label: '모든 출력에서 찾기' },
+  { command: 'history-clear', accel: '', label: '명령 기록 모두 지우기…' },
 ] as const satisfies ReadonlyArray<{ command: string; accel: string; label: string }>
 
 export type AppCommand = (typeof SHORTCUTS)[number]['command']

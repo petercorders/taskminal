@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { accelLabel, type Shortcut } from '../shared/keymap'
 import { markSegments, nextScope, paletteItems, SCOPE_LABEL, type PaletteInput, type PaletteItem, type PaletteScope } from '../shared/palette'
+import type { HistoryEntry } from '../shared/history'
 import type { AppState } from '../shared/types'
 import { shortPath, sidebarSections } from './sidebar-model'
 import { terminals } from './terminals'
@@ -9,6 +10,8 @@ interface Props {
   state: AppState
   /** 바꾼 단축키가 반영된 표 — 명령 이름 · 키 표시 */
   shortcuts: readonly Shortcut[]
+  /** 명령 기록 (19단계 — 오래된 → 최근) */
+  history?: readonly HistoryEntry[]
   /** 고른 항목을 실행 — newTab 은 ⌘↩ */
   onRun(item: PaletteItem, query: string, newTab: boolean): void
   onClose(): void
@@ -22,10 +25,10 @@ const commandsOf = (shortcuts: readonly Shortcut[]) =>
 
 const OUTPUT_BUDGET = 20
 
-const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', template: '템플릿', output: '출력', create: '새 일감' }
+const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', template: '템플릿', history: '기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
-export function Palette({ state, shortcuts, onRun, onClose }: Props) {
+export function Palette({ state, shortcuts, history = [], onRun, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<PaletteScope>('all')
   const [selected, setSelected] = useState(0)
@@ -58,10 +61,11 @@ export function Palette({ state, shortcuts, onRun, onClose }: Props) {
       commands: commandsOf(shortcuts),
       templates: state.settings.templates.map((t) => ({ id: t.id, name: t.name })),
       outputs,
+      history: query.trim() ? [...history].reverse().map((h) => ({ id: h.id, cmd: h.cmd, taskName: state.tasks.find((t) => t.id === h.taskId)?.name ?? '' })) : [],
       query,
       scope,
     })
-  }, [state, shortcuts, query, scope, outputQuery])
+  }, [state, shortcuts, query, scope, outputQuery, history])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {
@@ -107,7 +111,7 @@ export function Palette({ state, shortcuts, onRun, onClose }: Props) {
             aria-activedescendant={items.length ? optionId(selected) : undefined}
             aria-autocomplete="list"
             value={query}
-            placeholder="일감 · 명령 · 템플릿 · 터미널 출력 찾기"
+            placeholder="일감 · 명령 · 템플릿 · 기록 · 터미널 출력 찾기"
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}

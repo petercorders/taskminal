@@ -9,12 +9,14 @@ interface Props {
   paneId: string
   /** ⌘F 를 다시 누름 — 입력칸으로 포커스 · 전체 선택 */
   signal: number
+  /** 이 글자로 연다 (19단계 ⇧⌘F 결과로 갈 때) — 찾은 줄이 이미 선택돼 있어 그 자리부터 이어 찾는다 */
+  initialQuery?: string
   onClose(): void
   /** 단축키 표 (설정에서 바꾼 키 포함) */
   shortcuts: readonly Shortcut[]
 }
 
-export function FindBar({ paneId, signal, onClose, shortcuts }: Props) {
+export function FindBar({ paneId, signal, initialQuery, onClose, shortcuts }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [result, setResult] = useState({ index: -1, count: 0 })
@@ -22,6 +24,22 @@ export function FindBar({ paneId, signal, onClose, shortcuts }: Props) {
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
+    if (initialQuery === undefined) return
+    setQuery(initialQuery)
+    // 결과로 가는 reveal(다음 프레임) 뒤에 — 그 선택에서 이어 찾아 같은 줄이 첫 결과가 된다
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        if (initialQuery) terminals.get(paneId)?.find.next(initialQuery, true)
+        inputRef.current?.select()
+      })
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
+    // signal 이 바뀔 때만 (같은 열기에서 글자를 바꿔도 다시 넣지 않는다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signal])
 
   // 결과 수를 받고, 막대가 닫히거나 다른 pane 으로 옮기면 칠한 것을 지운다

@@ -8,6 +8,8 @@ export interface ToastSpec {
   action?: { label: string; run(): void }
   /** 보이는 시간 (기본 8초) */
   ms?: number
+  /** 알림이 내려갔다(시간 · 닫기 · 다른 알림 · 되돌리기) — undone 이면 되돌리기로 (19단계: 파일에서 지우기를 이때) */
+  onEnd?(undone: boolean): void
 }
 
 export const TOAST_MS = 8000

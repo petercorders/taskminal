@@ -53,6 +53,8 @@ export interface Pane {
   pendingCommand?: string
   /** 템플릿으로 저장할 때 쓰는 원래 시작 명령 */
   command?: string
+  /** pendingCommand 를 실행하지 않고 입력줄에 넣기만 (19단계 — 기록의 위험 명령) */
+  pendingInsert?: true
 }
 
 export interface Tab {

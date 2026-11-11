@@ -45,6 +45,8 @@ interface Props {
   update?: UpdateView | null
   /** 첫 실행 안내 다시 보기 */
   onFirstRun?(): void
+  /** 명령 기록 모두 지우기 (19단계) — App 이 확인을 묻는다 */
+  onClearHistory?(): void
   onClose(): void
 }
 
@@ -139,7 +141,7 @@ const NOTIFY_ROWS: Record<NotifyKind, { title: string; desc: string }> = {
 /** 편집기를 새 템플릿으로 연다 — 템플릿 id 와 겹치지 않는 값 */
 const NEW_TEMPLATE = '\u0000new'
 
-export function SettingsView({ state, shortcuts, dispatch, newId, initialSection, busy = 0, update = null, onFirstRun = () => {}, onClose, onRestore }: Props) {
+export function SettingsView({ state, shortcuts, dispatch, newId, initialSection, busy = 0, update = null, onFirstRun = () => {}, onClearHistory = () => {}, onClose, onRestore }: Props) {
   const s = state.settings
   const [section, setSection] = useState<SectionId>(initialSection ?? 'general')
   // JSON 편집기: 템플릿 id · 'new'(새 템플릿)
@@ -196,7 +198,7 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
 
   const body: Record<SectionId, ReactNode> = {
     host: <HostSection state={state} busy={busy} Row={Row} />,
-    privacy: <PrivacySection s={s} patch={patch} Row={Row} Switch={Switch} />,
+    privacy: <PrivacySection s={s} patch={patch} Row={Row} Switch={Switch} onClearHistory={onClearHistory} />,
     backup: <BackupSection state={state} Row={Row} newId={newId} onRestore={onRestore} />,
     about: <AboutSection s={s} patch={patch} Row={Row} Switch={Switch} update={update} onFirstRun={onFirstRun} />,
     general: (

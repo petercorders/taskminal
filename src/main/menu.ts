@@ -77,6 +77,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { type: 'separator' },
         item('clear'),
         item('find'),
+        item('global-find'),
       ],
     },
     {
@@ -85,6 +86,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('font-bigger'),
         item('font-smaller'),
         item('font-reset'),
+        { type: 'separator' },
+        item('history'),
         { type: 'separator' },
         item('mask-toggle'),
         item('mask-next'),
