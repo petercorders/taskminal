@@ -1179,7 +1179,8 @@ select {
 .settings-section + .settings-section {
   margin-top: var(--space-8);
 }
-.settings-section:not(:has(.setting-row)) {
+/* 보이는 줄이 없는 절 · 묶음은 hidden(줄 수를 JS 로 센다 — 28c 리뷰, :has() 는 Chrome 이 다시 계산하지 않는 때가 있었다) */
+.settings-section[hidden] {
   display: none;
 }
 .settings-section-title {
@@ -1193,7 +1194,7 @@ select {
   color: var(--muted);
 }
 /* 묶음: 제목은 카드 밖(15px), 줄은 카드 안 · 줄 사이 선. 찾기로 줄이 다 빠진 묶음은 숨긴다 */
-.setting-group:not(:has(.setting-row)) {
+.setting-group[hidden] {
   display: none;
 }
 .setting-group-head {
@@ -2589,16 +2590,21 @@ input[type='checkbox'] {
   color: var(--fg);
   border-radius: 2px;
 }
+/* 줄 번호 칸 폭 — 앞뒤 줄(.gf-context)이 이 폭만큼 들어가 찾은 글과 같은 왼쪽 끝에 선다 */
+.global-find {
+  --gf-line-w: 44px;
+}
 .gf-line {
   flex: none;
-  width: 44px;
+  width: var(--gf-line-w);
   text-align: right;
   color: var(--muted);
   font-family: Menlo, monospace;
   font-size: 12px;
 }
 .gf-context {
-  margin: 0 var(--space-2) var(--space-1) 72px;
+  /* 줄 왼쪽 여백 + 줄 번호 칸 + 틈 = 찾은 글의 왼쪽 끝(전에는 72px 로 박아 둠 — 28c 리뷰의 척도 검사가 잡음) */
+  margin: 0 var(--space-2) var(--space-1) calc(var(--space-5) + var(--gf-line-w) + var(--space-2));
   color: var(--muted);
   font-size: 12px;
   white-space: pre;
@@ -3463,6 +3469,10 @@ input[type='checkbox'] {
 }
 .chat-queue.paused .chat-queue-label {
   color: var(--waiting);
+}
+/* 글 줄 안의 아이콘(대기 줄의 그림 수) — 글자 가운데에 맞춘다 */
+.inline-icon {
+  vertical-align: -2px;
 }
 .chat-queue-text {
   flex: 1;

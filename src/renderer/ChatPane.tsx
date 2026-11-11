@@ -477,7 +477,8 @@ export function ChatPane(p: Props) {
               <div className="chat-user-images" data-testid="chat-user-images">
                 {b.images.map((n, i) => (
                   <span key={i} className="chat-image-chip">
-                    🖼 {n}
+                    <Icon name="image" size={12} />
+                    {n}
                   </span>
                 ))}
               </div>
@@ -718,7 +719,12 @@ export function ChatPane(p: Props) {
             </span>
             <span className="chat-queue-text" title={queue[0]!.text}>
               {queue[0]!.text.split('\n')[0]}
-              {queue[0]!.images.length > 0 ? ` · 🖼 ${queue[0]!.images.length}` : ''}
+              {queue[0]!.images.length > 0 && (
+                <>
+                  {' · '}
+                  <Icon name="image" size={12} className="inline-icon" /> {queue[0]!.images.length}
+                </>
+              )}
             </span>
             <button
               type="button"
@@ -752,7 +758,8 @@ export function ChatPane(p: Props) {
           <div className="chat-images" data-testid="chat-images">
             {images.map((im, i) => (
               <span key={i} className="chat-image-chip">
-                🖼 {im.name}
+                <Icon name="image" size={12} />
+                {im.name}
                 <button type="button" aria-label={`${im.name} 빼기`} onClick={() => setImages((xs) => xs.filter((_, j) => j !== i))}>
                   ×
                 </button>

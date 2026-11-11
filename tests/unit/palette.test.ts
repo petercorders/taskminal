@@ -51,6 +51,38 @@ describe('paletteItems', () => {
     expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(['task:t1', 'task:t2', 'command:next-task', 'create:일감'])
   })
 
+  it('전체 범위: 종류마다 한 묶음 — 묶음 순서는 가장 높은 점수가 처음 나온 순서, 묶음 안은 점수순 (28c 리뷰)', () => {
+    // 점수: 'dep server'(앞부분) > 'run dep'(낱말 시작) > 'xdepx'(중간) — 점수순으로만 두면 일감 / 명령 / 일감
+    const items = paletteItems(
+      input({
+        tasks: [
+          { id: 'mid', name: 'xdepx', detail: '' },
+          { id: 'pre', name: 'dep server', detail: '' },
+        ],
+        commands: [{ id: 'word', label: 'run dep', hint: '' }],
+        templates: [],
+        query: 'dep',
+      }),
+    )
+    expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(['task:pre', 'task:mid', 'command:word', 'create:dep'])
+    // 명령이 가장 높으면 명령 묶음이 먼저
+    const cmdFirst = paletteItems(
+      input({
+        tasks: [
+          { id: 'm', name: 'adepb', detail: '' },
+          { id: 'w', name: 'go dep', detail: '' },
+        ],
+        commands: [{ id: 'c', label: 'dep now', hint: '' }],
+        templates: [{ id: 'tp', name: 'my dep' }],
+        query: 'dep',
+      }),
+    )
+    expect(cmdFirst.map((i) => `${i.kind}:${i.id}`)).toEqual(['command:c', 'task:w', 'task:m', 'template:tp', 'create:dep'])
+    // 어떤 종류도 두 번 끊겨 나오지 않는다
+    const runs = cmdFirst.map((i) => i.kind).filter((k, i, a) => i === 0 || a[i - 1] !== k)
+    expect(new Set(runs).size).toBe(runs.length)
+  })
+
   it('범위를 고르면 그 종류만', () => {
     expect(paletteItems(input({ query: '일감', scope: 'command' })).map((i) => i.id)).toEqual(['next-task'])
     expect(paletteItems(input({ query: '', scope: 'template' })).map((i) => i.id)).toEqual(['tpl'])

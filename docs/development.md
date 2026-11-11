@@ -206,7 +206,9 @@
 - 대화 머리 · 글 · 입력의 바깥 여백은 `--chat-gutter` 하나(`% ` 는 pane 폭 전체인 자식에서만 맞다 — 새 요소가 바깥 칸에 서려면 같은 변수를 쓴다). 설정은 `--settings-gutter`.
 - 설정 화면의 `h1` 은 이제 칸 이름만('일반' · '정보') — '설정 — …' 로 찾던 시험은 고쳤다. 설정 칸은 `settings/parts.tsx`(Row · Group · Switch · Choices · TextField)를 쓴다.
 - 이모지 대신 `src/renderer/icons.tsx` 선 아이콘(`<Icon name=… />`, aria-hidden) — 단추 글자는 그대로 두어 이름으로 찾는 시험이 유지된다.
-- **CSS `:has()` 로 켜고 끄는 안내는 믿지 않는다** — 설정의 '맞는 설정이 없습니다' 가 묶음 카드 안으로 줄이 들어간 뒤 줄이 다 빠져도 다시 계산되지 않았다(computed 는 block 인데 layout 이 없음). 지금은 그린 뒤 DOM 을 세어 렌더한다(`noMatch`). 줄 · 묶음을 `:has` 로 숨기는 규칙은 그대로지만 새 안내는 JS 로.
+- **CSS `:has()` 로 켜고 끄지 않는다** — 설정의 '맞는 설정이 없습니다' 가 묶음 카드 안으로 줄이 들어간 뒤 줄이 다 빠져도 다시 계산되지 않았다(computed 는 block 인데 layout 이 없음). 28c 부터 보이는 줄 수를 상태로 센다: `Row` 가 그려질 때 · 빠질 때 `useRowCount` 로 위(묶음 `Group` → 절 `Section` → 설정 창)에 알리고, 묶음 · 절은 줄이 0 이면 `hidden`, 창은 `noMatch`. 그린 뒤 DOM 을 한 번 세는 방식은 자식이 늦게 줄을 바꾸면 낡는다 — 새 숨김 · 안내도 이 수를 쓴다.
+- 팔레트 '전체' 결과는 종류마다 한 묶음(`groupByKind` — 가장 높은 점수가 처음 나온 종류 순, 묶음 안은 점수순). 점수순으로만 두면 같은 제목이 두 번 나온다. 묶음 첫 줄을 고르면 제목 줄도 스크롤해 보인다.
+- `tool/check-spacing.mjs` 는 64px 넘는 값을 calc · max · min · clamp **안에서만** 건너뛴다 — 다른 칸에 맞춘 들여쓰기는 박힌 수(72px) 대신 그 칸들의 합(`calc(var(--space-5) + var(--gf-line-w) + var(--space-2))`)으로.
 - 가독성 e2e 는 `[role=dialog] p` 를 '본문 14px 이상' 으로 본다 — 설정의 작은 제목 · 설명은 `p` 가 아니라 `div`.
 - 팔레트 결과의 종류 제목 줄(`.palette-group`)은 `role=presentation` — `li` 에 option 을 주면 ↑↓ 가 제목을 고른다(`layout-align.spec` 이 잡는다).
 

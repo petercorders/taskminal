@@ -254,10 +254,12 @@ test('그림 붙여넣기(⌘V) → 칩 → 보내기 → claude stdin 에 image
     dt.items.add(new File([bytes], 'shot.png', { type: 'image/png' }))
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
   }, PNG)
-  await expect(chat().getByTestId('chat-images')).toContainText('🖼 shot.png')
+  await expect(chat().getByTestId('chat-images')).toContainText('shot.png')
+  await expect(chat().locator('[data-testid="chat-images"] .chat-image-chip svg.icon')).toHaveCount(1) // 28c: 🖼 대신 선 아이콘
   await say('see')
   await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: see · 그림 1')
-  await expect(chat().getByTestId('chat-user-images')).toContainText('🖼 shot.png')
+  await expect(chat().getByTestId('chat-user-images')).toContainText('shot.png')
+  await expect(chat().locator('[data-testid="chat-user-images"] .chat-image-chip svg.icon')).toHaveCount(1)
   const content = userLines()[0]!.message!.content!
   expect(content.find((c) => c.type === 'image')!.source).toEqual({ type: 'base64', media_type: 'image/png', data: PNG })
   await win.screenshot({ path: 'test-results/chat-image.png' })

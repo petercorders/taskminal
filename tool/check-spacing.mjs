@@ -22,7 +22,8 @@ export function scanSpacing(css) {
     tokens += (m[2].match(/var\(--space-/g) ?? []).length
     for (const t of m[2].matchAll(/(-?\d*\.?\d+)px/g)) {
       const v = Number(t[1])
-      if (Math.abs(v) > 64) continue // calc · max 안의 폭(760px 등)
+      // calc · max · min · clamp 안의 큰 폭(760px 등)만 건너뛴다 — 괄호 밖의 `padding: 80px` 는 척도 밖으로 잡는다(28c 리뷰)
+      if (Math.abs(v) > 64 && inFunction(m[2], t.index)) continue
       total++
       const ok = SPACE_SCALE.includes(Math.abs(v))
       if (!ok) bad.push({ line, prop, value: v, decl: `${prop}: ${m[2].trim()}` })
@@ -31,8 +32,19 @@ export function scanSpacing(css) {
   return { bad, total, tokens }
 }
 
+/** value 의 at 자리가 calc( · max( · min( · clamp( 안인가 — 그 앞에서 열린 괄호들 중 가장 안쪽을 연 함수 이름을 본다 */
+function inFunction(value, at) {
+  const open = []
+  for (const p of value.slice(0, at).matchAll(/([a-z-]*)\(|\)/g)) {
+    if (p[0] === ')') open.pop()
+    else open.push(p[1])
+  }
+  return open.some((name) => /^(calc|max|min|clamp)$/.test(name))
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const file = process.argv[2] ?? new URL('../src/renderer/styles.css', import.meta.url).pathname
+  // URL.pathname 은 한글 · 공백을 %xx 로 남긴다 → fileURLToPath (28c 리뷰)
+  const file = process.argv[2] ?? fileURLToPath(new URL('../src/renderer/styles.css', import.meta.url))
   const { bad, total, tokens } = scanSpacing(readFileSync(file, 'utf8'))
   for (const b of bad) console.log(`${file}:${b.line}  ${b.decl}`)
   console.log(`간격 값 ${total + tokens}개 (var(--space-*) ${tokens} · px 직접 ${total}) 중 척도 밖 ${bad.length}개`)

@@ -79,7 +79,11 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {
-    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    const el = listRef.current?.querySelector('[aria-selected="true"]')
+    // 묶음의 첫 줄이면 그 위 제목 줄도 보이게(28c 리뷰) — 제목을 먼저 맞추고 줄을 맞춘다(목록이 두 줄보다 높으면 둘 다 보인다)
+    const heading = el?.previousElementSibling
+    if (heading?.classList.contains('palette-group')) heading.scrollIntoView({ block: 'nearest' })
+    el?.scrollIntoView({ block: 'nearest' })
   }, [selected])
 
   // ↩ 를 빨리 두 번 눌러도 한 번만 돈다 — 첫 ↩ 에 팔레트가 닫히고(키 이벤트의 상태 변경은 바로 그려진다) 두 번째는 터미널로 간다

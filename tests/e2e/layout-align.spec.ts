@@ -119,6 +119,58 @@ for (const width of WIDTHS) {
   })
 }
 
+test('설정 찾기 ‘커서’: 줄이 없는 묶음 제목 · 절 제목은 보이지 않고, 보이는 묶음 · 절에는 줄이 있다 (28c 리뷰)', async () => {
+  await launch(1280)
+  await command('settings')
+  await expect(win.getByRole('searchbox', { name: '설정 찾기' })).toBeFocused()
+  await win.keyboard.type('커서')
+  const body = win.getByTestId('settings-body')
+  await expect(body.locator('.setting-row')).toHaveCount(2)
+  // 보이는 것(상자가 있는 것)만 센다 — 숨김 규칙이 다시 계산되지 않으면 줄 없는 묶음 제목이 남는다(28b 의 :has 함정)
+  const seen = await body.evaluate((root) => {
+    const shown = (el: Element | null) => !!el && el.getClientRects().length > 0
+    const of = (sel: string, title: string) =>
+      Array.from(root.querySelectorAll(sel)).map((el) => ({ title: el.querySelector(title)?.textContent ?? '', shown: shown(el.querySelector(title) ?? el), rows: el.querySelectorAll('.setting-row').length }))
+    return { groups: of('.setting-group', '.setting-group-title'), sections: of('.settings-section', '.settings-section-title') }
+  })
+  for (const g of [...seen.groups, ...seen.sections]) expect(g.shown, `‘${g.title}’ 줄 ${g.rows}개`).toBe(g.rows > 0)
+  expect(seen.groups.filter((g) => g.rows === 0).length, '줄이 빠진 묶음이 있어야 시험이 뜻이 있다').toBeGreaterThan(0)
+  expect(seen.sections.filter((g) => g.rows === 0).length, '줄이 빠진 절이 있어야 시험이 뜻이 있다').toBeGreaterThan(0)
+  await expect(body.getByRole('heading', { level: 3, name: '커서', exact: true })).toBeVisible()
+  await expect(body.getByRole('heading', { level: 3, name: '스크롤', exact: true })).toBeHidden()
+  await expect(body.getByRole('heading', { level: 2, name: '터미널', exact: true })).toBeVisible()
+  await expect(body.getByRole('heading', { level: 2, name: '알림 · 활동', exact: true })).toBeHidden()
+})
+
+test('팔레트: 긴 목록에서 ↓ 로 내려갔다가 ↑ 로 묶음 첫 줄에 돌아오면 그 위 제목 줄도 보인다 (28c 리뷰)', async () => {
+  await launch(1280)
+  await command('palette')
+  await expect(win.getByTestId('palette')).toBeVisible()
+  const list = win.locator('#palette-list')
+  const items = win.getByTestId('palette-item')
+  const kinds = await items.evaluateAll((els) => els.map((e) => e.getAttribute('data-kind')))
+  const firstCmd = kinds.indexOf('command')
+  expect(firstCmd).toBeGreaterThan(0) // 일감 묶음 뒤에 명령 묶음
+  const deep = 15
+  expect(kinds.length).toBeGreaterThan(firstCmd + deep)
+  const headingShown = (i: number) =>
+    list.evaluate((ul, idx) => {
+      const h = document.getElementById(`palette-option-${idx}`)!.previousElementSibling!
+      const a = h.getBoundingClientRect()
+      const b = ul.getBoundingClientRect()
+      return h.classList.contains('palette-group') && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5
+    }, i)
+  for (let i = 0; i < firstCmd + deep; i++) await win.keyboard.press('ArrowDown')
+  await expect.poll(() => list.evaluate((ul) => ul.scrollTop)).toBeGreaterThan(0) // 목록이 실제로 내려갔다
+  for (let i = 0; i < deep; i++) await win.keyboard.press('ArrowUp')
+  await expect(win.locator(`#palette-option-${firstCmd}`)).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => headingShown(firstCmd), '명령 묶음 제목').toBe(true)
+  // 맨 위 묶음(일감)의 첫 줄로 돌아와도 제목이 보인다
+  for (let i = 0; i < firstCmd; i++) await win.keyboard.press('ArrowUp')
+  await expect(win.locator('#palette-option-0')).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => headingShown(0), '일감 묶음 제목').toBe(true)
+})
+
 test('팔레트: 결과 줄 높이가 같고, 종류 제목 줄은 ↑↓ 로 고를 수 없다', async () => {
   await launch(1280)
   await command('palette')

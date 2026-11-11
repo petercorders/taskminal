@@ -1,5 +1,4 @@
 // 명령 기록 칸 ⌘Y (19단계, History 보드) — 오른쪽에서 밀려 나오는 칸. 본문을 가리지 않고 좁힌다.
-import { Icon } from './icons'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { formatDuration, type PaneActivity } from '../shared/activity'
 import { isDangerous } from '../shared/danger'
@@ -10,6 +9,7 @@ import type { Task } from '../shared/types'
 import type { HistoryView } from './history-state'
 import { integratedPanes } from './runtime'
 import { terminals } from './terminals'
+import { Icon } from './icons'
 
 type Chip = 'all' | 'failed' | 'running'
 

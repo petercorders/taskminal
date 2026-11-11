@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -38,5 +38,22 @@ describe('간격 척도', () => {
   it('주석 안의 값과 calc 안의 큰 폭은 세지 않는다', () => {
     const r = scan('/* padding: 6px */\n.a { padding: 0 max(var(--space-4), calc((100% - 760px) / 2)) }')
     expect(r.code).toBe(0)
+  })
+  it('64px 를 넘는 값은 calc · max · min · clamp 밖이면 잡는다 (28c 리뷰)', () => {
+    const r = scan('.a { padding: 80px }\n.b { margin-top: -96px }\n.c { gap: min(100px, 10%) }\n.d { padding-left: clamp(var(--space-2), 2vw, 120px) }')
+    expect(r.code).toBe(1)
+    expect(r.out).toContain(':1  padding: 80px')
+    expect(r.out).toContain(':2  margin-top: -96px')
+    expect(r.out).toMatch(/척도 밖 2개/)
+  })
+  it('한글 · 공백이 든 폴더에서도 기본 파일(../src/renderer/styles.css)을 찾는다 (28c 리뷰)', () => {
+    const root = join(realpathSync(dir), '한글 폴더') // macOS 임시 폴더는 링크 — 실제 경로여야 스크립트가 '직접 실행' 으로 안다
+    mkdirSync(join(root, 'tool'), { recursive: true })
+    mkdirSync(join(root, 'src/renderer'), { recursive: true })
+    copyFileSync(SCRIPT, join(root, 'tool/check-spacing.mjs'))
+    writeFileSync(join(root, 'src/renderer/styles.css'), '.a { padding: 6px }')
+    const r = spawnSync('node', [join(root, 'tool/check-spacing.mjs')], { encoding: 'utf8' })
+    expect(r.stderr).toBe('')
+    expect(r.stdout).toMatch(/척도 밖 1개/)
   })
 })

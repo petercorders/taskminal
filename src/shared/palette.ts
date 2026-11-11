@@ -103,7 +103,7 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
   if (want('template')) for (const t of input.templates) add({ kind: 'template', id: t.id, label: t.name }, t.name)
 
   // 점수순 — 같으면 넣은 순서(일감 > 명령 > 템플릿, 일감은 사이드바 순서). sort 는 안정 정렬이다
-  const items = out.sort((a, b) => b.score - a.score)
+  const items = groupByKind(out.sort((a, b) => b.score - a.score))
 
   // 기록: 명령 글자 그대로 맞은 것(퍼지는 거의 모든 명령에 맞는다) — 최근 것부터, 같은 명령은 한 번. 전체 범위에서만
   if (input.scope === 'all' && query !== '' && input.history) {
@@ -136,6 +136,20 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
     items.push({ kind: 'create', id: query, label: query, marks: [], score: 0 })
   }
   return items
+}
+
+/**
+ * 종류마다 한 묶음(28c 리뷰 — 팔레트가 종류 제목 줄을 달므로 같은 제목이 두 번 나오지 않게).
+ * 점수순으로 정렬된 목록을 받아, 묶음 순서는 그 종류가 처음 나온 순서(= 가장 높은 점수 순), 묶음 안은 받은 순서(점수순)를 지킨다.
+ */
+function groupByKind(sorted: PaletteItem[]): PaletteItem[] {
+  const groups = new Map<PaletteItem['kind'], PaletteItem[]>()
+  for (const item of sorted) {
+    const g = groups.get(item.kind)
+    if (g) g.push(item)
+    else groups.set(item.kind, [item])
+  }
+  return [...groups.values()].flat()
 }
 
 export function nextScope(scope: PaletteScope, step: 1 | -1): PaletteScope {

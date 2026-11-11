@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Icon } from './icons'
 import { formatDuration } from '../shared/activity'
 import { QUICK_WHERE, WHERE_LABEL, quickDefaults, quickError, type QuickButton, type QuickCommand, type QuickState, type QuickWhere } from '../shared/quick'
 import { Modal } from './Modal'
 import { isMenuKey } from './PopupMenu'
+import { Icon } from './icons'
 
 const SOURCE_MARK = { task: '', template: '▤', all: '◎' } as const
 

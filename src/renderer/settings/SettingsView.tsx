@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
 import { accelFromEvent, accelLabel, FONT_MAX, FONT_MIN, keyConflicts, type AppCommand, type Shortcut } from '../../shared/keymap'
 import { ACCENTS, DIM, FONT_FAMILIES, LINE_HEIGHT, LONG_AFTER_CHOICES, NOTIFY_KINDS, RESUME_AFTER_CHOICES, SCROLLBACK } from '../../shared/settings'
 import type { AppState, NotifyKind } from '../../shared/types'
@@ -9,7 +9,7 @@ import { HostSection } from './HostSection'
 import { BackupSection } from './BackupSection'
 import { PrivacySection } from './PrivacySection'
 import { AboutSection } from './AboutSection'
-import { Choices, Group, QueryContext, Row, Switch, TextField } from './parts'
+import { Choices, Group, QueryContext, Row, RowCountProvider, Section, Switch, TextField, useRowCount } from './parts'
 import { Icon, type IconName } from '../icons'
 import type { UpdateView } from '../../shared/update'
 import type { Restored } from '../../shared/backup'
@@ -89,10 +89,9 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
   const [query, setQuery] = useState('')
   const [capturing, setCapturing] = useState<AppCommand | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  // 찾기 결과가 하나도 없으면 안내 — CSS :has() 로 숨기던 것은 묶음 카드가 줄을 품게 된 뒤 줄이 다 빠져도 다시 계산되지 않았다(Chrome) → 그린 뒤 DOM 에서 센다
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const [noMatch, setNoMatch] = useState(false)
-  useLayoutEffect(() => setNoMatch(query.trim() !== '' && !bodyRef.current?.querySelector('.setting-row')))
+  // 찾기 결과가 하나도 없으면 안내 — 줄이 그려지고 빠질 때마다 알려 오는 보이는 줄 수로 정한다(28c 리뷰: DOM 을 한 번 세면 늦게 바뀌는 줄에 낡는다)
+  const [rowCount, reportRow] = useRowCount()
+  const noMatch = query.trim() !== '' && rowCount === 0
   const conflicts = keyConflicts(shortcuts)
   // main 이 받아 주는 셸(/etc/shells) — 그 밖의 경로는 $SHELL 로 열리므로 칸 아래에 알린다
   const [shells, setShells] = useState<string[] | null>(null)
@@ -675,18 +674,19 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
           </button>
         </header>
         <QueryContext.Provider value={query.trim()}>
-          <div ref={bodyRef} className="settings-body" data-testid="settings-body">
+          <div className="settings-body" data-testid="settings-body">
             <div className="settings-column">
               <div className="settings-page-head">
                 <h1>{query ? `‘${query}’ 찾기` : current.title}</h1>
                 {!query && <p>{current.desc}</p>}
               </div>
-              {SECTIONS.filter((x) => show(x.id)).map((x) => (
-                <section key={x.id} className="settings-section" aria-label={x.title} data-section={x.id}>
-                  {query && <h2 className="settings-section-title">{x.title}</h2>}
-                  {body[x.id]}
-                </section>
-              ))}
+              <RowCountProvider value={reportRow}>
+                {SECTIONS.filter((x) => show(x.id)).map((x) => (
+                  <Section key={x.id} id={x.id} title={x.title} showTitle={query !== ''}>
+                    {body[x.id]}
+                  </Section>
+                ))}
+              </RowCountProvider>
               {noMatch && <p className="settings-none">맞는 설정이 없습니다</p>}
             </div>
           </div>

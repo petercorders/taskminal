@@ -127,7 +127,7 @@ test('재시작 뒤 thread/resume 에 저장된 스레드 id · 앞 대화가 �
   expect(calls('thread/start')).toHaveLength(1)
 })
 
-test('그림: 📎 → 칩 → 보내기 → codex 가 받은 localImage 경로에 파일이 있다 · 메시지에 🖼', async () => {
+test('그림: 📎 → 칩 → 보내기 → codex 가 받은 localImage 경로에 파일이 있다 · 메시지에 그림 칩', async () => {
   const png = join(userData, 'dot.png')
   writeFileSync(png, Buffer.from(PNG, 'base64'))
   await launch()
@@ -136,10 +136,10 @@ test('그림: 📎 → 칩 → 보내기 → codex 가 받은 localImage 경로�
   }, png)
   await command('chat-new-codex')
   await chat().getByTestId('chat-attach').click()
-  await expect(chat().getByTestId('chat-images')).toContainText('🖼 dot.png')
+  await expect(chat().getByTestId('chat-images')).toContainText('dot.png')
   await say('look')
   await expect(chat().locator('[data-kind="text"]')).toHaveText('echo: look · 그림 1')
-  await expect(chat().getByTestId('chat-user-images')).toContainText('🖼 dot.png')
+  await expect(chat().getByTestId('chat-user-images')).toContainText('dot.png')
   await expect(chat().getByTestId('chat-images')).toHaveCount(0)
   const input0 = calls('turn/start')[0]!['input'] as Array<{ type: string; path?: string }>
   const img = input0.find((x) => x.type === 'localImage')!

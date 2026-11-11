@@ -1,13 +1,42 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { settingsMatch } from '../../shared/settings'
 
 // 찾는 중이면 모든 칸에서 맞는 줄만 보인다 — 줄마다 찾을 글자를 갖는다
 export const QueryContext = createContext('')
 
+/**
+ * 28c 리뷰: 보이는 줄 수를 위로 알린다 — 줄 → 묶음 → 절 → 설정 창. 묶음 · 절은 줄이 없으면 숨고, 설정 창은 '맞는 설정이 없습니다' 를 정한다.
+ * CSS :has() 는 줄이 묶음 카드 안으로 들어간 뒤 Chrome 이 다시 계산하지 않는 때가 있었고, 그린 뒤 DOM 을 세면 자식이 늦게 줄을 바꿀 때 값이 낡는다.
+ */
+const RowCounter = createContext<((delta: 1 | -1) => void) | null>(null)
+export const RowCountProvider = RowCounter.Provider
+
+/** 이 자리 아래에 보이는 줄 수와, 아래 줄들이 부를 알림 함수(위로도 전한다) */
+export function useRowCount(): [number, (delta: 1 | -1) => void] {
+  const parent = useContext(RowCounter)
+  const [count, setCount] = useState(0)
+  const report = useCallback(
+    (delta: 1 | -1) => {
+      setCount((n) => n + delta)
+      parent?.(delta)
+    },
+    [parent],
+  )
+  return [count, report]
+}
+
 /** 설정 한 줄. 찾기 글자가 title · desc · keywords 에 모두 없으면 그리지 않는다. */
 export function Row({ title, desc, keywords = '', control, children }: { title: string; desc?: ReactNode; keywords?: string; control?: ReactNode; children?: ReactNode }) {
   const query = useContext(QueryContext)
-  if (query && !settingsMatch(`${title} ${typeof desc === 'string' ? desc : ''} ${keywords}`, query)) return null
+  const report = useContext(RowCounter)
+  const shown = !query || settingsMatch(`${title} ${typeof desc === 'string' ? desc : ''} ${keywords}`, query)
+  // 그리기 전(layout effect)에 세므로 숨김 · 안내가 한 번 깜빡이지 않는다
+  useLayoutEffect(() => {
+    if (!shown || !report) return
+    report(1)
+    return () => report(-1)
+  }, [shown, report])
+  if (!shown) return null
   return (
     <div className="setting-row" data-testid="setting-row" data-title={title}>
       <div className="setting-head">
@@ -24,11 +53,12 @@ export function Row({ title, desc, keywords = '', control, children }: { title: 
 
 /**
  * 28단계(Orca 의 설정 묶음): 제목은 카드 밖, 줄들은 테두리 카드 안 · 줄 사이 선.
- * 찾기로 줄이 하나도 안 남으면 CSS(:has)가 묶음째 숨긴다.
+ * 찾기로 줄이 하나도 안 남으면 묶음째 숨긴다(보이는 줄 수를 센다 — useRowCount).
  */
 export function Group({ title, desc, action, children }: { title?: string; desc?: string; action?: ReactNode; children: ReactNode }) {
+  const [rows, report] = useRowCount()
   return (
-    <section className="setting-group" aria-label={title}>
+    <section className="setting-group" aria-label={title} hidden={rows === 0}>
       {title && (
         <div className="setting-group-head">
           <div>
@@ -38,7 +68,20 @@ export function Group({ title, desc, action, children }: { title?: string; desc?
           {action}
         </div>
       )}
-      <div className="setting-card">{children}</div>
+      <RowCountProvider value={report}>
+        <div className="setting-card">{children}</div>
+      </RowCountProvider>
+    </section>
+  )
+}
+
+/** 설정 칸 하나의 절 — 찾는 중이면 칸 이름을 제목으로 달고, 보이는 줄이 없으면 숨긴다 */
+export function Section({ id, title, showTitle, children }: { id: string; title: string; showTitle: boolean; children: ReactNode }) {
+  const [rows, report] = useRowCount()
+  return (
+    <section className="settings-section" aria-label={title} data-section={id} hidden={rows === 0}>
+      {showTitle && <h2 className="settings-section-title">{title}</h2>}
+      <RowCountProvider value={report}>{children}</RowCountProvider>
     </section>
   )
 }
