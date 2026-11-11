@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-11 (20단계 빠른 명령 · 포트 병합 — 단위 669 · e2e 157, 다음은 21단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
+마지막 갱신: 2026-11-11 (21단계 대화 1 — Claude · 사이드바 흐름 보기 병합 — 단위 726 · e2e 174, 다음은 22단계. 서명 · 공증은 사용자 준비물 뒤 `npm run release`)
 
 ## 1. 지금 어디까지
 
@@ -17,7 +17,8 @@
 | 18 출시 기본기 | main 에 병합(브랜치 `stage-18-release`). 자동 업데이트(GitHub Releases) · 오류 기록 · 지난번 꺼짐 · 첫 실행 안내 · `npm run release`(서명 · 공증 — Developer ID 인증서 · 공증 프로필 `taskminal-notary` 를 사용자가 만든 뒤). 계획 · 결과 `docs/stages/18-release.md` |
 | 19 기록과 찾기 | main 에 병합(브랜치 `stage-19-history`). 명령 기록 ⌘Y(`<userData>/history/*.jsonl`, 가린 뒤) · 모든 출력 찾기 ⇧⌘F · ⌘P 기록 · 설정 › 개인정보 모두 지우기. 계획 · 결과 `docs/stages/19-history.md` |
 | 20 빠른 명령 · 포트 | main 에 병합(브랜치 `stage-20-quick-ports`). 빠른 명령 단추 줄(일감 · 템플릿 · 모든 일감, ⌥1~9, ⌘P) · 포트 칩(탭 · 사이드바 · ⌘P · 끄기 · 숨기기 · 겹침 막대). 계획 · 결과 `docs/stages/20-quick-ports.md` |
-| 21~25 1차 출시 | 21 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
+| 21 대화 1 — Claude · 사이드바 | main 에 병합(브랜치 `stage-21-chat-claude`). 대화 pane(가짜 claude 로 e2e · stream-json · 허락/질문 카드 · `--resume` · 허락 방식 · ⇧⌘J 터미널 전환 · 가린 대화 기록 `<userData>/chat/*.jsonl`) + 사이드바 흐름 보기(상태 칸 · 개수 막대 · `/` 거르기 · 끌어 놓기 · 안 본 점). 계획 · 결과 `docs/stages/21-chat-claude.md` |
+| 22~25 1차 출시 | 22 부터 — `docs/plan.md` "1차 출시까지" 표 · 보드는 디자인 캔버스 1차 출시 구역(2026-11-11 추천안 채택) |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
@@ -127,6 +128,17 @@
 - ⌥숫자는 물리 키(`e.code` DigitN)로 잡는다. 'Option 을 Meta 로' 면 가로채지 않는다. 한글 입력기 켠 실제 키는 미확인.
 - 단위 시험에서 '다른 pane' 의 pid 로 1 을 쓰지 않는다(모든 프로세스의 조상) — 형제 `sleep` 을 띄운다. 없는 pid 는 `process.kill` 이 던져 검사 없이도 통과한다(변이에서 드러남).
 - 템플릿 JSON 편집(`replaceTemplate`)은 칸을 펼쳐 담는다 — 골라 담으면 새 칸(quickCommands)이 지워진다.
+
+### 21 대화 1 — Claude · 사이드바 흐름 보기
+계획 · 결과 `docs/stages/21-chat-claude.md`(0절 스파이크 표 = claude stream-json 줄 모양). 구조: `src/shared/chat.ts`(이벤트 · 변환 · `foldBlocks` · `chatStatus` · `redactEvent`) · `src/main/chat/`(`claude-adapter.ts` 프로세스 하나 · `chat-manager.ts` pane 마다 · `chat-store.ts` 가린 기록 · `find-bin.ts`) · `src/renderer/ChatPane.tsx` · `sidebar-model.ts`(`flowSections` · `countBar` · `unreadTasks` · `lastLine`). 짚어 둔 함정:
+- e2e 는 `TASKMINAL_CLAUDE_BIN=tests/fixtures/fake-claude.mjs`(보낸 글의 낱말로 대본) · `FAKE_CLAUDE_LOG`(인자 · stdin) · 터미널 전환은 `TASKMINAL_CLAUDE_TUI`. `shellEnv` 가 TASKMINAL_* 를 지우므로 가짜에 줄 값은 다른 이름으로. 로그인 셸은 PATH 앞에 가짜 폴더를 끼워도 실제 `~/.local/bin/claude` 를 찾는다.
+- 화면 · 디스크 둘 다 가린 사본, claude 로는 원문. 질문 답 키는 가린 글이라 adapter 가 원래 질문 글로 되돌린다. 위험 판정은 main(adapter)도 다시 한다 — '늘 허락' 단추를 숨기는 것만으로 믿지 않는다.
+- 이벤트 번호(pane 마다) + `history → {events, upTo}`: 화면은 번호 > upTo 인 실시간 이벤트만 붙인다. upTo 는 읽기 **전에** 잡는다.
+- 앱이 턴 도중 끝나면 '멈춤' 을 못 쓴다 → `history` 가 프로세스 없는 열린 턴을 멈춤으로 닫는다(리뷰가 찾음, 안 하면 '실행 중' 에 굳음).
+- claude stdin 에는 'error' 받는 이를 단다(EPIPE 는 늦게 와 main 을 죽인다). 찾는 사이 닫힌 pane 은 띄우지 않고, 닫은 entry 의 늦은 이벤트는 기록하지 않는다.
+- claude 찾기는 `-lc` → 못 찾으면 `-ilc`(zsh 는 비대화형이면 .zshrc 를 안 읽음).
+- 사이드바 기본이 흐름 보기 — 묶음을 보는 e2e 는 `sidebarView: 'group'` 으로 띄우거나 '묶음' 단추를 누른다. 불러오기 전에는 흐름 칸을 그리지 않는다(기본 설정으로 번쩍여 재시작 시험의 locator 가 엉뚱한 칸을 잡았다).
+- 메뉴 이름이 일감 이름보다 ⌘P 순위가 높으면 palette 시험이 깨진다('일감 거르기' → '사이드바에서 거르기').
 
 ### 디자인 맞추기 (단계 아님)
 `docs/design-gaps.md` 를 사용자가 고치는 중. 15단계 뒤 그 문서로 단계를 나눈다. 디자인 캔버스 파일은 Artifact 도구 read 로 받는다(`project/Main.dc.html` 등).
