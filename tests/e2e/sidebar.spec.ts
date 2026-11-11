@@ -90,7 +90,8 @@ test('일감 두 개를 오가도 각 터미널의 출력과 폴더가 남는다
   expect(b).not.toMatch(/MARK_A_2/)
   expect(b).toContain(`PWD_B ${userData}`)
 
-  // 묶음 칸과 둘째 줄(브랜치 또는 폴더 · 상태 — 15c 부터 점 없이 6px 틈, 디자인과 같게)
+  // 묶음 칸과 둘째 줄(브랜치 또는 폴더 · 상태 — 15c 부터 점 없이 6px 틈, 디자인과 같게) — 21b 부터 기본은 흐름 보기라 묶음 보기로 바꿔 본다
+  await win.getByTestId('sidebar').getByRole('radio', { name: '묶음' }).click()
   await expect(win.getByTestId('sidebar').getByRole('heading', { name: '서버' })).toBeVisible()
   await expect(row('A 일감').locator('.task-where')).toHaveText('/tmp')
   await expect(row('A 일감').locator('.task-sub')).toContainText('진행 중')
@@ -151,6 +152,7 @@ test('껐다 켜면 일감 · 묶음 · 활성 일감이 그대로', async () =>
   await createTask('B 일감', { group: '서버' })
   await selectButton('A 일감').click()
   await expect(view('A 일감')).toBeVisible()
+  await win.getByTestId('sidebar').getByRole('radio', { name: '묶음' }).click() // 보기 선택도 남는다(21b)
   await app.close()
   launched = undefined
 
@@ -164,6 +166,7 @@ test('껐다 켜면 일감 · 묶음 · 활성 일감이 그대로', async () =>
 
 test('일감이 없으면 빈 화면 안내 — 새 일감 버튼과 Esc', async () => {
   await expect(win.getByTestId('empty-view')).toContainText('일감이 없습니다')
+  await expect(win.locator('[data-testid="flow-section"]')).toHaveCount(0) // 흐름 보기여도 빈 상태 칸은 그리지 않는다(21b)
   await win.getByTestId('empty-view').getByRole('button', { name: '새 일감' }).click()
   const dialog = win.getByRole('dialog', { name: '새 일감' })
   await expect(dialog.getByLabel('이름')).toBeFocused()

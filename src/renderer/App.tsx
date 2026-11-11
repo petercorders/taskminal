@@ -28,7 +28,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
-import { adjacentTask, nextAttention } from './sidebar-model'
+import { adjacentTask, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
 import { TabBar, tabElementId, tabPanelId } from './TabBar'
 import { TemplateNameDialog } from './TemplateNameDialog'
@@ -985,6 +985,20 @@ export function App() {
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
   const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory
 
+  // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
+  const [seenAt, setSeenAt] = useState<Record<string, number>>({})
+  const lastActiveTask = useRef<string | null>(null)
+  useEffect(() => {
+    const prev = lastActiveTask.current
+    const cur = state.activeTaskId
+    if (prev === cur) return
+    lastActiveTask.current = cur
+    const now = Date.now()
+    setSeenAt((s) => ({ ...s, ...(prev ? { [prev]: now } : {}), ...(cur ? { [cur]: now } : {}) }))
+  }, [state.activeTaskId])
+  const unread = useMemo(() => unreadTasks(state, activity, seenAt), [state, activity, seenAt])
+  const [filterSignal, setFilterSignal] = useState(0)
+
   // 상태에서 빠진 대화 pane(일감 지우기 · 되돌리기 · 백업 되살리기 …)의 claude 를 끝낸다 — 화면 기록은 지우는 쪽이 정한다
   const chatPaneIds = useRef<Set<string>>(new Set())
   useEffect(() => {
@@ -1111,6 +1125,9 @@ export function App() {
       case 'new-tab':
         addTab(task.id)
         return refocus()
+      case 'sidebar-filter':
+        setFilterSignal((n) => n + 1)
+        return
       case 'chat-new':
         dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId: newId() })
         return refocus()
@@ -1332,6 +1349,13 @@ export function App() {
           portsOf={(t) => chipsOf(Object.keys(t.panes))}
           updateChip={updateView?.state === 'downloaded' && updateView.version === laterVersion ? laterVersion : null}
           onUpdateChip={() => runCommand('error-log')}
+          unread={unread}
+          filterSignal={filterSignal}
+          onView={(v) => dispatch({ type: 'settings/patch', patch: { sidebarView: v } })}
+          onToggleSection={(key) => {
+            const cur = stateRef.current.settings.sidebarClosed
+            dispatch({ type: 'settings/patch', patch: { sidebarClosed: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] } })
+          }}
         />
         <main className="workspace">
           {/* 전환해도 셸 · 화면이 남도록 본 탭의 pane 은 모두 마운트해 두고, 활성이 아닌 일감 · 탭은 숨긴다. */}

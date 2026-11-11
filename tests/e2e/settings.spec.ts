@@ -29,7 +29,8 @@ test.beforeEach(async ({}, info) => {
       { id: 'task-b', name: 'B 일감', paneId: 'pane-b', cwd: '/tmp', groupId: 'g-srv' },
     ],
     [{ id: 'g-srv', name: '서버' }],
-    info.title.includes('끄기 전') ? { confirmQuit: true } : {},
+    // 묶음 · 상태 둘째 줄을 보는 시험들이라 묶음 보기로 띄운다 — 흐름 보기(21b 기본)는 sidebar-flow.spec
+    { sidebarView: 'group', ...(info.title.includes('끄기 전') ? { confirmQuit: true } : {}) },
   )
   launched = undefined
   await launch()

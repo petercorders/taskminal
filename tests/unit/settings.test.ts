@@ -187,3 +187,19 @@ describe('개인정보 설정 (17단계)', () => {
     expect(v.secretAllow).toEqual([{ hash: 'abc123', kind: '비밀번호', where: '서버', at: 5 }])
   })
 })
+
+describe('대화 · 사이드바 보기 설정 (21단계)', () => {
+  it('기본: 매번 묻기 · 흐름 보기 · 완료 칸 접힘', () => {
+    const s = parseExtraSettings({}, [])
+    expect(s.chatPermission).toBe('ask')
+    expect(s.sidebarView).toBe('flow')
+    expect(s.sidebarClosed).toEqual(['done'])
+  })
+  it('모르는 값은 기본으로, 접힌 칸 목록은 문자열만 · 중복 없이', () => {
+    const s = parseExtraSettings({ chatPermission: 'yolo', sidebarView: 'grid', sidebarClosed: ['wait', 'wait', 3, '', 'x'.repeat(65)] }, [])
+    expect(s.chatPermission).toBe('ask')
+    expect(s.sidebarView).toBe('flow')
+    expect(s.sidebarClosed).toEqual(['wait'])
+    expect(parseExtraSettings({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] }, [])).toMatchObject({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] })
+  })
+})

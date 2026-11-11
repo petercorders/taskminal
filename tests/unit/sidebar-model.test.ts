@@ -111,3 +111,87 @@ describe('nextAttention (⇧⌘A)', () => {
     expect(nextAttention(s, {}, null)).toBeNull()
   })
 })
+
+// ─── 21단계 흐름 보기 ───
+import { countBar, filterTasks, flowSections, lastLine, timeAgo, unreadTasks } from '../../src/renderer/sidebar-model'
+import type { PaneActivity } from '../../src/shared/activity'
+
+function flowState(): AppState {
+  const s = emptyState()
+  s.settings.groups = [{ id: 'g', name: '서버' }]
+  const mk = (name: string, statusId: string, groupId: string | null = null) =>
+    createTask({ name, cwd: `/code/${name}`, templateId: null, statusId, groupId, color: null }, s.settings, newId, 0)
+  s.tasks = [mk('a', 'doing', 'g'), mk('b', 'wait'), mk('c', 'done'), mk('d', 'doing'), mk('e', 'wait')]
+  return s
+}
+const paneOf = (s: AppState, name: string) => Object.keys(s.tasks.find((t) => t.name === name)!.panes)[0]!
+const act = (state: PaneActivity['state'], extra: Partial<PaneActivity> = {}): PaneActivity => ({ state, busy: state === 'running', attention: false, ...extra })
+
+describe('flowSections', () => {
+  it('확인 필요 → 상태 순서대로, 확인 필요인 일감은 자기 상태 칸에서 빠진다', () => {
+    const s = flowState()
+    const activity = { [paneOf(s, 'b')]: act('waiting', { attention: true }) }
+    const secs = flowSections(s, activity, new Set(), '')
+    expect(secs.map((x) => [x.key, x.tasks.map((t) => t.name)])).toEqual([
+      ['need', ['b']],
+      ['doing', ['a', 'd']],
+      ['wait', ['e']],
+      ['done', ['c']],
+    ])
+  })
+  it('없는 상태의 일감은 첫 상태 칸 · 마지막 상태(완료)의 일감은 확인 필요로 올리지 않는다', () => {
+    const s = flowState()
+    s.tasks[0]!.statusId = 'gone'
+    const activity = { [paneOf(s, 'c')]: act('failed', { attention: true }) }
+    const secs = flowSections(s, activity, new Set(), '')
+    expect(secs.find((x) => x.key === 'doing')!.tasks.map((t) => t.name)).toEqual(['a', 'd'])
+    expect(secs.find((x) => x.key === 'need')!.tasks).toEqual([])
+    expect(secs.find((x) => x.key === 'done')!.tasks.map((t) => t.name)).toEqual(['c'])
+  })
+  it('안 본 끝남도 확인 필요', () => {
+    const s = flowState()
+    const d = s.tasks.find((t) => t.name === 'd')!
+    expect(flowSections(s, {}, new Set([d.id]), '').find((x) => x.key === 'need')!.tasks.map((t) => t.name)).toEqual(['d'])
+  })
+  it('거르기: 이름 · 폴더 · 묶음 · 브랜치, 대소문자 무시', () => {
+    const s = flowState()
+    expect(filterTasks(s.tasks, '서버', s.settings.groups, {}).map((t) => t.name)).toEqual(['a'])
+    expect(filterTasks(s.tasks, 'CODE/B', s.settings.groups, {}).map((t) => t.name)).toEqual(['b'])
+    expect(filterTasks(s.tasks, 'feat', s.settings.groups, { '/code/e': 'feat/x' }).map((t) => t.name)).toEqual(['e'])
+    expect(filterTasks(s.tasks, '  ', s.settings.groups, {})).toHaveLength(5)
+    expect(flowSections(s, {}, new Set(), 'zzz').every((x) => x.tasks.length === 0)).toBe(true)
+  })
+})
+
+describe('countBar · unreadTasks · lastLine · timeAgo', () => {
+  it('막대: 확인 · 실행 · 끝남 · 조용 — 마지막 상태(완료) 일감은 세지 않는다', () => {
+    const s = flowState()
+    const activity = { [paneOf(s, 'a')]: act('running'), [paneOf(s, 'b')]: act('waiting', { attention: true }), [paneOf(s, 'd')]: act('done') }
+    expect(countBar(s, activity, new Set())).toEqual({ need: 1, run: 1, done: 1, idle: 1 })
+  })
+  it('안 본 것: 그 일감을 마지막으로 본 뒤 끝난 pane 이 있으면, 지금 보는 일감은 아님', () => {
+    const s = flowState()
+    const a = s.tasks[0]!
+    const b = s.tasks[1]!
+    const activity = { [paneOf(s, 'a')]: act('done', { endedAt: 50 }), [paneOf(s, 'b')]: act('failed', { endedAt: 50 }) }
+    s.activeTaskId = b.id
+    expect([...unreadTasks(s, activity, { [a.id]: 10 })]).toEqual([a.id])
+    expect([...unreadTasks(s, activity, { [a.id]: 60 })]).toEqual([])
+  })
+  it('마지막 한 줄: 기다림 · 실패 · 실행 · 끝남, 없으면 null', () => {
+    const s = flowState()
+    const t = s.tasks[0]!
+    const p = paneOf(s, 'a')
+    expect(lastLine(t, {})).toBeNull()
+    expect(lastLine(t, { [p]: act('failed', { command: 'npm test', exitCode: 1 }) })).toEqual({ text: '✗ npm test · exit 1', tone: 'err' })
+    expect(lastLine(t, { [p]: act('waiting', { attention: true, message: '허락이 필요해요 · Bash' }) })).toEqual({ text: '허락이 필요해요 · Bash', tone: 'wait' })
+    expect(lastLine(t, { [p]: act('running', { command: 'npm run dev' }) })).toEqual({ text: '● npm run dev', tone: 'run' })
+    expect(lastLine(t, { [p]: act('done', { command: 'ls' }) })).toEqual({ text: '✓ ls', tone: 'dim' })
+  })
+  it('몇 분 전', () => {
+    expect(timeAgo(1000, 1000 + 20_000)).toBe('방금')
+    expect(timeAgo(0, 5 * 60_000)).toBe('5분')
+    expect(timeAgo(0, 3 * 3600_000)).toBe('3시간')
+    expect(timeAgo(0, 50 * 3600_000)).toBe('2일')
+  })
+})

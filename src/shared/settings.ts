@@ -66,7 +66,7 @@ export function defaultExtraSettings(): ExtraSettings {
     portTipSeen: false,
     chatPermission: 'ask',
     sidebarView: 'flow',
-    sidebarClosed: [],
+    sidebarClosed: ['done'], // 흐름 보기에서 기본 마지막 상태(완료)는 접어 둔다 (21b 보드)
   }
 }
 

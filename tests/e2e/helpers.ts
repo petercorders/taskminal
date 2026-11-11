@@ -11,6 +11,8 @@ export interface SeedTask {
   cwd?: string
   groupId?: string | null
   color?: string | null
+  /** 기본 'doing' (21b 흐름 보기 시험이 칸을 나눈다) */
+  statusId?: string
   /** 빠른 명령 (20단계) */
   quickCommands?: Array<Record<string, unknown>>
 }
@@ -21,7 +23,7 @@ export function taskJson(t: SeedTask) {
     id: t.id,
     name: t.name,
     cwd,
-    statusId: 'doing',
+    statusId: t.statusId ?? 'doing',
     groupId: t.groupId ?? null,
     color: t.color ?? null,
     tabs: [{ id: `${t.id}-tab`, layout: { type: 'pane', paneId: t.paneId }, activePaneId: t.paneId }],
