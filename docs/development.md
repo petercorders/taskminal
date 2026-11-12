@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-12 (28단계 Orca 에서 배워 다듬기 병합 — 설정 구조 · 간격 척도 · 대화 정렬. 27단계 UX 감사 · 다듬기 병합 — 배율 1 에서 DOM 렌더러 · 첫 실행 대화. 26단계: 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
+마지막 갱신: 2026-11-12 (작업 위치를 Orca 워크스페이스로 옮김 — 2절 '작업 위치'. 28단계 Orca 에서 배워 다듬기 병합 — 설정 구조 · 간격 척도 · 대화 정렬. 27단계 UX 감사 · 다듬기 병합 — 배율 1 에서 DOM 렌더러 · 첫 실행 대화. 26단계: 새 일감은 대화로 시작 · ⌘J 셸. 1차 출시까지 남은 것은 8절: 서명 · 공증(사용자 준비물 뒤 `npm run release`) · 설치 · 미확인 목록)
 
 ## 1. 지금 어디까지
 
@@ -33,7 +33,8 @@
 ## 2. 진행 방식 (사용자 지시)
 
 - **15단계까지 묻지 말고 이어서 진행한다.** 디자인 맞추기는 15단계 뒤 사용자와 단계로 만든 다음에. 선택은 추천안으로 정해 계획에 적는다. 단계 사이에 멈추지 않고, 보고는 끝에 한 번.
-- 예외 — 반드시 사용자 확인: GitHub 원격 만들기 · push(원격 없음) · `/Applications` 에 실제 설치(14단계) · 사용자 Claude Code 설정 바꾸기 · 실제 데이터 폴더(`~/Library/Application Support/Taskminal`) 건드리기.
+- 예외 — 반드시 사용자 확인: `/Applications` 에 실제 설치(14단계) · 사용자 Claude Code 설정 바꾸기 · 실제 데이터 폴더(`~/Library/Application Support/Taskminal`) 건드리기. (GitHub push · Pages · 릴리스는 2026-11-11 사용자 "너가 알아서 실행해줘 나한테 묻지마" 로 자율.)
+- **작업 위치 (2026-11-12 옮김)**: Orca 워크스페이스 `~/orca/workspaces/taskminal/taskminal`(Orca 프로젝트 `~/orca/projects/taskminal` 의 worktree, 브랜치 `petercorders/taskminal` → upstream `origin/main`). 커밋 뒤 `git push origin HEAD:main` 으로 올린다. 저장소 로컬 git 이름 · 주소는 `petercorders` · GitHub noreply(전역 설정의 개인 메일을 공개 저장소에 남기지 않으려고). 옛 폴더 `~/taskminal` · `~/taskminal-work` 와 cherry-pick 으로 올리던 흐름(`published-local-main` 태그)은 더 쓰지 않는다 — 문서 안의 옛 경로는 그때의 기록이다.
 - 보고 · 커밋 메시지는 한국어.
 
 ## 3. 단계 하나의 순서
@@ -67,7 +68,7 @@
 
 - e2e 는 `TASKMINAL_USER_DATA=<임시 폴더>` 로만 앱을 띄운다. 앱은 `args: ['.']` (out/main/index.js 직접 주면 앱 이름이 Electron 이 된다).
 - e2e 상태는 `tests/e2e/helpers.ts` 의 `seedState` 로 깐다(기본 `confirmQuit:false` — 켜져 있으면 실행 중 셸 때문에 `app.close` 가 대화상자에서 멈춘다).
-- **사용자가 `npm run dev` 로 앱을 띄워 둔 동안 `~/taskminal` 의 src 를 고치지 않는다** — 화면을 다시 읽어 셸이 모두 끝난다. 그때는 `git worktree add ../taskminal-work stage-N-…` 같은 별도 폴더에서 일한다(그 폴더에서 `npm ci` 필요 · node-pty postinstall 이 spawn-helper 권한을 고친다).
+- **사용자가 `npm run dev` 로 앱을 띄워 둔 동안 그 폴더의 src 를 고치지 않는다** — 화면을 다시 읽어 셸이 모두 끝난다. 그때는 Orca 에서 새 워크스페이스를 만들거나(`orca worktree create`) `git worktree add` 로 별도 폴더에서 일한다(그 폴더에서 `npm ci` 필요 · node-pty postinstall 이 spawn-helper 권한을 고친다).
 - `rm -rf` 는 가드 훅이 막는다 — 파일을 하나씩 지운다. zsh 글롭은 따옴표(`--include='*.ts'`).
 - 다른 파일을 일부러 남기고 커밋할 때: `HARNESS_PARTIAL_COMMIT=1 git commit …`
 - renderer → node/electron import 금지(경계 검사). preload API 는 동작 단위로 좁게, main IPC 는 renderer 값을 검사(`isPaneId` · 크기 상한).
@@ -234,8 +235,8 @@
 0~25단계 기능은 모두 `main` 에 있다. 아래는 **사용자 손이 필요한 것 · 실제 환경에서만 확인되는 것** 이다. 하나씩 끝나면 이 절에서 지운다.
 
 ### 사용자 준비물 → 출시
-1. **Developer ID 서명 · 공증** — 키체인에 'Developer ID Application' 인증서(Xcode › Settings › Accounts › Manage Certificates) + 공증 프로필 `taskminal-notary`(`xcrun notarytool store-credentials taskminal-notary --apple-id … --team-id …`, 비밀번호는 앱 전용 암호를 사용자가 직접). 그 뒤 `npm run release` — 서명 · 공증 · `spctl -a` · 배포본 검사(`scripts/check-package.mjs`)까지 한 번에. 둘 중 하나라도 없으면 release 가 무엇이 없는지 말하고 멈춘다(`scripts/release-config.mjs`).
-2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). 저장소 push · 릴리스 만들기는 메인 세션(사용자 확인) 몫.
+1. **Developer ID 서명 · 공증** — 준비물은 끝남(2026-11-11): 인증서 'Developer ID Application: KiBong Kim (96CFW3T8G4)' 이 로그인 키체인에, 공증 프로필 `taskminal-notary`(Account Holder Apple ID)가 확인됨. 첫 공증 제출(2026-11-11 22:36, id `5fe32385-…`)은 26단계 이전 빌드라 내보내지 않는다 — Apple 이 이 팀의 첫 공증을 오래 붙잡고 있어 `xcrun notarytool history --keychain-profile taskminal-notary` 로 통과를 본 뒤, **이 폴더에서 최신 main 으로 `npm run release`** 를 다시 돌린다(서명 · 공증 · `spctl -a` · 배포본 검사 `scripts/check-package.mjs` 까지 한 번에, 공증 대기가 길어 백그라운드로).
+2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). release 가 통과하면 `spctl` · `xcrun stapler validate` 확인 → dmg · zip 을 Release 로 올리고 → 홈페이지 `site/assets/site.js` 의 `RELEASE = 'ready'` 로 바꿔 push(내려받기 단추가 OS 를 보고 dmg 로 잇는다).
 3. **/Applications 설치 · Finder 더블클릭 실행** — 개발 앱이 아니라 서명된 .app 으로(14 · 18단계 미확인). 확인할 것: 셸 · 한글 · 최소 환경 PATH(`which node`) · 셸 지킴이 · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지(18단계 verify 중 실제 설치 성공).
 4. **명령줄 도구 설치** — 앱 메뉴 '명령줄 도구 설치…' 가 `/usr/local/bin/taskminal` 링크를 만든다. 쓸 수 없는 폴더면 직접 칠 `sudo mkdir … && sudo ln -sf …` 명령을 돌려준다(`src/main/cli-install.ts`) — 서명된 .app 에서 실제 설치는 미확인(24단계).
 
