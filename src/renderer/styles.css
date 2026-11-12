@@ -31,6 +31,8 @@
   --fg: #e6e7ea;
   --muted: #a1a6ae; /* 26단계: #8a8f98 은 바탕(#131418)에서 대비 5.5 지만 반투명 · 띠 바탕에서 4.5 아래로 — 올림 */
   --accent: #5b9cf5;
+  --accent-ink: var(--accent);
+  --running-ink: var(--running);
   --accent-soft: #5b9cf522;
   --danger: #e07a7a;
   --running: #5b9cf5;
@@ -48,11 +50,15 @@
   --raised: #e8eaee;
   --line: #d5d8dd;
   --fg: #1f2328;
-  --muted: #5f6670;
-  --danger: #c4413b;
-  --waiting: #9a6700;
-  --done: #2f8a46;
-  --failed: #c4413b;
+  --muted: #515963;
+  --danger: #a52b27;
+  --accent-ink: color-mix(in srgb, var(--accent) 55%, #000);
+  --running-ink: color-mix(in srgb, var(--running) 55%, #000);
+  --accent-soft: #2454a622;
+  --running: #2454a6;
+  --waiting: #805400;
+  --done: #236d36;
+  --failed: #a52b27;
   color-scheme: light;
 }
 
@@ -297,6 +303,7 @@ select {
 .task-view {
   /* 이어받기 요약 카드(24단계)가 이 칸 위에 덮어 뜬다 */
   position: relative;
+  container: task-workspace / inline-size;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -368,14 +375,14 @@ select {
   gap: var(--space-1);
   flex: none;
 }
-.pane-head-status.running { color: var(--running); }
+.pane-head-status.running { color: var(--running-ink); }
 .pane-head-status.waiting { color: var(--waiting); }
 .pane-head-status.done { color: var(--done); }
 .pane-head-status.failed { color: var(--failed); }
 
 /* ─── 활동 아이콘 (모양으로도 구분: 호 · 원 · 체크 · 네모) ─── */
 .activity-icon { flex: none; display: block; }
-.activity-icon.running { color: var(--running); animation: spin 1.1s linear infinite; }
+.activity-icon.running { color: var(--running-ink); animation: spin 1.1s linear infinite; }
 .activity-icon.waiting { color: var(--waiting); }
 .activity-icon.done { color: var(--done); }
 .activity-icon.failed { color: var(--failed); }
@@ -807,7 +814,7 @@ select {
   padding: var(--space-half) var(--space-2);
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
   font-weight: 600;
 }
@@ -874,7 +881,7 @@ select {
 }
 .palette-label mark {
   background: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .palette-detail {
@@ -1396,7 +1403,7 @@ select {
 }
 .key-field.listening {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .notify-table {
   width: 100%;
@@ -1688,7 +1695,7 @@ input[type='checkbox'] {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   cursor: pointer;
   text-decoration: underline;
 }
@@ -2010,7 +2017,7 @@ input[type='checkbox'] {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 13px;
   text-align: left;
   padding: 0 var(--space-3);
@@ -2020,7 +2027,7 @@ input[type='checkbox'] {
   color: var(--done);
 }
 .update-status.run {
-  color: var(--running);
+  color: var(--running-ink);
 }
 .update-status.err {
   color: var(--failed);
@@ -2192,7 +2199,7 @@ input[type='checkbox'] {
 }
 .tab-action.history.on,
 .tab-action.notes.on {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 /* 24단계 '✎ 메모 · 할 일 n' · '↺ 요약' — 기록 단추처럼 정수 폭 (할 일이 있으면 넓게) */
@@ -2221,7 +2228,9 @@ input[type='checkbox'] {
   /* 터미널의 가린 칸(xterm 꾸밈, z-index 7)이 좁아진 본문 밖으로 넘쳐도 칸 위를 덮지 않게 */
   position: relative;
   z-index: 8;
-  width: 380px;
+  box-sizing: border-box;
+  width: min(380px, calc(100vw - var(--sidebar-width) - 184px));
+  min-width: 0;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -2287,7 +2296,7 @@ input[type='checkbox'] {
 }
 .history-scopes .seg.on {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 .history-chips,
@@ -2309,7 +2318,7 @@ input[type='checkbox'] {
 .history-chips .chip.on,
 .gf-chips .chip.on {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 .history-chips .chip.fail.on {
@@ -2374,7 +2383,7 @@ input[type='checkbox'] {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  color: var(--running);
+  color: var(--running-ink);
 }
 .history-line {
   display: flex;
@@ -2393,7 +2402,7 @@ input[type='checkbox'] {
   color: var(--failed);
 }
 .history-badge.run {
-  color: var(--running);
+  color: var(--running-ink);
 }
 .history-time,
 .history-dur,
@@ -2703,7 +2712,7 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 .quick-state.running {
-  color: var(--running);
+  color: var(--running-ink);
 }
 .quick-state.done {
   color: var(--done);
@@ -2879,7 +2888,7 @@ input[type='checkbox'] {
 }
 .chat-status.run,
 .chat-tools-state.run {
-  color: var(--running);
+  color: var(--running-ink);
 }
 .chat-status.wait {
   color: var(--waiting);
@@ -2996,7 +3005,7 @@ input[type='checkbox'] {
   border: 1px solid #3d3566;
 }
 .chat-card.answered {
-  opacity: 0.7;
+  border-style: dashed;
 }
 .chat-card-title {
   font-weight: 600;
@@ -3043,7 +3052,7 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 .chat-card.ask .chat-card-actions button.primary {
-  background: #8b6cf0;
+  background: #6e49c7;
   color: #fff;
 }
 .chat-band.err .chat-card-actions button.primary {
@@ -3089,6 +3098,7 @@ input[type='checkbox'] {
   white-space: pre-wrap;
   color: var(--fg);
   font-size: 13.5px;
+  line-height: 1.45;
 }
 .chat-done {
   color: var(--done);
@@ -3238,7 +3248,7 @@ input[type='checkbox'] {
   border-radius: var(--r-md);
   font-size: 12px;
   font-weight: 600;
-  background: #8b6cf0;
+  background: #6e49c7;
   color: #fff;
   cursor: pointer;
 }
@@ -3313,7 +3323,7 @@ input[type='checkbox'] {
   text-overflow: ellipsis;
 }
 .sidebar-bar-item.need { color: var(--waiting); border-top-color: var(--waiting); }
-.sidebar-bar-item.run { color: var(--running); border-top-color: var(--running); }
+.sidebar-bar-item.run { color: var(--running-ink); border-top-color: var(--running); }
 .sidebar-bar-item.done { color: var(--done); border-top-color: var(--done); }
 
 .flow-section .sidebar-section-title {
@@ -3384,8 +3394,8 @@ input[type='checkbox'] {
 }
 .task-last.err { color: var(--failed); }
 .task-last.wait { color: var(--waiting); }
-.task-last.run { color: var(--running); }
-.task-last.dim { opacity: 0.9; } /* 26단계: 0.75 는 대비 4.15 */
+.task-last.run { color: var(--running-ink); }
+.task-last.dim { opacity: 1; } /* 완료 상태도 테마의 글자 대비를 유지한다 */
 .task-group,
 .task-terms {
   flex: none;
@@ -3398,6 +3408,33 @@ input[type='checkbox'] {
 .chat-agent.codex {
   background: #1d2a26;
   color: #8fe0c4;
+}
+:root[data-theme='light'] .chat-card.perm,
+:root[data-theme='light'] .chat-band.warn {
+  background: #fff4d9;
+  border-color: #a87b20;
+}
+:root[data-theme='light'] .chat-card.ask {
+  background: #f1ecff;
+  border-color: #8e75c2;
+}
+:root[data-theme='light'] .chat-card-cmd {
+  background: #0000000a;
+}
+:root[data-theme='light'] .chat-ask-option {
+  border-color: #8e75c2;
+}
+:root[data-theme='light'] .chat-ask-option.on {
+  background: #ded2f6;
+  border-color: #7353a4;
+}
+:root[data-theme='light'] .chat-band.err {
+  background: #fff0ef;
+  border-color: #c4413b;
+}
+:root[data-theme='light'] .chat-send.stop {
+  background: #ffe3e1;
+  color: #9d2924;
 }
 :root[data-theme='light'] .chat-agent.codex {
   background: #dff3ec;
@@ -3505,7 +3542,7 @@ input[type='checkbox'] {
   --rv-del-fg: #f2a7a1;
   --rv-pick: #3a2a12;
   --rv-pick-edge: #f0b866;
-  --rv-violet: #8b6cf0;
+  --rv-violet: #6e49c7;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -3888,7 +3925,7 @@ input[type='checkbox'] {
   color: var(--failed);
 }
 .review-band.info {
-  color: var(--running);
+  color: var(--running-ink);
 }
 :root[data-theme='light'] .review-band.warn {
   background: #fbefd5;
@@ -4066,7 +4103,7 @@ input[type='checkbox'] {
   color: var(--failed);
 }
 .resume-fact.running .resume-mark {
-  color: var(--running);
+  color: var(--running-ink);
 }
 .resume-fact.done .resume-mark {
   color: var(--done);
@@ -4095,7 +4132,7 @@ input[type='checkbox'] {
   padding: var(--space-half) var(--space-2);
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 13px;
   cursor: pointer;
 }
@@ -4108,7 +4145,9 @@ input[type='checkbox'] {
 .notes-panel {
   position: relative;
   z-index: 8;
-  width: 300px;
+  box-sizing: border-box;
+  width: min(300px, calc(100vw - var(--sidebar-width) - 184px));
+  min-width: 0;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -4158,7 +4197,7 @@ input[type='checkbox'] {
 }
 .note-by {
   flex: none;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 12px;
 }
 .notes-input {
@@ -4240,7 +4279,7 @@ input[type='checkbox'] {
 }
 .archive-tabs button[aria-selected='true'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .archive-search {
   box-sizing: border-box;
@@ -4294,7 +4333,7 @@ input[type='checkbox'] {
 }
 .archive-hint {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .archive-empty {
   color: var(--muted);
@@ -4407,7 +4446,7 @@ input[type='checkbox'] {
 .new-task-where button[aria-pressed='true'],
 .new-task-start button[aria-pressed='true'] {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* 창 폭과 별개로, 분할된 pane도 자기 폭에 맞춰 액션을 배치한다. */
@@ -4540,6 +4579,47 @@ input[type='checkbox'] {
   .font-preview,
   .setting-desc {
     overflow-wrap: anywhere;
+  }
+}
+
+/* 보조 패널을 연 좁은 본문: 안내가 터미널 높이를 모두 차지하지 않게 한다. */
+@container task-workspace (max-width: 360px) {
+  .quick-empty {
+    justify-content: space-between;
+  }
+  .quick-empty-text {
+    display: none;
+  }
+  .quick-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .quick-button,
+  .quick-add,
+  .quick-more {
+    flex-shrink: 0;
+  }
+  .tab-bar {
+    height: auto;
+    min-height: var(--head-h);
+    flex-wrap: wrap;
+  }
+  .tab-list {
+    min-height: var(--head-h);
+  }
+  .tab-actions {
+    flex-basis: 100%;
+    height: var(--row-h);
+    justify-content: flex-end;
+    border-top: 1px solid var(--line);
+  }
+  .tab-action.history,
+  .tab-action.notes,
+  .tab-action.resume {
+    width: 30px;
+  }
+  .tab-action-label {
+    display: none;
   }
 }
 

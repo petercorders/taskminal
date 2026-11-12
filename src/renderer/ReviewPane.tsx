@@ -601,7 +601,7 @@ export function ReviewPane(p: Props) {
       <div className="review-body">
         <div className="review-list" data-testid="review-list">
           <div className="review-list-tools">
-            <input ref={filterRef} className="review-filter" placeholder="⌕ 파일 거르기 /" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="review-filter" />
+            <input ref={filterRef} className="review-filter" aria-label="변경 파일 거르기" placeholder="⌕ 파일 거르기 /" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="review-filter" />
             <span className="review-seg">
               <button type="button" aria-pressed={!many} onClick={() => setFolderView(false)}>
                 목록
@@ -720,6 +720,7 @@ export function ReviewPane(p: Props) {
               className="review-msg"
               data-testid="review-msg"
               placeholder="커밋 메시지를 써 주세요"
+              aria-label="커밋 메시지"
               value={message}
               disabled={commit.s === 'running'}
               onChange={(e) => setMessage(e.target.value)}

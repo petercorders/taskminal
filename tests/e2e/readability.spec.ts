@@ -31,7 +31,13 @@ async function measure(page: Page): Promise<Sample[]> {
   return page.evaluate(() => {
     const parse = (c: string): [number, number, number, number] => {
       const m = c.match(/rgba?\(([^)]+)\)/)
-      if (!m) return [0, 0, 0, 0]
+      if (!m) {
+        // Chromium은 color-mix(in srgb, ...)의 계산값을 color(srgb ...)로 돌려준다.
+        const srgb = c.match(/color\(srgb\s+([^)]*)\)/)
+        if (!srgb) return [0, 0, 0, 0]
+        const p = srgb[1]!.split(/[ /]+/).filter(Boolean).map(Number)
+        return [p[0]! * 255, p[1]! * 255, p[2]! * 255, p[3] ?? 1]
+      }
       const p = m[1]!.split(/[ ,/]+/).filter(Boolean).map(Number)
       return [p[0]!, p[1]!, p[2]!, p[3] ?? 1]
     }
@@ -125,8 +131,8 @@ async function record(name: string) {
   return bad
 }
 
-async function launch(tasks: Parameters<typeof seedState>[1]) {
-  seedState(userData, tasks)
+async function launch(tasks: Parameters<typeof seedState>[1], settings: Record<string, unknown> = {}) {
+  seedState(userData, tasks, [], settings)
   app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData, TASKMINAL_CLAUDE_BIN: FAKE_CLAUDE } })
   win = await firstWindow(app)
   await win.setViewportSize({ width: 1280, height: 800 }).catch(() => {})
@@ -160,6 +166,7 @@ test('가독성: 사이드바 · 터미널 · 대화 · 팔레트 · 설정 · �
   await expect(chat.getByTestId('chat-empty')).toBeVisible()
   bad.push(...(await record('chat-empty')).map((p) => `chat-empty: ${p}`))
   await chat.getByTestId('chat-input').fill('안녕')
+  bad.push(...await record('composer'))
   await chat.getByTestId('chat-input').press('Enter')
   await expect(chat.getByTestId('chat-status')).toContainText('끝남')
   bad.push(...(await record('chat')).map((p) => `chat: ${p}`))
@@ -185,5 +192,42 @@ test('가독성: 사이드바 · 터미널 · 대화 · 팔레트 · 설정 · �
 test('가독성: 일감이 없는 첫 화면', async () => {
   await launch([])
   const bad = (await record('empty')).map((p) => `empty: ${p}`)
+  expect(bad, bad.join('\n')).toEqual([])
+})
+
+test('가독성: 라이트 테마의 완료·허락·검색·설정도 대비 기준을 지킨다', async () => {
+  await launch([{ id: 'light', name: '밝은 화면 점검', paneId: 'lp', cwd: userData }], { theme: 'light' })
+  await expect(win.locator('html')).toHaveAttribute('data-theme', 'light')
+  const bad: string[] = []
+  bad.push(...await record('light-main'))
+  await command('chat-new')
+  const chat = win.locator('[data-testid="task-view"][aria-hidden="false"] [data-testid="chat-pane"]')
+  await chat.getByTestId('chat-input').fill('안녕')
+  bad.push(...await record('light-composer'))
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('chat-status')).toContainText('끝남')
+  bad.push(...await record('light-chat'))
+  await chat.getByTestId('chat-input').fill('perm 1')
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('perm-card')).toBeVisible()
+  bad.push(...await record('light-permission'))
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('chat-status')).toContainText('끝남')
+  await chat.getByTestId('chat-input').fill('ask')
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('ask-card')).toBeVisible()
+  bad.push(...await record('light-question'))
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('chat-status')).toContainText('끝남')
+  await chat.getByTestId('chat-input').fill('crash')
+  await chat.getByTestId('chat-input').press('Enter')
+  await expect(chat.getByTestId('chat-band')).toBeVisible()
+  bad.push(...await record('light-error'))
+  for (const c of ['palette', 'settings', 'weekly', 'archive-open']) {
+    await command(c)
+    await expect(win.getByRole('dialog').first()).toBeVisible()
+    bad.push(...await record(`light-${c}`))
+    await win.keyboard.press('Escape')
+  }
   expect(bad, bad.join('\n')).toEqual([])
 })

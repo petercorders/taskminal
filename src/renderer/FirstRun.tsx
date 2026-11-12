@@ -21,16 +21,30 @@ export function FirstRun({ home, onCreate, onDone, again = false }: Props) {
   const [page, setPage] = useState(0)
   const [folder, setFolder] = useState(home || '~')
   const [copied, setCopied] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyError, setCopyError] = useState(false)
+  const copyBusy = useRef(false)
+  const copyRequest = useRef(0)
+  const pageRef = useRef(page)
+  pageRef.current = page
   const [picking, setPicking] = useState(false)
   const alive = useRef(true)
   const primaryRef = useRef<HTMLButtonElement>(null)
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true
+    return () => {
       alive.current = false
-    },
-    [],
-  )
-  useEffect(() => primaryRef.current?.focus(), [page])
+      copyRequest.current++
+    }
+  }, [])
+  useEffect(() => {
+    copyRequest.current++
+    copyBusy.current = false
+    setCopying(false)
+    setCopyError(false)
+    setCopied(false)
+    primaryRef.current?.focus()
+  }, [page])
 
   const pick = () => {
     if (picking) return
@@ -46,7 +60,26 @@ export function FirstRun({ home, onCreate, onDone, again = false }: Props) {
     )
   }
   const copy = () => {
-    void navigator.clipboard.writeText(CLAUDE_BELL_COMMAND).then(() => alive.current && setCopied(true))
+    if (copyBusy.current || page !== 1) return
+    copyBusy.current = true
+    const request = ++copyRequest.current
+    const current = () => alive.current && request === copyRequest.current && pageRef.current === 1
+    setCopying(true)
+    setCopyError(false)
+    setCopied(false)
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(CLAUDE_BELL_COMMAND)
+        if (current()) setCopied(true)
+      } catch {
+        if (current()) setCopyError(true)
+      } finally {
+        if (current()) {
+          copyBusy.current = false
+          setCopying(false)
+        }
+      }
+    })()
     // 복사 버튼을 눌러도 ↩ 는 '다음' — 포커스를 기본 버튼으로 돌린다
     primaryRef.current?.focus()
   }
@@ -108,10 +141,11 @@ export function FirstRun({ home, onCreate, onDone, again = false }: Props) {
             </p>
             <div className="first-run-code">
               <code data-testid="first-run-command">{CLAUDE_BELL_COMMAND}</code>
-              <button type="button" className="button" onClick={copy}>
-                {copied ? '복사함' : '명령 복사 ⌘C'}
+              <button type="button" className="button" onClick={copy} disabled={copying}>
+                {copying ? '복사 중…' : copied ? '복사함' : '명령 복사 ⌘C'}
               </button>
             </div>
+            {copyError && <p role="alert">복사하지 못했어요. ‘명령 복사’를 눌러 다시 시도해 주세요.</p>}
           </>
         )}
         {page === 2 && (

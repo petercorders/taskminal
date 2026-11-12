@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Modal } from './Modal'
 import { hours, weekRange, weeklyMarkdown, weeklySummary } from '../shared/weekly'
 import type { HistoryEntry } from '../shared/history'
@@ -24,6 +24,20 @@ function label(start: number, offset: number): string {
 /** 주간 정리 — 한 주의 일감 · 명령 · 실패 · 터미널 시간(명령이 돈 시간 합). [ ] 로 주 바꾸기 · ⇧⌘C 마크다운으로 복사 */
 export function WeeklyPanel({ entries, tasks, onCopied, onClose }: Props) {
   const [offset, setOffset] = useState(0)
+  const [copying, setCopying] = useState(false)
+  const [copyError, setCopyError] = useState(false)
+  const copyBusy = useRef(false)
+  const copyRequest = useRef(0)
+  const alive = useRef(true)
+  const offsetRef = useRef(offset)
+  offsetRef.current = offset
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      copyRequest.current++
+    }
+  }, [])
   const [now] = useState(() => Date.now())
   const range = useMemo(() => weekRange(now, new Date(now).getTimezoneOffset(), offset), [now, offset])
   const names = useMemo(() => new Map(tasks.map((t) => [t.id, t.name])), [tasks])
@@ -31,10 +45,41 @@ export function WeeklyPanel({ entries, tasks, onCopied, onClose }: Props) {
   const text = label(range.start, offset)
   const max = Math.max(1, ...s.days)
 
-  const copy = () => void navigator.clipboard.writeText(weeklyMarkdown(s, text)).then(onCopied, () => {})
+  const changeWeek = (delta: number) => {
+    const next = Math.min(0, offsetRef.current + delta)
+    if (next === offsetRef.current) return
+    copyRequest.current++
+    copyBusy.current = false
+    offsetRef.current = next
+    setCopying(false)
+    setCopyError(false)
+    setOffset(next)
+  }
+  const copy = () => {
+    if (copyBusy.current) return
+    copyBusy.current = true
+    const request = ++copyRequest.current
+    const copiedOffset = offsetRef.current
+    const current = () => alive.current && request === copyRequest.current && offsetRef.current === copiedOffset
+    setCopying(true)
+    setCopyError(false)
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(weeklyMarkdown(s, text))
+        if (current()) onCopied()
+      } catch {
+        if (current()) setCopyError(true)
+      } finally {
+        if (current()) {
+          copyBusy.current = false
+          setCopying(false)
+        }
+      }
+    })()
+  }
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === '[') setOffset((o) => o - 1)
-    else if (e.key === ']') setOffset((o) => Math.min(0, o + 1))
+    if (e.key === '[') changeWeek(-1)
+    else if (e.key === ']') changeWeek(1)
     else if (e.key.toLowerCase() === 'c' && e.metaKey && e.shiftKey) {
       e.preventDefault()
       copy()
@@ -45,19 +90,20 @@ export function WeeklyPanel({ entries, tasks, onCopied, onClose }: Props) {
     <Modal role="dialog" labelledBy="weekly-title" className="weekly-panel" onCancel={onClose}>
       <div onKeyDown={onKeyDown} tabIndex={-1} data-testid="weekly-panel" style={{ display: 'contents' }}>
         <div className="weekly-head">
-          <button type="button" className="button" aria-label="앞 주" onClick={() => setOffset((o) => o - 1)} autoFocus>
+          <button type="button" className="button" aria-label="앞 주" onClick={() => changeWeek(-1)} autoFocus>
             ‹
           </button>
           <h2 id="weekly-title" data-testid="weekly-label">
             {text}
           </h2>
-          <button type="button" className="button" aria-label="다음 주" disabled={offset === 0} onClick={() => setOffset((o) => Math.min(0, o + 1))}>
+          <button type="button" className="button" aria-label="다음 주" disabled={offset === 0} onClick={() => changeWeek(1)}>
             ›
           </button>
-          <button type="button" className="button" onClick={copy} data-testid="weekly-copy">
-            마크다운으로 복사 <kbd>⇧⌘C</kbd>
+          <button type="button" className="button" onClick={copy} data-testid="weekly-copy" disabled={copying}>
+            {copying ? '복사 중…' : '마크다운으로 복사'} <kbd>⇧⌘C</kbd>
           </button>
         </div>
+        {copyError && <p role="alert">복사하지 못했어요. ‘마크다운으로 복사’를 눌러 다시 시도해 주세요.</p>}
         {s.insight && <p className="weekly-insight">✗ {s.insight}</p>}
         <div className="weekly-kpis">
           {(

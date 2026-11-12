@@ -75,6 +75,8 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 
 | 29 | UI/UX · 반응형 | 사이드바 폭 · 작은 창/분할 pane의 대화·검토·설정 배치 · 모달 크기 제한 · 보관함/검토/출력 찾기 키보드 · 복구 조회 오류·재시도 | 28 | 실제 계정·레티나·스크린리더는 별도 확인 | e2e archive-ux · uiux-polish · responsive · review, 회귀 변이 9개 (`uiux-sidebar-polish`, main 미병합, `docs/stages/29-uiux-responsive.md`) |
 
+| 30 | 전체 UI/UX 85점 개선 루프 | 고정 40항목 평가·감점 수정·재평가. 라이트 대비 · 보조 패널 · 복사 실패 안내·수명 · 입력 이름 | 29 | 실제 사용자 테스트·접근성 인증으로 표현하지 않음 | 고정표 95점, 관련 e2e·변이9개 (`uiux-sidebar-polish`, main 미병합, `docs/stages/30-uiux-score-loop.md`) |
+
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 나머지 디자인 맞추기(design-gaps 1 · 2 · 3 · 5 — 전체 보기 · AI 사용량 등)는 사용자와 따로 단계로 나눈다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 

@@ -43,6 +43,7 @@ export function NotesPanel({ task, signal, onAdd, onToggle, onRemove, onClose }:
       <input
         ref={input}
         className="notes-input"
+        aria-label="할 일 · 메모"
         placeholder="할 일 · 메모 적고 ↩"
         value={draft}
         data-testid="notes-input"

@@ -177,7 +177,7 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
             <span className="task-dot" style={{ background: task.color ?? 'transparent' }} aria-hidden />
             <span className="task-text">
               <span className="task-line1">
-                <span className="task-name">{task.name}</span>
+                <span className="task-name" title={task.name}>{task.name}</span>
                 {unread.has(task.id) && <span className="task-unread" aria-label="새 출력" data-testid="task-unread" />}
                 {!compact && agoOf(task) && <span className="task-ago">{agoOf(task)}</span>}
               </span>

@@ -192,19 +192,19 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
             </svg>
           </button>
         ))}
-        <button type="button" className={`tab-action history${historyOpen ? ' on' : ''}`} aria-pressed={historyOpen} title="명령 기록 (⌘Y)" data-testid="history-button" onClick={onHistory}>
+        <button type="button" className={`tab-action history${historyOpen ? ' on' : ''}`} aria-label="명령 기록" aria-pressed={historyOpen} title="명령 기록 (⌘Y)" data-testid="history-button" onClick={onHistory}>
           <Icon name="history" size={14} />
-          기록
+          <span className="tab-action-label">기록</span>
         </button>
         {notes?.onResume && (
-          <button type="button" className="tab-action resume" title="이어받기 요약 다시 보기 (⌥⌘R)" data-testid="resume-button" onClick={notes.onResume}>
-            ↺ 요약
+          <button type="button" className="tab-action resume" aria-label="이어받기 요약 다시 보기" title="이어받기 요약 다시 보기 (⌥⌘R)" data-testid="resume-button" onClick={notes.onResume}>
+            <span aria-hidden>↺</span><span className="tab-action-label">요약</span>
           </button>
         )}
         {notes && (
-          <button type="button" className={`tab-action notes${notes.todo > 0 ? ' has-todo' : ''}${notes.open ? ' on' : ''}`} aria-pressed={notes.open} title="메모 · 할 일 (⌥⌘M)" data-testid="notes-button" onClick={notes.onToggle}>
+          <button type="button" className={`tab-action notes${notes.todo > 0 ? ' has-todo' : ''}${notes.open ? ' on' : ''}`} aria-label={`메모${notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}`} aria-pressed={notes.open} title="메모 · 할 일 (⌥⌘M)" data-testid="notes-button" onClick={notes.onToggle}>
             <Icon name="note" size={14} />
-            메모{notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}
+            <span className="tab-action-label">메모{notes.todo > 0 ? ` · 할 일 ${notes.todo}` : ''}</span>
           </button>
         )}
       </div>
