@@ -127,7 +127,7 @@ test('↩ 입력줄에 넣기(실행 안 함) · ⌥↩ 오른쪽 분할에서 �
   // ↩: 고른 줄을 지금 pane 입력줄에 — 실행하지 않는다
   await select('INS$((1+1))')
   await row('INS$((1+1))').getByTestId('history-insert').click()
-  await expect.poll(async () => ((await screenOf('pane-a')).match(/INS\$\(\(1\+1\)\)/g) ?? []).length).toBe(2)
+  await expect.poll(async () => ((await flatOf('pane-a')).match(/INS\$\(\(1\+1\)\)/g) ?? []).length).toBe(2)
   await win.waitForTimeout(800)
   expect(((await screenOf('pane-a')).match(/^INS2$/gm) ?? []).length).toBe(1)
   await win.keyboard.press('Control+c')

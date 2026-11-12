@@ -373,14 +373,21 @@ export function ReviewPane(p: Props) {
       return
     }
     if (e.metaKey || e.ctrlKey) return
+    if (mode === 'reverted' && e.key === 'Escape') {
+      e.preventDefault()
+      setMode('diff')
+      return
+    }
+    if (t instanceof Element && t.closest('button, select, a')) return
     if (mode === 'reverted') {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         setRevCursor((i) => Math.max(0, Math.min(reverted.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))))
       } else if (e.key === 'Enter') {
+        e.preventDefault()
         const r = reverted[revCursor]
         if (r) void restore(r.id)
-      } else if (e.key === 'Escape') setMode('diff')
+      }
       return
     }
     if (e.altKey && e.key === 'Enter') return e.preventDefault(), toggleSeen()

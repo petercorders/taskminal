@@ -11,6 +11,7 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --sidebar-width: clamp(248px, 24vw, 288px);
   /* 같은 종류 요소의 크기: 머리 줄 높이 · 목록 줄 높이 · 설정 한 줄 최소 높이 · 대화 글 칸 */
   --head-h: 40px;
   --row-h: 36px;
@@ -108,7 +109,7 @@ select {
 
 /* ─── 사이드바 ─── */
 .sidebar {
-  width: 248px;
+  width: var(--sidebar-width);
   flex: none;
   background: var(--panel);
   border-right: 1px solid var(--line);
@@ -321,6 +322,7 @@ select {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  container: work-pane / inline-size;
 }
 /* 어느 pane 에 칠지 보이게: 포커스 pane 은 머리 아래 강조 줄, 나머지는 내용을 흐리게 (Ghostty unfocused-split-opacity) */
 .pane-slot.focused {
@@ -440,6 +442,7 @@ select {
 
 .tab-list {
   display: flex;
+  flex: 1;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -548,6 +551,7 @@ select {
 
 .tab-actions {
   display: flex;
+  flex-shrink: 0;
   margin-left: auto;
   padding-right: var(--space-1);
 }
@@ -646,8 +650,11 @@ select {
 }
 
 .dialog {
+  box-sizing: border-box;
   width: 440px;
   max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 12vh - var(--space-4));
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -1017,7 +1024,7 @@ select {
 .settings-nav {
   display: flex;
   flex-direction: column;
-  width: 248px;
+  width: var(--sidebar-width);
   flex-shrink: 0;
   border-right: 1px solid var(--line);
   background: var(--panel);
@@ -1123,6 +1130,7 @@ select {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  container: settings-content / inline-size;
 }
 .settings-head {
   display: flex;
@@ -2820,6 +2828,7 @@ input[type='checkbox'] {
 /* ─── 대화 pane (21단계, 보드 'Chat') ─── */
 .chat-pane {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -4221,7 +4230,6 @@ input[type='checkbox'] {
 .archive-panel,
 .weekly-panel {
   width: min(760px, calc(100vw - 32px));
-  max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -4235,6 +4243,7 @@ input[type='checkbox'] {
   color: var(--accent);
 }
 .archive-search {
+  box-sizing: border-box;
   width: 100%;
   height: 30px;
   border: 1px solid var(--line);
@@ -4399,4 +4408,160 @@ input[type='checkbox'] {
 .new-task-start button[aria-pressed='true'] {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* 창 폭과 별개로, 분할된 pane도 자기 폭에 맞춰 액션을 배치한다. */
+@container work-pane (max-width: 560px) {
+  .chat-head {
+    height: auto;
+    min-height: var(--head-h);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--chat-gutter);
+  }
+  .chat-agent,
+  .chat-status,
+  .chat-switch {
+    flex-shrink: 0;
+  }
+  .chat-where {
+    flex-basis: 120px;
+  }
+  .chat-input-row {
+    flex-wrap: wrap;
+  }
+  .chat-input-row > .chat-model {
+    flex: 1 1 120px;
+  }
+  .chat-input-row > .chat-ctx {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    flex-shrink: 1;
+  }
+  .chat-perm-wrap {
+    max-width: 100%;
+  }
+  .chat-perm {
+    max-width: 100%;
+    height: auto;
+    min-height: 22px;
+    white-space: normal;
+  }
+  .chat-keys {
+    display: none;
+  }
+  .chat-send {
+    margin-left: auto;
+  }
+  .chat-empty,
+  .chat-band-body {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .review-head,
+  .review-file-head {
+    height: auto;
+    min-height: var(--head-h);
+    flex-wrap: wrap;
+    padding: var(--space-2);
+  }
+  .review-head .grow {
+    display: none;
+  }
+  .review-branch,
+  .review-summary {
+    min-width: 0;
+  }
+  .review-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(120px, 35%) minmax(160px, 1fr);
+    overflow-y: auto;
+  }
+  .review-list {
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .review-files,
+  .review-pane .review-file,
+  .review-pane .review-folder {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  .review-pick-tip {
+    display: none;
+  }
+  .review-commit-head,
+  .review-commit-acts,
+  .review-band {
+    flex-wrap: wrap;
+  }
+  .review-empty {
+    margin: var(--space-3);
+    padding: var(--space-3);
+    overflow-wrap: anywhere;
+  }
+  .review-rev-row {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--space-2);
+  }
+}
+
+@container settings-content (max-width: 560px) {
+  .settings-head,
+  .settings-body {
+    --settings-gutter: var(--space-4);
+  }
+  .setting-head,
+  .setting-controls,
+  .manage-item,
+  .choices.segment {
+    flex-wrap: wrap;
+  }
+  .setting-head {
+    gap: var(--space-2);
+  }
+  .setting-text {
+    flex-basis: 200px;
+  }
+  .setting-input,
+  .setting-select {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .setting-controls {
+    max-width: 100%;
+  }
+  .manage-item .setting-input {
+    flex: 1 1 160px;
+    width: 100%;
+  }
+  .font-preview,
+  .setting-desc {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 800px) {
+  :root {
+    --sidebar-width: 200px;
+  }
+  .palette-input-row {
+    flex-wrap: wrap;
+  }
+  .palette-help {
+    flex-basis: 100%;
+    text-align: right;
+  }
+  .weekly-head {
+    flex-wrap: wrap;
+  }
+  .archive-row {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+  .archive-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
 }

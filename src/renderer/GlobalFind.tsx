@@ -23,6 +23,7 @@ import { redact as redactText, type SecretOptions } from '../shared/redact'
 import type { AppState } from '../shared/types'
 import { sidebarSections } from './sidebar-model'
 import { terminals } from './terminals'
+import { trapModalTab } from './Modal'
 
 export type FindScope = 'all' | 'task' | 'group'
 const SCOPES: readonly FindScope[] = ['all', 'task', 'group']
@@ -243,6 +244,20 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return
+    if (e.key === 'Tab') {
+      if (e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        setScope((s) => SCOPES[(SCOPES.indexOf(s) + (e.shiftKey ? SCOPES.length - 1 : 1)) % SCOPES.length]!)
+      } else trapModalTab(e, e.currentTarget)
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+      return
+    }
+    // 옵션·더 보기 버튼의 Enter/Space는 그 버튼만 실행한다.
+    if (e.target instanceof Element && e.target.closest('button')) return
     const opt = e.altKey && e.metaKey
     if (opt && e.code === 'Digit1') return e.preventDefault(), setPrev((v) => !v)
     if (opt && e.code === 'Digit3') return e.preventDefault(), setDone((v) => !v)
@@ -261,12 +276,6 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
     } else if (e.key === 'Enter') {
       e.preventDefault()
       jump(sel, e.metaKey)
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-      setScope((s) => SCOPES[(SCOPES.indexOf(s) + (e.shiftKey ? SCOPES.length - 1 : 1)) % SCOPES.length]!)
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onClose()
     }
   }
 
@@ -277,7 +286,7 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
   const allCollapsed = byTask.length > 0 && byTask.every((t) => collapsed.has(t.taskId))
   return (
     <div className="palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette global-find" role="dialog" aria-label="모든 출력에서 찾기" data-testid="global-find" onKeyDown={onKeyDown}>
+      <div className="palette global-find" role="dialog" aria-modal="true" aria-label="모든 출력에서 찾기" data-testid="global-find" onKeyDown={onKeyDown}>
         <div className="palette-input-row">
           <span className="palette-scope" data-testid="global-find-scope">
             {SCOPE_LABEL[scope]}
@@ -293,7 +302,7 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
               setSelected(null)
             }}
           />
-          <span className="palette-help">⇥ 범위 · ⌘↩ 열어 둔 채</span>
+          <span className="palette-help">⌃⇥ 범위 · ⌘↩ 열어 둔 채</span>
         </div>
         {/* 칩을 눌러도 입력칸 포커스는 그대로(눌러 놓고 바로 이어 치게) */}
         <div className="gf-chips" onMouseDown={(e) => e.preventDefault()}>
@@ -430,7 +439,7 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
           </p>
         )}
         {savedTabs > 0 && <p className="gf-note" data-testid="gf-saved">열지 않은 탭 {savedTabs}개는 저장된 출력에서 찾았어요</p>}
-        <p className="history-keys">↑↓ 고르기 · ↩ 가기 · ⌘↩ 열어 둔 채 · ⇥ 범위 · ⌥⌘1 이전 세션 · ⌥⌘3 완료 · ⌥⌘C Aa · ⌥⌘R .* · esc</p>
+        <p className="history-keys">↑↓ 고르기 · ↩ 가기 · ⌘↩ 열어 둔 채 · ⌃⇥ 범위 · ⌥⌘1 이전 세션 · ⌥⌘3 완료 · ⌥⌘C Aa · ⌥⌘R .* · esc</p>
       </div>
     </div>
   )

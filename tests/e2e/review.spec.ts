@@ -109,6 +109,37 @@ test('되돌린 것 — 되살리기 · 그 뒤로 같은 줄이 바뀌면 되�
   expect(read('x.txt')).toBe('a\nZZ\nd\ne\nf\ng\n')
 })
 
+test('되돌린 것: 두 번째 버튼을 Enter로 실행하면 그 파일만 되살린다', async () => {
+  write('first.txt', 'first\n')
+  write('second.txt', 'second\n')
+  await launch()
+  await command('review')
+  for (const name of ['first.txt', 'second.txt']) {
+    await files().filter({ hasText: name }).click()
+    await pane().getByTestId('review-revert-file').click()
+    await win.getByRole('button', { name: '지우기', exact: true }).click()
+    await expect.poll(() => existsSync(join(repo, name))).toBe(false)
+  }
+  await command('review-reverted')
+  const rows = pane().getByTestId('review-rev-row')
+  await expect(rows).toHaveCount(2)
+  const second = rows.nth(1)
+  const target = (await second.getAttribute('data-path'))!
+  const untouched = (await rows.first().getAttribute('data-path'))!
+  const button = second.getByTestId('review-restore')
+  await expect(pane()).toBeFocused()
+  await button.focus()
+  await expect(button).toBeFocused()
+  await button.press('Enter')
+  await expect.poll(() => existsSync(join(repo, target))).toBe(true)
+  await expect(rows).toHaveCount(1)
+  expect(existsSync(join(repo, untouched))).toBe(false)
+  await win.screenshot({ path: 'test-results/uiux-review-keyboard.png' })
+  await rows.getByTestId('review-restore').focus()
+  await win.keyboard.press('Escape')
+  await expect(pane().getByTestId('review-reverted')).toHaveCount(0)
+})
+
 test('커밋 — 체크한 파일만 · 빠진 파일 한 줄 · git log · 커밋 취소', async () => {
   write('x.txt', 'X\n')
   write('keep.txt', 'K\n')

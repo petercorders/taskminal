@@ -165,6 +165,8 @@ test('sk-ant 키를 출력한 뒤 스크롤 파일에 원문이 없고 화면은
 test('가린 칸이 여럿이어도 끄기 · 같은 줄 다시 훑기에서 하나도 남거나 겹치지 않는다', async () => {
   seedState(userData, [{ id: 't', name: '여럿', paneId: 'p1' }])
   await launch()
+  // 이 시험은 같은 물리 줄의 재검사를 본다. 줄바꿈된 토큰은 아래 별도 시험이 본다.
+  await win.setViewportSize({ width: 1400, height: 800 })
   const masks = pane('p1').locator('.secret-mask')
   // 같은 줄에 키 둘 → 훑은 뒤 그 줄에 글이 더 붙으면 그 줄을 다시 훑는다
   const key = (c: string) => `"sk-ant-api03-$(printf '${c}%.0s' {1..40})"`
