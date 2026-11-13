@@ -1,7 +1,7 @@
 import { wireDownloads } from './downloads.mjs'
 
 // 검증된 공개 릴리스가 준비되면 ready로 전환한다.
-const RELEASE = 'soon' // 'soon' | 'ready'
+const RELEASE = 'ready' // 'soon' | 'ready'
 if (RELEASE === 'ready') document.documentElement.classList.add('is-ready')
 // 다운로드 목록은 공개 자산을 직접 확인한다. 없는 OS의 파일은 준비 중으로 표시한다.
 void wireDownloads()
