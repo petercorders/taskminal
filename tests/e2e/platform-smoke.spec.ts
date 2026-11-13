@@ -134,11 +134,18 @@ test('OS별 패키지: 한글 셸·CLI·렌더러 재연결·종료 뒤 지킴�
     await win.keyboard.press('Enter')
     await expect(pane.locator('.xterm-rows')).toContainText('PLATFORM_OK 한글', { timeout: 20_000 })
     mark('DONE shell input/output')
+    await app.evaluate(({ ipcMain }) => {
+      const writes: string[] = []
+      ;(globalThis as unknown as { shortcutWrites: string[] }).shortcutWrites = writes
+      ipcMain.on('pty:write', (_event, _pane: string, data: string) => writes.push(data))
+    })
     mark('START palette')
     await win.keyboard.press(process.platform === 'darwin' ? 'Meta+p' : 'Control+p')
     await expect(win.getByTestId('palette')).toBeVisible()
     await win.keyboard.press('Escape')
     await expect(win.getByTestId('palette')).toBeHidden()
+    const shortcutWrites = await app.evaluate(() => (globalThis as unknown as { shortcutWrites: string[] }).shortcutWrites.join(''))
+    expect(shortcutWrites).not.toContain('\x10')
     mark('DONE palette')
 
     // 같은 바이너리를 Node 모드로 열어 패키지 CLI와 IPC 연결도 확인한다.

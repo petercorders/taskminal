@@ -1786,7 +1786,7 @@ export function App() {
   }, [sidebarCompactOpen])
 
   useEffect(() => {
-    // capture 단계에서 받는다. xterm 은 ⌘ 가 눌린 키를 셸로 보내지 않으므로(@xterm Keyboard.ts) 전파는 막지 않는다.
+    // capture 단계에서 받는다. Ctrl 앱 명령은 xterm까지 전파하면 셸 제어 문자로도 보내진다.
     const onKey = (e: KeyboardEvent) => {
       // 글을 고치는 칸(탭 이름 · 대화상자)에서는 ⌘ 키가 그 칸의 편집 몫 — ⌘W 가 뒤의 셸을 끝내지 않게. xterm 의 입력칸은 제외.
       const t = e.target
@@ -1815,6 +1815,7 @@ export function App() {
       const command = commandForKey(e, shortcutsRef.current)
       if (!command) return
       e.preventDefault()
+      if (e.ctrlKey && !e.metaKey) e.stopPropagation()
       if (e.repeat && !repeatable(command)) return
       runCommandRef.current(command)
     }
