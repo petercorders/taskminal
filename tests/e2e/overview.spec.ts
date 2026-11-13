@@ -41,6 +41,9 @@ test('전체 보기에서 상태·검색을 거르고 선택한 탭의 정확한
   const overview = win.getByTestId('overview')
   const search = overview.getByRole('textbox', { name: '전체 일감 찾기' })
   await expect(search).toBeFocused()
+  for(const control of [search,overview.getByRole('combobox',{name:'전체 보기 상태'})]){
+    const box=await control.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(24)
+  }
   await expect(overview.getByTestId('overview-card')).toHaveCount(2)
   await win.screenshot({ path: 'test-results/overview-wide.png' })
   await overview.getByRole('combobox', { name: '전체 보기 상태' }).selectOption('done')

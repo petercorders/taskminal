@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { applyActivity, formatDuration, taskActivity, type ActivityEvent, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
 import { commandForKey, isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand } from '../shared/keymap'
@@ -29,6 +29,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
+import { CompactSidebar } from './CompactSidebar'
+import './workspace-layout.css'
 import { ConversationSearch } from './ConversationSearch'
 import type { ConversationHit } from '../shared/conversation-search'
 import { paneIds as layoutPaneIds } from '../shared/layout'
@@ -188,6 +190,17 @@ export function App() {
   const [conversationRestore,setConversationRestore]=useState<ConversationHit|null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
   const [sidebarCompactOpen,setSidebarCompactOpen]=useState(false)
+  const pendingSidebarAction = useRef<(() => void) | null>(null)
+  const workspaceElement = useRef<HTMLElement>(null)
+  const toolbarElement = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const workspace = workspaceElement.current, toolbar = toolbarElement.current
+    if (!workspace || !toolbar) return
+    const measure = () => workspace.style.setProperty('--workspace-toolbar-height', `${toolbar.getBoundingClientRect().height}px`)
+    const observer = new ResizeObserver(measure)
+    observer.observe(toolbar); measure()
+    return () => observer.disconnect()
+  }, [])
   const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree';url?:string;runId?:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
@@ -1248,6 +1261,16 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
+  useLayoutEffect(() => {
+    const workspace = workspaceElement.current
+    const header = workspace?.querySelector<HTMLElement>('.work-tool-panel > header')
+    if (!workspace) return
+    const measure = () => workspace.style.setProperty('--work-tool-header-height', `${header?.getBoundingClientRect().height ?? 0}px`)
+    const observer = new ResizeObserver(measure)
+    if (header) observer.observe(header)
+    measure()
+    return () => observer.disconnect()
+  }, [workTool, state.activeTaskId])
   const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
@@ -1747,6 +1770,19 @@ export function App() {
 
   const runCommandRef = useRef(runCommand)
   runCommandRef.current = runCommand
+  // Sidebar-owned commands run only after its modal DOM/inert boundary has closed.
+  const sidebarAction = (action: () => void) => {
+    if (sidebarCompactOpen && matchMedia('(max-width: 520px)').matches) {
+      pendingSidebarAction.current = action
+      setSidebarCompactOpen(false)
+    } else action()
+  }
+  useEffect(() => {
+    if (sidebarCompactOpen || !pendingSidebarAction.current) return
+    const action = pendingSidebarAction.current
+    pendingSidebarAction.current = null
+    if (!document.querySelector('[aria-modal="true"]')) action()
+  }, [sidebarCompactOpen])
 
   useEffect(() => {
     // capture 단계에서 받는다. xterm 은 ⌘ 가 눌린 키를 셸로 보내지 않으므로(@xterm Keyboard.ts) 전파는 막지 않는다.
@@ -1832,39 +1868,41 @@ export function App() {
         onSkip={(version) => dispatch({ type: 'settings/patch', patch: { updateSkip: version } })}
         onOpenLog={() => runCommand('error-log')}
       />
-      <div className={`app-body${sidebarCompactOpen?' sidebar-revealed':''}`}>
+      <div className="app-body">
+        <CompactSidebar open={sidebarCompactOpen} onClose={() => setSidebarCompactOpen(false)}>
         <Sidebar
-          onOverview={() => {setOverviewOpen(true);setWorkTool(null)}}
-          onWorkTool={kind=>{if(kind!=='accounts'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}
+          onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
+          onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees'} as const)[kind]))}
           state={viewState}
-          onArchive={(t) => archive([t.id])}
+          onArchive={(t) => sidebarAction(() => archive([t.id]))}
           archivedCount={state.tasks.length - viewState.tasks.length}
           remoteStateOf={(t) => {
             const r = taskRemote(t)
             return r ? (r.state.kind === 'up' ? 'up' : r.state.kind === 'down' ? 'down' : 'retry') : null
           }}
-          onOpenArchive={() => runCommand('archive-open')}
-          onWeekly={() => runCommand('weekly')}
+          onOpenArchive={() => sidebarAction(() => runCommandRef.current('archive-open'))}
+          onWeekly={() => sidebarAction(() => runCommandRef.current('weekly'))}
           suggestArchive={suggestions}
-          onArchiveMany={(ids) => archive(ids)}
+          onArchiveMany={(ids) => sidebarAction(() => archive(ids))}
           activity={shownActivity}
           loading={load.phase === 'loading'}
-          onSelect={(id) => {
-            setOverviewOpen(false);setWorkTool(null);setSidebarCompactOpen(false)
+          onSelect={(id) => sidebarAction(() => {
+            if (!stateRef.current.tasks.some(task => task.id === id && task.archivedAt === undefined)) return
+            setOverviewOpen(false);setWorkTool(null)
             dispatch({ type: 'task/select', id })
             refocus()
-          }}
-          onNew={() => setCreating({})}
-          onRemove={setRemoving}
+          })}
+          onNew={() => sidebarAction(() => runCommandRef.current('new-task'))}
+          onRemove={task => sidebarAction(() => { const target=stateRef.current.tasks.find(item=>item.id===task.id);if(target)setRemoving(target) })}
           onEdit={(id, patch) => dispatch({ type: 'task/edit', id, patch })}
           onToggleGroup={(id) => dispatch({ type: 'group/toggle', id })}
-          onSettings={() => runCommand('settings')}
-          onSaveTemplate={(task) => openSaveTemplate(task, null)}
-          onMenuClosed={refocus}
+          onSettings={() => sidebarAction(() => runCommandRef.current('settings'))}
+          onSaveTemplate={(task) => sidebarAction(() => { const target=stateRef.current.tasks.find(item=>item.id===task.id);if(target)openSaveTemplate(target,null) })}
+          onMenuClosed={() => { if (!sidebarCompactOpen) refocus() }}
           branches={branches}
           portsOf={(t) => chipsOf(Object.keys(t.panes))}
           updateChip={updateView?.state === 'downloaded' && updateView.version === laterVersion ? laterVersion : null}
-          onUpdateChip={() => runCommand('error-log')}
+          onUpdateChip={() => sidebarAction(() => runCommandRef.current('error-log'))}
           unread={unread}
           filterSignal={filterSignal}
           onView={(v) => dispatch({ type: 'settings/patch', patch: { sidebarView: v } })}
@@ -1873,11 +1911,12 @@ export function App() {
             dispatch({ type: 'settings/patch', patch: { sidebarClosed: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] } })
           }}
         />
-        <main className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
-          <nav className="workspace-toolbar" aria-label="작업 도구">
+        </CompactSidebar>
+        <main ref={workspaceElement} className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
+          <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
             <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
             <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option></>}</>}</select>
-            <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
+            <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
             <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button>
             {activeTask && <>{(['files','browser','git'] as const).map((kind)=><button type="button" className="button" key={kind} onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind})}}>{kind==='files'?'파일 탐색':kind==='browser'?'브라우저':'GitHub'}</button>)}</>}

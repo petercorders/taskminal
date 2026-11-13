@@ -76,3 +76,31 @@ test('손상된 탭 기록을 보존하고 앱의 다른 화면을 계속 사용
  await win.getByRole('button',{name:'작업 보조 화면 닫기'}).click();await expect(win.getByTestId('task-view').filter({visible:true})).toBeVisible();expect(existsSync(join(data,'state.json'))).toBe(true)
  await captureWindow(app,'test-results/browser-tabs-journal-error.png')
 })
+test('스크롤한 웹 화면은 고정된 패널 제목과 닫기 단추 아래에서만 표시한다',async()=>{
+ await launch();await open();await go('/a')
+ await win.locator('.work-tool-panel').evaluate(panel=>{panel.style.height='330px';panel.scrollTop=panel.scrollHeight})
+ await expect.poll(()=>win.locator('.work-tool-panel').evaluate(panel=>{const p=panel.getBoundingClientRect(),h=panel.querySelector(':scope > header')!.getBoundingClientRect(),r=panel.querySelector('.work-browser-surface')!.getBoundingClientRect();return r.top<h.bottom&&r.bottom>h.bottom&&h.top>=p.top-1})).toBe(true)
+ await expect.poll(async()=>{
+  const visible=await win.locator('.work-tool-panel').evaluate(panel=>{const p=panel.getBoundingClientRect(),h=panel.querySelector(':scope > header')!.getBoundingClientRect(),r=panel.querySelector('.work-browser-surface')!.getBoundingClientRect();return {x:Math.max(0,p.left,r.left),y:Math.max(0,p.top,h.bottom,r.top),right:Math.min(innerWidth,p.right,r.right),bottom:Math.min(innerHeight,p.bottom,r.bottom)}})
+  const bounds=await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0]!,child=w.contentView.children.find(v=>v.getVisible());return child?.getBounds()})
+  return !!bounds&&bounds.y===Math.round(visible.y)&&bounds.x===Math.round(visible.x)&&bounds.width===Math.round(visible.right-visible.x)&&bounds.height===Math.round(visible.bottom-visible.y)&&bounds.height>0
+ }).toBe(true)
+ await captureWindow(app,'test-results/uiux-final-browser-header.png')
+})
+test('웹 화면 이동의 늦은 응답은 탭을 왕복한 뒤 포커스를 빼앗지 않는다',async()=>{
+ await launch();await open();await go('/a');await win.getByRole('button',{name:'새 브라우저 탭'}).click();await go('/b');await win.getByRole('tab',{name:'Alpha',exact:true}).click()
+ await expect(win.getByRole('button',{name:'웹 화면으로 이동 · F6로 돌아오기'})).toBeEnabled()
+ await app.evaluate(({ipcMain})=>{
+  const g=globalThis as unknown as {shows:Array<()=>void>;hold:boolean;focusCalls:number};g.shows=[];g.hold=true;g.focusCalls=0
+  ipcMain.removeHandler('browser:show');ipcMain.handle('browser:show',()=>g.hold?new Promise<void>(resolve=>g.shows.push(resolve)):undefined)
+  ipcMain.removeHandler('browser:action');ipcMain.handle('browser:action',(_e,_id,action)=>{if(action==='focus')g.focusCalls++})
+ })
+ await win.getByRole('button',{name:'웹 화면으로 이동 · F6로 돌아오기'}).click()
+ await win.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))))
+ await expect.poll(()=>app.evaluate(()=>(globalThis as unknown as {shows:unknown[]}).shows.length)).toBeGreaterThan(0)
+ await win.getByRole('tab',{name:'Beta',exact:true}).click();await win.getByRole('tab',{name:'Alpha',exact:true}).click();await expect(win.getByRole('tab',{name:'Alpha',exact:true})).toBeFocused()
+ await app.evaluate(()=>{const g=globalThis as unknown as {shows:Array<()=>void>;hold:boolean};g.hold=false;for(const resolve of g.shows)resolve();g.shows=[]})
+ await win.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))))
+ expect(await app.evaluate(()=>(globalThis as unknown as {focusCalls:number}).focusCalls)).toBe(0)
+ await expect(win.getByRole('tab',{name:'Alpha',exact:true})).toBeFocused()
+})

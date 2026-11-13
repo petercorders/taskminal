@@ -14,6 +14,7 @@ import { Icon, type IconName } from '../icons'
 import type { UpdateView } from '../../shared/update'
 import type { Restored } from '../../shared/backup'
 import type { BackupMark } from '../../shared/ipc'
+import './settings-responsive.css'
 
 type SectionId = 'general' | 'look' | 'term' | 'host' | 'notify' | 'privacy' | 'backup' | 'keys' | 'tasks' | 'about'
 /** ⌘P 로 바로 여는 칸 */
@@ -89,6 +90,9 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
   const [query, setQuery] = useState('')
   const [capturing, setCapturing] = useState<AppCommand | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const compactSectionRef = useRef<HTMLSelectElement>(null)
+  const [compactSearchOpen, setCompactSearchOpen] = useState(false)
+  const searchOpen = compactSearchOpen || query !== ''
   // 찾기 결과가 하나도 없으면 안내 — 줄이 그려지고 빠질 때마다 알려 오는 보이는 줄 수로 정한다(28c 리뷰: DOM 을 한 번 세면 늦게 바뀌는 줄에 낡는다)
   const [rowCount, reportRow] = useRowCount()
   const noMatch = query.trim() !== '' && rowCount === 0
@@ -104,7 +108,15 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
   }, [])
   const shellRejected = s.shell !== null && shells !== null && !shells.includes(s.shell)
 
-  useEffect(() => searchRef.current?.focus(), [])
+  useEffect(() => {
+    const compact = matchMedia('(max-width: 700px)')
+    if (compact.matches) compactSectionRef.current?.focus()
+    else searchRef.current?.focus()
+    const changed = () => { if (compact.matches && document.activeElement === searchRef.current) setCompactSearchOpen(true) }
+    compact.addEventListener('change', changed)
+    return () => compact.removeEventListener('change', changed)
+  }, [])
+  useEffect(() => { if (compactSearchOpen) searchRef.current?.focus() }, [compactSearchOpen])
 
   const patch = (p: SettingsPatch) => dispatch({ type: 'settings/patch', patch: p })
   const setNotify = (kind: NotifyKind, way: 'banner' | 'sound', on: boolean) => patch({ notify: { ...s.notify, [kind]: { ...s.notify[kind], [way]: on } } })
@@ -613,15 +625,27 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
 
   return (
     <div className="settings" role="dialog" aria-modal="true" aria-label="설정" data-testid="settings" onKeyDown={onKeyDown}>
-      <nav className="settings-nav" aria-label="설정 칸">
+      <nav className={`settings-nav${searchOpen ? ' compact-search-open' : ''}`} aria-label="설정 칸">
         <button type="button" className="settings-back" onClick={onClose}>
           <Icon name="back" />
           일감으로 돌아가기
         </button>
+        <select ref={compactSectionRef} className="settings-compact-section" aria-label="설정 칸 선택" value={section} onChange={event => {
+          const next = SECTIONS.find(item => item.id === event.target.value)
+          if (next) { setQuery(''); setSection(next.id) }
+        }}>
+          {NAV_GROUPS.map(group => <optgroup label={group.title} key={group.title}>{group.ids.map(id => <option value={id} key={id}>{SECTIONS.find(item => item.id === id)!.title}</option>)}</optgroup>)}
+        </select>
+        <button type="button" className="icon-button settings-compact-control" aria-label="설정 찾기 열기" aria-controls="settings-search-input" aria-expanded={searchOpen} onClick={() => {
+          if (searchOpen) { setQuery(''); setCompactSearchOpen(false) }
+          else setCompactSearchOpen(true)
+        }}><Icon name="search" /></button>
+        <button type="button" className="icon-button settings-compact-control" aria-label="설정 닫기" onClick={onClose}><Icon name="close" /></button>
         <div className="settings-search-wrap">
           <Icon name="search" className="settings-search-icon" />
           <input
             ref={searchRef}
+            id="settings-search-input"
             className="settings-search"
             type="search"
             aria-label="설정 찾기"

@@ -11,6 +11,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
   const lockKind=useRef<'tab'|'navigate'|null>(null),operationSerial=useRef(0)
   const navigationTarget=useRef<{taskId:string;tabId:string;scope:number;operation:number}|null>(null)
   const metadata=useRef<BrowserTaskState|null>(null),initial=useRef(initialUrl),processed=useRef<string|undefined>(undefined)
+  const showCurrent=useRef<()=>Promise<void>>(async()=>{})
   initial.current=initialUrl
   const drafts=useRef(new Map<string,string>()),captureSerial=useRef(0),captureRef=useRef<CapturePreview|null>(null),attachLock=useRef(false),pickLock=useRef(false)
   const [tabs,setTabs]=useState<BrowserTaskState|null>(null),[state,setState]=useState<BrowserState|null>(null),[url,setUrl]=useState('http://localhost:3000')
@@ -72,12 +73,13 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
     const selected=tabs?.selectedTabId
     if(!selected)return
     const layout=()=>{
-      const node=box.current,r=node?.getBoundingClientRect(),parent=node?.closest('.work-tool-panel')?.getBoundingClientRect()
+      const node=box.current,r=node?.getBoundingClientRect(),panel=node?.closest('.work-tool-panel'),parent=panel?.getBoundingClientRect(),header=panel?.querySelector(':scope > header')?.getBoundingClientRect()
       const hidden=document.hidden||!!document.querySelector('[aria-modal="true"]')||!!capture
-      const x=Math.max(0,r?.left??0,parent?.left??0),y=Math.max(0,r?.top??0,parent?.top??0)
+      const x=Math.max(0,r?.left??0,parent?.left??0),y=Math.max(0,r?.top??0,parent?.top??0,header?.bottom??0)
       const width=Math.min(innerWidth,r?.right??0,parent?.right??innerWidth)-x,height=Math.min(innerHeight,r?.bottom??0,parent?.bottom??innerHeight)-y
-      void api.browserShow(id,!hidden&&width>0&&height>0?{x,y,width,height}:null,selected).catch(()=>{})
+      return api.browserShow(id,!hidden&&width>0&&height>0?{x,y,width,height}:null,selected).catch(()=>{})
     }
+    showCurrent.current=layout
     const observer=new ResizeObserver(layout);if(box.current)observer.observe(box.current)
     const mutation=new MutationObserver(layout);mutation.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['aria-modal']})
     const timer=setInterval(layout,750)
@@ -117,12 +119,22 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
   }
   const select=(tabId:string)=>void write(()=>api.browserSelectTab(id,tabId),true)
   const canAction=(action:string)=>!locked.current||(action==='stop'&&lockKind.current==='navigate'&&navigationTarget.current?.taskId===id&&navigationTarget.current.scope===lifecycle.current)
+  const reveal=async(selected:string,scope:number)=>{
+    const generation=version.current
+    const current=()=>live.current&&lifecycle.current===scope&&metadata.current?.selectedTabId===selected&&version.current===generation
+    if(!current())return false
+    box.current?.scrollIntoView({block:'nearest'})
+    await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()))
+    if(!current())return false
+    await showCurrent.current()
+    return current()
+  }
   const action=(action:'back'|'forward'|'reload'|'stop'|'zoomIn'|'zoomOut'|'focus')=>{
     if(!canAction(action))return
     const selected=locked.current?navigationTarget.current?.tabId:metadata.current?.selectedTabId;if(!selected)return
     const scope=lifecycle.current
     if(['back','forward','reload','stop'].includes(action)){version.current++;clearCapture()}
-    void api.browserAction(id,action,selected).catch(reason=>{if(live.current&&lifecycle.current===scope)setError(String(reason))})
+    void(async()=>{if(action==='focus'&&!await reveal(selected,scope))return;await api.browserAction(id,action,selected)})().catch(reason=>{if(live.current&&lifecycle.current===scope)setError(String(reason))})
   }
   const tabMutation=busy&&lockKind.current==='tab',navigationPending=busy&&lockKind.current==='navigate'
   const shouldStop=navigationPending||!!state?.loading
@@ -138,6 +150,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
       const tab=before.tabs.find(tab=>tab.id===selected)
       if(!tab||before.selectedTabId!==selected)throw new Error('선택한 탭이 바뀌었습니다. 다시 시도해 주세요.')
       const bound={tabId:selected,navigationEpoch:tab.navigationEpoch,selectionEpoch:before.selectionEpoch}
+      if(!await reveal(selected,scope)||!current())return
       const value=await api.browserCapture(id,element,selected)
       if(!current())return
       const after=await api.browserTabs(id)

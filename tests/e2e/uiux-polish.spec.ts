@@ -36,7 +36,8 @@ test('사이드바: 보통 창에서 긴 일감 이름이 보이고 작은 창�
   expect(small).toBeLessThan(normal)
   expect(640 - small).toBeGreaterThanOrEqual(390)
   await command('settings')
-  expect((await win.locator('.settings-nav').boundingBox())!.width).toBe(small)
+  await expect(win.getByRole('combobox',{name:'설정 칸 선택'})).toBeVisible()
+  expect((await win.locator('.settings-main').boundingBox())!.width).toBeGreaterThanOrEqual(600)
   await win.screenshot({ path: 'test-results/uiux-settings-small.png' })
 })
 

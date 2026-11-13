@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { firstWindow, seedState, waitLoaded } from './helpers'
+import { firstWindow, seedState, waitLoaded, captureWindow } from './helpers'
 let data:string,app:ElectronApplication,win:Page
 async function open(){await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0]!.webContents.send('app:command','conversation-search'))}
 test.beforeEach(async()=>{
@@ -26,7 +26,7 @@ test('저장한 대화를 가려 검색하고 정확한 일감과 턴으로 이�
  await expect(dialog).not.toContainText('INTERNAL-ABCDEF')
  await dialog.getByRole('combobox',{name:'에이전트',exact:true}).selectOption('claude');await expect(dialog.getByText('검색 결과가 없습니다.')).toBeVisible()
  await dialog.getByRole('combobox',{name:'에이전트',exact:true}).selectOption('codex');await expect(dialog.getByRole('listitem')).toHaveCount(2)
- await win.screenshot({path:'test-results/conversation-search.png'})
+ await captureWindow(app,'test-results/conversation-search.png')
  await dialog.getByRole('listitem').first().getByRole('button').click()
  await expect(dialog).toHaveCount(0)
  await expect(win.locator('[data-testid="task-view"]:visible')).toHaveAttribute('data-task-name','B')
@@ -44,7 +44,7 @@ test('검색 뒤 바뀐 대화는 잘못 열지 않으며 작은 창 확대에�
  await win.evaluate(()=>document.documentElement.dataset.theme='light')
  await expect.poll(()=>dialog.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&e.scrollWidth<=e.clientWidth+1})).toBe(true)
  await expect(dialog.getByRole('button',{name:'닫기',exact:true})).toBeInViewport()
- await win.screenshot({path:'test-results/conversation-search-small-light.png'})
+ await captureWindow(app,'test-results/conversation-search-small-light.png')
  await dialog.getByRole('searchbox').press('Escape');await expect(dialog).toHaveCount(0)
 })
 

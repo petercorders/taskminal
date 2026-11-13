@@ -1,0 +1,32 @@
+/* Measured toolbar height follows wrapping, zoom and the short-window hidden toolbar. */
+main.workspace > aside.work-tool-panel { top: var(--workspace-toolbar-height, 0px); scroll-padding-top: calc(var(--work-tool-header-height, 0px) + var(--space-3)); }
+main.workspace > aside.work-tool-panel > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: none;
+  background: var(--panel);
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.compact-sidebar-shell, .compact-sidebar-panel { display: contents; }
+.compact-sidebar-shell[hidden] { display: none; }
+.compact-sidebar-header { display: none; }
+@media (max-width: 520px) {
+  .compact-sidebar-shell.is-modal { display: flex; position: fixed; inset: 0; z-index: 40; background: #0007; }
+  .compact-sidebar-shell.is-modal > .compact-sidebar-panel { display: flex; flex-direction: column; width: min(88vw, 288px); min-width: 0; height: 100dvh; background: var(--panel); box-shadow: var(--space-2) 0 var(--space-8) #0007; }
+  .compact-sidebar-panel > .compact-sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3); flex: none; border-bottom: 1px solid var(--line); }
+  .compact-sidebar-panel > .sidebar { display: block; position: static; width: 100%; min-height: 0; flex: 1; overflow: auto; box-shadow: none; }
+  .compact-sidebar-panel > .sidebar .sidebar-tools-menu { display: block; }
+}
+/* Overview filters use the same readable controls as the adjacent tool panels. */
+.overview-controls input, .overview-controls select {
+  min-height: var(--row-h);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font: inherit;
+  box-sizing: border-box;
+}

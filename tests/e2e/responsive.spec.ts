@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { firstWindow, seedState, taskJson, waitLoaded } from './helpers'
+import { firstWindow, seedState, taskJson, waitLoaded, selectSettingsSection } from './helpers'
 
 for (const [width, height] of [[640, 400], [900, 600], [1280, 800]]) {
   test(`반응형 ${width}×${height}: 대화·분할 검토·설정·팔레트·긴 모달의 주요 액션에 도달한다`, async () => {
@@ -64,7 +64,7 @@ for (const [width, height] of [[640, 400], [900, 600], [1280, 800]]) {
       await command('settings')
       const settings = win.getByTestId('settings')
       for (const section of ['일반', '일감 관리', '모양', '터미널', '단축키', '알림 · 활동', '셸 지킴이', '개인정보', '백업 · 되돌리기', '정보']) {
-        await settings.getByRole('navigation').getByRole('button', { name: section, exact: true }).click()
+        await selectSettingsSection(settings, section)
         await expect.poll(() => settings.getByTestId('settings-body').evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true)
       }
       await shot('settings')
@@ -89,7 +89,7 @@ for (const [width, height] of [[640, 400], [900, 600], [1280, 800]]) {
       if (width === 1280) {
         await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(1.25))
         await command('settings')
-        await settings.getByRole('navigation').getByRole('button', { name: '일감 관리', exact: true }).click()
+        await selectSettingsSection(settings, '일감 관리')
         await expect.poll(() => settings.getByTestId('settings-body').evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true)
         await shot('zoom-125')
       }

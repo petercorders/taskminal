@@ -85,6 +85,7 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 38 | 앱 실행 중 예약과 결과함 | 기본 꺼짐·놓침 건너뜀·영속 claim·DST·실행 이력 | 37 | 실제 기기 절전/계정 미검증 | 단위1,060·e2e293·변이7·GC, 종료0 (완료: `docs/stages/38-schedules.md`, main 미병합) |
 | 39 | worktree 수명 관리 | 실제 목록·명시 base 생성·사용/ignored/불명 보호·force 없는 정리 | 38 | 외부 writer 원자적 봉쇄는 제외 | 단위1,121·e2e299·변이8·GC, 종료0 (완료: `docs/stages/39-worktree-management.md`, main 미병합) |
 | 40 | 브라우저 탭 | 일감별6개·기본 기억 꺼짐·선택 탭 지연 복원·수집 세대 검증 | 36 | 실제 사이트/기기 별도 확인 | 단위1,141·e2e304·변이7·GC, 종료0 (완료: `docs/stages/40-browser-tabs.md`, main 미병합) |
+| 41 | 전체 UI/UX 후속 | 초안/삭제 편집·서랍 키보드·도구 줄/고정 헤더·320 CSS px 설정과 제어 개선 | 40 | 실제 계정·VoiceOver·IME·Retina 미검증 | 단위1,141·e2e316·변이13·GC, 최종 전체 종료0 (완료: `docs/stages/41-whole-app-uiux.md`, main 미병합) |
 
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.

@@ -1,4 +1,4 @@
-import { expect, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, type ElectronApplication, type Page, type Locator } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -111,6 +111,24 @@ export function runCli(userData: string, ...args: string[]): Promise<{ code: num
 
 /** Playwright screenshots crop Electron zoomed windows; capture the native viewport for visual review. */
 export async function captureWindow(app: ElectronApplication, path: string): Promise<void> {
-  const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0]!.webContents.capturePage()).toPNG().toString('base64'))
+  const png = await app.evaluate(async ({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]!.webContents
+    await contents.executeJavaScript(`new Promise(resolve => {
+      const timer = setTimeout(resolve, 300)
+      requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve() }))
+    })`)
+    return (await contents.capturePage()).toPNG().toString('base64')
+  })
   writeFileSync(path, Buffer.from(png, 'base64'))
+}
+
+/** Use the visible settings navigation at the current viewport/zoom. */
+export async function selectSettingsSection(settings: Locator, title: string): Promise<void> {
+  // Electron's native zoom can reach the renderer after a dialog opens.
+  // Re-evaluate the visible mode if that transition hides the chosen control.
+  await expect(async()=>{
+    const compact = settings.getByRole('combobox', { name: '설정 칸 선택', exact: true })
+    if (await compact.isVisible()) await compact.selectOption({ label: title }, { timeout: 750 })
+    else await settings.getByRole('navigation').getByRole('button', { name: title, exact: true }).click({ timeout: 750 })
+  }).toPass({ timeout: 5000, intervals: [50,100,250] })
 }

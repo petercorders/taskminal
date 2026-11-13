@@ -290,9 +290,13 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return
               if (e.key === 'Escape') {
-                e.preventDefault()
-                setQuery('')
-                onMenuClosed()
+                // A nonempty filter consumes Escape once; an empty drawer filter
+                // lets the modal close and restore its opener's focus.
+                if (query || !e.currentTarget.closest('[aria-modal="true"]')) {
+                  e.preventDefault()
+                  setQuery('')
+                  onMenuClosed()
+                }
               } else if (e.key === 'ArrowDown') {
                 e.preventDefault()
                 e.currentTarget.closest('nav')?.querySelector<HTMLElement>('.task-main')?.focus()
