@@ -1,6 +1,7 @@
 // 대화 pane (21단계) — 에이전트 출력을 공통 이벤트로 바꾸고, 화면 블록 · 상태를 만든다. 순수 함수라 단위 시험한다.
 // Claude 모양은 2026-11-11 스파이크(claude 2.1.322, stream-json + --permission-prompt-tool stdio)로 확인했다 — tests/fixtures/claude/*.jsonl
 import { isDangerous } from './danger'
+import { isAbsolutePath, pathInside } from './platform'
 import { isObj, type Obj } from './guards'
 import { hasMask } from './history'
 import { redact, type SecretOptions } from './redact'
@@ -89,8 +90,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
 function inside(cwd: string, path: string): boolean {
-  const root = cwd.replace(/\/+$/, '')
-  return path === root || path.startsWith(root + '/')
+  return pathInside(cwd, path)
 }
 function rel(cwd: string, path: string): string {
   return inside(cwd, path) && path !== cwd.replace(/\/+$/, '') ? path.slice(cwd.replace(/\/+$/, '').length + 1) : path
@@ -112,7 +112,7 @@ export function isDangerousTool(tool: string, input: unknown, cwd: string, block
   if (typeof i['command'] === 'string' && isDangerous(i['command'])) return true
   for (const k of ['file_path', 'notebook_path']) {
     const p = i[k]
-    if (typeof p === 'string' && p.startsWith('/') && !inside(cwd, p)) return true
+    if (typeof p === 'string' && isAbsolutePath(p) && !inside(cwd, p)) return true
   }
   void tool
   return false
@@ -545,13 +545,13 @@ export function codexRequestToEvents(method: string, rpcId: number | string, par
   if (method === 'item/commandExecution/requestApproval') {
     const command = str(p['command'])
     const where = str(p['cwd'])
-    const danger = isDangerousTool('Bash', { command }, cwd) || (where.startsWith('/') && !inside(cwd, where))
+    const danger = isDangerousTool('Bash', { command }, cwd) || (isAbsolutePath(where) && !inside(cwd, where))
     return [{ t: 'permission', id, tool: 'Bash', summary: clip(command || '명령 실행', 300), why: clip(str(p['reason']), 200), danger }]
   }
   if (method === 'item/fileChange/requestApproval') {
     const root = str(p['grantRoot'])
     const summary = root ? `${rel(cwd, root)} 에 쓰기` : str(p['reason']) || '파일 바꾸기'
-    return [{ t: 'permission', id, tool: 'Edit', summary: clip(summary, 300), why: root ? clip(str(p['reason']), 200) : '', danger: root.startsWith('/') && !inside(cwd, root) }]
+    return [{ t: 'permission', id, tool: 'Edit', summary: clip(summary, 300), why: root ? clip(str(p['reason']), 200) : '', danger: isAbsolutePath(root) && !inside(cwd, root) }]
   }
   if (method === 'item/tool/requestUserInput') {
     const qs = Array.isArray(p['questions']) ? p['questions'].filter(isObj) : []

@@ -6,6 +6,8 @@ import { expandHome } from '../shared/cwd'
 import type { HostRequest, SessionInfo } from '../shared/ptyhost'
 import { integrationEnv, OutputBatcher, pickShell, shellEnv } from '../shared/pty'
 import type { HostClient } from './ptyhost/client'
+import { delimiter } from 'node:path'
+import { defaultShell, shellArgs } from '../shared/platform'
 
 /** 화면을 처음부터 다시 그리기 전에 지운다 (ESC c — 화면 · 스크롤 · 모드 초기화) */
 const RESET = '\x1bc'
@@ -93,7 +95,7 @@ export class PtyManager {
   async spawn(owner: WebContents, paneId: string, opts: PtySpawnOptions, ssh?: { file: string; args: string[] }): Promise<void> {
     const other = this.owners.get(paneId)
     if (other && other !== owner && !other.isDestroyed()) throw new Error('다른 창의 pane')
-    const shell = pickShell(opts.shell, process.env['SHELL'], this.allowedShells)
+    const shell = pickShell(opts.shell, defaultShell(process.platform, process.env), this.allowedShells)
     const env = withExtra(shellEnv(process.env), this.extraEnv(paneId))
     if (!this.host.connected) this.missed = true
     const { r, early } = await this.request(owner, paneId, {
@@ -103,7 +105,7 @@ export class PtyManager {
         ? { file: ssh.file, args: ssh.args, cwd: homedir(), env }
         : {
             file: shell,
-            args: ['-l'],
+            args: shellArgs(process.platform),
             cwd: resolveCwd(opts.cwd),
             env: opts.integration === false ? env : integrationEnv(env, shell, this.zshIntegrationDir),
           }),
@@ -234,7 +236,7 @@ export class PtyManager {
 export function withExtra(env: Record<string, string>, extra: Record<string, string>): Record<string, string> {
   const out = { ...env }
   for (const [k, v] of Object.entries(extra)) {
-    if (k === 'PATH') out['PATH'] = out['PATH'] ? `${out['PATH']}:${v}` : v
+    if (k === 'PATH') out['PATH'] = out['PATH'] ? `${out['PATH']}${delimiter}${v}` : v
     else out[k] = v
   }
   return out

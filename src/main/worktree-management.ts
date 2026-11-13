@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { lstat, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   isWorktreeOid, parseWorktrees, validWorktreeJournal,
   type CreateWorktree, type ManagedWorktree, type WorktreeCreateReceipt,
@@ -76,7 +76,7 @@ function absolutePath(value: unknown, expand = false): string {
 
 function inside(parent: string, child: string): boolean {
   const path = relative(parent, child)
-  return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith('../'))
+  return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith('..' + sep))
 }
 
 /** Resolve existing symlink ancestors even when the last cwd components have disappeared. */

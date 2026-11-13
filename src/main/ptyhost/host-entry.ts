@@ -11,6 +11,7 @@ import { HostCore, type HostConn } from './host-core'
 
 const [sockPath, userData] = process.argv.slice(2)
 if (!sockPath || !userData) process.exit(2)
+const pipe = process.platform === 'win32'
 
 const logFile = join(userData, 'ptyhost.log')
 const LOG_MAX = 1024 * 1024
@@ -32,7 +33,7 @@ const version = envInt('TASKMINAL_PTYHOST_PROTOCOL', PTYHOST_PROTOCOL)
 const IDLE_MS = envInt('TASKMINAL_PTYHOST_IDLE_MS', 60_000)
 const WATCH_MS = 2000
 
-process.umask(0o077) // 소켓 · 로그를 같은 사용자만
+if (!pipe) process.umask(0o077) // Windows named pipe는 기본 DACL을 유지 (readableAll/writableAll 금지)
 process.on('SIGHUP', () => {}) // 띄운 쪽 터미널이 닫혀도
 process.on('SIGPIPE', () => {})
 process.on('uncaughtException', (e) => log('uncaught', e.stack ?? e)) // 한 요청의 버그로 모든 셸을 잃지 않게
@@ -42,7 +43,7 @@ let sockIno = 0
 
 function exitNow(code: number): void {
   try {
-    if (sockIno && statSync(sockPath!).ino === sockIno) unlinkSync(sockPath!)
+    if (!pipe && sockIno && statSync(sockPath!).ino === sockIno) unlinkSync(sockPath!)
   } catch {
     // 이미 없음
   }
@@ -85,7 +86,7 @@ function serve(socket: Socket): void {
 
 function listen(): void {
   try {
-    unlinkSync(sockPath!) // 죽은 지킴이가 남긴 소켓 (살아 있는지는 위에서 봤다)
+    if (!pipe) unlinkSync(sockPath!) // Windows named pipe는 파일이 아니다
   } catch {
     // 없음
   }
@@ -96,8 +97,10 @@ function listen(): void {
   })
   server.listen(sockPath!, () => {
     try {
-      chmodSync(sockPath!, 0o600)
-      sockIno = statSync(sockPath!).ino
+      if (!pipe) {
+        chmodSync(sockPath!, 0o600)
+        sockIno = statSync(sockPath!).ino
+      }
     } catch (e) {
       log('소켓 권한', e)
     }
@@ -112,7 +115,7 @@ function watch(): void {
     // 데이터 폴더나 소켓이 사라지면 아무도 다시 붙을 수 없다 — 셸을 끝내고 나간다
     let gone = !existsSync(userData!)
     try {
-      if (statSync(sockPath!).ino !== sockIno) gone = true
+      if (!pipe && statSync(sockPath!).ino !== sockIno) gone = true
     } catch {
       gone = true
     }

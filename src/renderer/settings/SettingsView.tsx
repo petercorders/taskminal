@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
-import { accelFromEvent, accelLabel, FONT_MAX, FONT_MIN, keyConflicts, type AppCommand, type Shortcut } from '../../shared/keymap'
+import { FONT_MAX, FONT_MIN, keyConflicts, type AppCommand, type Shortcut } from '../../shared/keymap'
+import { accelFromEvent, accelLabel } from '../keyboard'
 import { ACCENTS, DIM, FONT_FAMILIES, LINE_HEIGHT, LONG_AFTER_CHOICES, NOTIFY_KINDS, RESUME_AFTER_CHOICES, SCROLLBACK } from '../../shared/settings'
 import type { AppState, NotifyKind } from '../../shared/types'
 import type { Action, SettingsPatch } from '../store'

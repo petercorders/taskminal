@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir, hostname, tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, delimiter, isAbsolute } from 'node:path'
 import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
 import { IPC, isBackupMark, isHostAction, isRedactFix, isUpdateAction, type AppInfo, type RedactStatus } from '../shared/ipc'
 import type { LogLevel } from '../shared/errlog'
@@ -42,7 +42,7 @@ import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
 import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
 import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
-import { execFile as execFileChild, spawn as spawnChild } from 'node:child_process'
+import { spawn as spawnChild } from 'node:child_process'
 import { ChatManager } from './chat/chat-manager'
 import { ChatStore } from './chat/chat-store'
 import { AgentBinFinder } from './chat/find-bin'
@@ -53,6 +53,8 @@ import { isObj } from '../shared/guards'
 import { StateFile } from './state-file'
 import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
+import { defaultShell } from '../shared/platform'
+import { openTextEditor } from './text-editor'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -74,6 +76,7 @@ const zshIntegrationDir = ((): string | null => {
 })()
 // 설정에서 고를 수 있는 셸 — 시스템이 로그인 셸로 인정한 것만
 const allowedShells = ((): string[] => {
+  if (process.platform === 'win32') return [defaultShell('win32', process.env)].filter(existsSync)
   try {
     return readFileSync('/etc/shells', 'utf8')
       .split('\n')
@@ -170,7 +173,12 @@ function startCliServer(): void {
 }
 /** 앱 메뉴 '명령줄 도구 설치…' — 사용자가 누를 때만. 시험은 TASKMINAL_CLI_INSTALL_DIR */
 async function installCliMenu(): Promise<void> {
-  const dir = process.env['TASKMINAL_CLI_INSTALL_DIR'] || '/usr/local/bin'
+  if (process.platform === 'win32') {
+    await dialog.showMessageBox({ type: 'info', message: '앱 안 터미널에서는 taskminal 명령을 바로 쓸 수 있어요', detail: `외부 터미널에서도 쓰려면 Windows 환경 변수 PATH에 다음 폴더를 추가하세요.\n${cliBinDir}\n기존 PATH는 바꾸지 않았어요.` })
+    return
+  }
+  const dir = process.env['TASKMINAL_CLI_INSTALL_DIR'] || (process.platform === 'darwin' ? '/usr/local/bin' : join(homedir(), '.local', 'bin'))
+  if (process.platform === 'linux') mkdirSync(dir, { recursive: true })
   const r = installCli(join(cliBinDir, 'taskminal'), dir)
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
   const box = (o: Electron.MessageBoxOptions) => (win ? dialog.showMessageBox(win, o) : dialog.showMessageBox(o))
@@ -239,7 +247,7 @@ const agentBins = new AgentBinFinder()
 const chats = () =>
   (chatManager ??= new ChatManager({
     // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
-    extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || ''}:${cliBinDir}` }),
+    extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || process.env['Path'] || ''}${delimiter}${cliBinDir}` }),
     sessionEnv: (env,paneId,chat) => agentAccounts?.sessionEnvironment(paneId,chat.agent,!!chat.sessionId,env) ?? env,
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
@@ -303,7 +311,7 @@ const sshRetryMs = ((): number => {
 // ssh 실행 파일 — 시험은 TASKMINAL_SSH 로 가짜(절대 경로만)
 const sshFile = (): string => {
   const v = process.env['TASKMINAL_SSH']
-  return v && v.startsWith('/') ? v : '/usr/bin/ssh'
+  return v && isAbsolute(v) ? v : process.platform === 'win32' ? join(process.env['SystemRoot'] || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe') : '/usr/bin/ssh'
 }
 // ControlMaster 소켓 폴더 — 나만 읽고 쓰는(0700 · 내 것 · 링크 아님) 폴더. macOS 소켓 경로 한도(104바이트)에 들어가야 한다:
 // 보통 '~/Library/Application Support/Taskminal/ssh' 는 넘치므로(25단계 리뷰) /tmp/taskminal-<uid> 로. 둘 다 안 되면 연결을 나누지 않는다
@@ -317,6 +325,7 @@ const ownPrivateDir = (dir: string): boolean => {
   }
 }
 const sshControlDir = (): string | null => {
+  if (process.platform === 'win32') return null // Windows OpenSSH는 ControlMaster 소켓을 지원하지 않는다
   for (const dir of [join(app.getPath('userData'), 'ssh'), `/tmp/taskminal-${process.getuid?.() ?? 'u'}`]) {
     if (controlPathFits(dir) && ownPrivateDir(dir)) return dir
   }
@@ -860,7 +869,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // ─── 23단계: 변경 검토 — 폴더 · 경로 모양만 믿는다(경로는 review-git 이 저장소 안인지 · 바뀐 목록에 있는지 다시 본다) ───
-  const okDir = (v: unknown): v is string => typeof v === 'string' && v.startsWith('/') && v.length <= 4096 && !v.includes('\0')
+  const okDir = (v: unknown): v is string => typeof v === 'string' && isAbsolute(v) && v.length <= 4096 && !v.includes('\0')
   const okStrs = (v: unknown, max: number): v is string[] => Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && x.length <= 4096)
   const okBase = (v: unknown): v is string | null => v === null || v === 'main' || v === 'master'
   ipcMain.handle(IPC.reviewLoad, async (event, dir: unknown, base: unknown): Promise<ReviewLoad> => {
@@ -918,7 +927,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event) || !okDir(root) || typeof path !== 'string' || !safeRel(path)) return
     // shell.openPath 는 .command · .app 을 실행한다 — 기본 글 편집기로만 연다. root 가 저장소 뿌리인지 main 이 다시 본다
     void openTarget(runGit, root, path).then((full) => {
-      if (full) execFileChild('/usr/bin/open', ['-t', full], () => {})
+      if (full) void openTextEditor(full).catch((e: unknown) => report('error', 'text-editor', '텍스트 편집기를 열지 못했어요', e))
     })
   })
 
@@ -1146,7 +1155,7 @@ if (!app.requestSingleInstanceLock()) {
     if (crashedLast) errlog().write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
     markRunning(true)
     installAppMenu()
-    cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
+    cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'), process.platform)
     // 새 셸을 띄울 때만 불린다 — 같은 pane id 로 새 셸이면 앞 셸의 끝 · 실행 중 표시를 지운다(24 리뷰)
     const newShellEnv = (paneId: string) => {
       paneWatch.forget(paneId)

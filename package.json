@@ -1,8 +1,10 @@
 {
   "name": "taskminal",
   "productName": "Taskminal",
-  "version": "0.1.1",
-  "description": "일감별로 터미널 세션을 묶어 쓰는 macOS 터미널",
+  "version": "0.1.2",
+  "description": "일감별로 터미널 세션을 묶어 쓰는 데스크톱 터미널",
+  "author": "petercorders <petercorders@users.noreply.github.com>",
+  "homepage": "https://taskminal.petercoders.com",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -15,7 +17,8 @@
     "e2e": "electron-vite build && playwright test",
     "check": "npm run typecheck && npm test",
     "icon": "bash scripts/build-icon.sh",
-    "package": "electron-vite build && electron-builder --mac --arm64 --publish never && node scripts/check-package.mjs dist/mac-arm64/Taskminal.app",
+    "package": "node scripts/platform-package.mjs",
+    "package:platform": "node scripts/platform-package.mjs",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {

@@ -1,4 +1,5 @@
 import { FONT_DEFAULT, FONT_MAX, FONT_MIN } from './keymap'
+import { normalizeLocalPath } from './platform'
 import { isObj } from './guards'
 import { AGENT_NAME, isChatAgent, type ChatAgent } from './chat'
 import { parseQuickList, removeQuick, restoreQuick, upsertQuick, type QuickCommand } from './quick'
@@ -62,28 +63,12 @@ export function emptyState(): AppState {
 
 // ─── 경로 (node:path 없이 — shared 는 renderer 에서도 쓴다) ───────────
 
-function normalizePath(path: string): string {
-  const prefix = path.startsWith('/') ? '/' : path === '~' || path.startsWith('~/') ? '~' : ''
-  const rest = prefix === '~' ? path.slice(1) : path
-  const parts: string[] = []
-  for (const seg of rest.split('/')) {
-    if (seg === '' || seg === '.') continue
-    if (seg === '..') {
-      if (parts.length && parts[parts.length - 1] !== '..') parts.pop()
-      else if (prefix !== '/') parts.push('..')
-      continue
-    }
-    parts.push(seg)
-  }
-  if (prefix === '/') return '/' + parts.join('/')
-  if (prefix === '~') return parts.length ? '~/' + parts.join('/') : '~'
-  return parts.join('/') || '.'
-}
+function normalizePath(path: string): string { return normalizeLocalPath(path) }
 
 /** 일감 폴더(base) 기준으로 pane 폴더를 푼다. rel 이 없으면 base, 절대 경로 · ~ 는 그대로. */
 export function resolveCwd(base: string, rel?: string): string {
   if (!rel) return normalizePath(base)
-  if (rel.startsWith('/') || rel === '~' || rel.startsWith('~/')) return normalizePath(rel)
+  if (rel.startsWith('/') || /^[A-Za-z]:[\\/]/.test(rel) || rel.startsWith('\\\\') || rel === '~' || rel.startsWith('~/')) return normalizePath(rel)
   return normalizePath(`${base}/${rel}`)
 }
 

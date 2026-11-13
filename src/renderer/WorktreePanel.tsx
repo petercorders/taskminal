@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isAbsolutePath } from '../shared/platform'
 import type {
   CreateWorktree, ManagedWorktree, WorktreeApi, WorktreeSnapshot, WorktreeView,
 } from '../shared/worktree-management'
@@ -98,8 +99,8 @@ export function WorktreePanel({ root, onOpen, api = window.taskminal.worktrees }
   const submit = () => {
     if (lock.current) return
     const input: Draft = { branch: draft.branch.trim(), base: draft.base.trim(), path: draft.path }
-    if (!input.branch || !input.base || !input.path.startsWith('/') || input.path.includes('\0')) {
-      setError('브랜치·기준 커밋과 /로 시작하는 새 폴더의 절대 경로를 입력하세요.')
+    if (!input.branch || !input.base || !isAbsolutePath(input.path) || input.path.includes('\0')) {
+      setError('브랜치·기준 커밋과 새 폴더의 절대 경로를 입력하세요.')
       return
     }
     const old = pendingCreates.get(root)

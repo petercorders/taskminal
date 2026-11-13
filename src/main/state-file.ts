@@ -80,11 +80,10 @@ export class StateFile {
         closeSync(fd)
       }
       renameSync(tmp, this.path)
-      const dirFd = openSync(this.dir, 'r')
-      try {
-        fsyncSync(dirFd)
-      } finally {
-        closeSync(dirFd)
+      // Windows는 디렉터리를 open/fsync할 수 없다. 파일 fsync와 원자적 rename은 유지한다.
+      if (process.platform !== 'win32') {
+        const dirFd = openSync(this.dir, 'r')
+        try { fsyncSync(dirFd) } finally { closeSync(dirFd) }
       }
       return null
     } catch (e) {

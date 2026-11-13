@@ -1,3 +1,5 @@
+import { isAbsolutePath } from './platform'
+
 export interface WorktreeSnapshot {
   path: string
   commonDir: string
@@ -80,7 +82,7 @@ export const isWorktreeOid = (value: unknown): value is string =>
   typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value)
 
 const pathText = (value: unknown): value is string =>
-  typeof value === 'string' && value.startsWith('/') && value.length <= 4096 && !value.includes('\0')
+  typeof value === 'string' && isAbsolutePath(value) && value.length <= 4096 && !value.includes('\0')
 
 export function validWorktreeJournal(value: unknown): value is WorktreeJournalState {
   if (!value || typeof value !== 'object') return false

@@ -9,9 +9,10 @@ export function developerIdOf(findIdentityOutput) {
   return m ? m[1] : null
 }
 
-/** electron-builder 인자 — 배포용 dmg(설치) + zip(자동 업데이트) · arm64 · 게시는 하지 않음(사용자 확인 대상) */
-export function builderArgs(identity) {
-  return ['--mac', 'dmg', 'zip', '--arm64', '--publish', 'never', `-c.mac.identity=${identity}`]
+/** electron-builder 인자 — 배포용 dmg(설치) + zip(자동 업데이트) · 지정한 칩 · 게시하지 않음 */
+export function builderArgs(identity, arch = 'arm64') {
+  if (!['arm64', 'x64', 'all'].includes(arch)) throw new Error(`지원하지 않는 Mac 칩: ${arch}`)
+  return ['--mac', 'dmg', 'zip', ...(arch === 'all' ? ['--arm64', '--x64'] : [`--${arch}`]), '--publish', 'never', `-c.mac.identity=${identity}`]
 }
 
 /** 시작 전에 사용자가 해야 할 일 — 빈 배열이면 진행 */

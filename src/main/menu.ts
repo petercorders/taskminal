@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { IPC } from '../shared/ipc'
-import { shortcutTable, type AppCommand, type Shortcut } from '../shared/keymap'
+import { nativeAccel, shortcutTable, type AppCommand, type Shortcut } from '../shared/keymap'
 
 // ⌥⌘Q 모두 끝내기는 창이 없어도 돌아야 해서 renderer 를 거치지 않고 main 이 바로 받는다 (index.ts 가 정한다)
 let quitAllHandler: () => void = () => {}
@@ -20,7 +20,7 @@ function itemOf(table: readonly Shortcut[], command: AppCommand): MenuItemConstr
   return {
     id: command,
     label: s.label,
-    ...(s.accel ? { accelerator: s.accel } : {}),
+    ...(s.accel ? { accelerator: nativeAccel(s.accel, process.platform === 'darwin' ? 'meta' : 'control') } : {}),
     registerAccelerator: false,
     click: (_item, win) => {
       // 창이 하나뿐인 앱 — 포커스된 창이 없으면(다른 앱이 앞) 그 창으로
@@ -74,7 +74,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('split-down'),
         { type: 'separator' },
         item('close-pane'),
-        { role: 'close', label: '창 닫기', accelerator: 'Shift+Command+W' },
+        { role: 'close', label: '창 닫기', accelerator: 'Shift+CommandOrControl+W' },
       ],
     },
     {

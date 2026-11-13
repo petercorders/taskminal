@@ -1,0 +1,113 @@
+name: Native platform packages
+
+on:
+  push:
+    branches: [stage-36-40-orca-followup, 'stage-43-*']
+    paths:
+      - 'src/**'
+      - 'resources/**'
+      - 'scripts/**'
+      - 'tests/e2e/platform-smoke.spec.ts'
+      - 'tests/unit/platform-package.test.ts'
+      - 'package*.json'
+      - 'electron-builder.yml'
+      - '.github/workflows/multi-platform.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+            os: mac
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            os: mac
+          - runner: windows-2025
+            platform: win32
+            arch: x64
+            os: win
+          - runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+            os: linux
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Require native runner
+        shell: bash
+        run: node -e "if(process.platform!=='${{ matrix.platform }}'||process.arch!=='${{ matrix.arch }}')process.exit(1)"
+      - name: Linux native build and display dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 xvfb libgtk-3-0 libnss3 libasound2t64 libgbm1 libx11-xcb1 libatk-bridge2.0-0
+          # 임시 러너에서만 user namespace를 허용한다. 앱의 Chromium sandbox를 끄지 않는다.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Platform decision regression tests
+        run: npx vitest run tests/unit/platform.test.ts tests/unit/agent-platform.test.ts tests/unit/platform-package.test.ts
+      - name: Native package (no publication)
+        run: npm run package:platform -- --arch ${{ matrix.arch }}
+      - name: Locate packaged executable
+        id: app
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));const f='dist/releases/'+p.version+'-${{ matrix.os }}-${{ matrix.arch }}/package-plan.json';const plan=JSON.parse(fs.readFileSync(f));fs.appendFileSync(process.env.GITHUB_OUTPUT,'path='+plan.executable+'\noutput='+plan.output+'\nversion='+p.version+'\n')"
+      - name: Run packaged shell and guardian smoke
+        if: runner.os != 'Linux'
+        run: npx playwright test tests/e2e/platform-smoke.spec.ts --reporter=line
+        env:
+          TASKMINAL_E2E_PACKAGED: '1'
+          TASKMINAL_E2E_APP_PATH: ${{ steps.app.outputs.path }}
+          TASKMINAL_EXPECT_VERSION: ${{ steps.app.outputs.version }}
+      - name: Run packaged shell and guardian smoke (Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npx playwright test tests/e2e/platform-smoke.spec.ts --reporter=line
+        env:
+          TASKMINAL_E2E_PACKAGED: '1'
+          TASKMINAL_E2E_APP_PATH: ${{ steps.app.outputs.path }}
+          TASKMINAL_EXPECT_VERSION: ${{ steps.app.outputs.version }}
+      - name: Record validated artifact hashes
+        run: node scripts/artifact-manifest.mjs "${{ steps.app.outputs.output }}" ${{ matrix.platform }} ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taskminal-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            ${{ steps.app.outputs.output }}/*.dmg
+            ${{ steps.app.outputs.output }}/*.zip
+            ${{ steps.app.outputs.output }}/*.exe
+            ${{ steps.app.outputs.output }}/*.AppImage
+            ${{ steps.app.outputs.output }}/*.deb
+            ${{ steps.app.outputs.output }}/*.blockmap
+            ${{ steps.app.outputs.output }}/*.yml
+            ${{ steps.app.outputs.output }}/manifest-*.json
+            ${{ steps.app.outputs.output }}/SHA256SUMS-*
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: diagnostics-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          if-no-files-found: ignore
+          path: test-results/

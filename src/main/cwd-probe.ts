@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import { parseLsofCwd, parseStrictLsofCwds } from '../shared/cwd'
+import { readlink } from 'node:fs/promises'
 
-const LSOF = '/usr/sbin/lsof'
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof'
 const TIMEOUT_MS = 2000
 
 /**
@@ -11,6 +12,8 @@ const TIMEOUT_MS = 2000
 export function lsofCwds(pids: readonly number[]): Promise<Record<number, string>> {
   const list = pids.filter((p) => Number.isInteger(p) && p > 0)
   if (list.length === 0) return Promise.resolve({})
+  if (process.platform === 'win32') return Promise.resolve({})
+  if (process.platform === 'linux') return linuxCwds(list, false)
   return new Promise((resolve) => {
     // 로캘이 UTF-8 이 아니면(Finder 로 띄운 앱 · LANG 없음) lsof 가 한글 경로 바이트를 `\xNN` 글자로 찍는다(13단계 리뷰에서 재현)
     const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
@@ -30,6 +33,8 @@ export async function strictLsofCwds(pids: readonly number[]): Promise<Record<nu
   if (list.length > 4096 || list.some(pid => !Number.isInteger(pid) || pid <= 0 || pid >= 2 ** 31) || new Set(list).size !== list.length) {
     throw new Error('실행 중인 셸의 PID를 확인하지 못했어요')
   }
+  if (process.platform === 'win32') throw new Error('Windows에서는 실행 중인 셸의 실제 폴더를 확인할 수 없어 안전하게 정리를 중단했어요.')
+  if (process.platform === 'linux') return linuxCwds(list, true)
   return new Promise((resolve, reject) => {
     const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
     execFile(LSOF, ['-a', '-d', 'cwd', '-F0pn', '-p', list.join(',')], { timeout: TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env }, (error, stdout, stderr) => {
@@ -41,4 +46,18 @@ export async function strictLsofCwds(pids: readonly number[]): Promise<Record<nu
       catch (cause) { reject(cause) }
     })
   })
+}
+
+async function linuxCwds(pids: readonly number[], strict: boolean): Promise<Record<number, string>> {
+  const found: Record<number, string> = {}
+  await Promise.all(pids.map(async (pid) => {
+    try {
+      const path = await readlink(`/proc/${pid}/cwd`)
+      if (!path.startsWith('/') || path.endsWith(' (deleted)')) throw new Error('폴더 확인 실패')
+      found[pid] = path
+    } catch {
+      if (strict) throw new Error('실행 중인 셸의 폴더를 확인하지 못했어요. 정리하지 않았어요.')
+    }
+  }))
+  return found
 }

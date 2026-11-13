@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline'
 import type { ChatAgent } from '../shared/chat'
 import { codexUsage, type AccountStatus, type AgentAccount } from '../shared/accounts'
 import { redact } from '../shared/redact'
-import { AgentBinFinder } from './chat/find-bin'
+import { AgentBinFinder, agentLaunch } from './chat/find-bin'
 
 interface Saved {
   accounts: Array<Omit<AgentAccount, 'selected'>>
@@ -127,6 +127,7 @@ export class Accounts {
     this.bind(pane, agent, resuming)
     const id = this.data.bindings[`${agent}:${pane}`]!
     if (id.startsWith('default-')) return bin
+    if (process.platform === 'win32') throw new Error('Windows에서 추가 계정의 TUI 전환은 아직 지원하지 않아요. 이 대화창에서 계속할 수 있어요.')
     const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'"
     const vars = Object.entries(this.env(id))
       .map(([k, v]) => k + '=' + quote(v))
@@ -158,7 +159,7 @@ export class Accounts {
     const env = this.environment(id, { ...process.env, PATH: bin.path })
     if (account.agent === 'claude') {
       return new Promise((resolve) =>
-        execFile(bin.bin, ['auth', 'status', '--json'], { env, timeout: 15000, maxBuffer: 100000 }, (err, stdout) => {
+        execFile(bin.bin, agentLaunch(bin, ['auth', 'status', '--json'], env).args, { env: agentLaunch(bin, [], env).env, timeout: 15000, maxBuffer: 100000 }, (err, stdout) => {
           try {
             const d = JSON.parse(stdout)
             const signed = d.loggedIn === true || (typeof d.authMethod === 'string' && d.authMethod !== 'none')
@@ -175,7 +176,8 @@ export class Accounts {
     }
     return new Promise((resolve) => {
       const args = ['app-server', '--listen', 'stdio://', ...(id.startsWith('default-') ? [] : ['-c', 'cli_auth_credentials_store="file"'])]
-      const child = spawn(bin.bin, args, { env, stdio: ['pipe', 'pipe', 'pipe'] })
+      const launch = agentLaunch(bin, args, env)
+      const child = spawn(launch.bin, launch.args, { env: launch.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
       this.queries.add(child)
       child.stderr?.resume()
       const lines = createInterface({ input: child.stdout! })
@@ -260,7 +262,8 @@ export class Accounts {
       if (!bin) throw new Error('CLI를 찾지 못했어요')
       if (!slot.running) return
       const args = a.agent === 'codex' ? ['-c', 'cli_auth_credentials_store="file"', 'login', '--device-auth'] : ['auth', 'login', '--claudeai']
-      const child = spawn(bin.bin, args, { env: this.environment(id, { ...process.env, PATH: bin.path }), stdio: ['ignore', 'pipe', 'pipe'] })
+      const launch = agentLaunch(bin, args, this.environment(id, { ...process.env, PATH: bin.path }))
+      const child = spawn(launch.bin, launch.args, { env: launch.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
       slot.child = child
       slot.output = ''
       const output = (d: Buffer) => {

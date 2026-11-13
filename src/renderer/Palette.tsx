@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { accelLabel, type Shortcut } from '../shared/keymap'
+import type { Shortcut } from '../shared/keymap'
+import { accelLabel } from './keyboard'
 import { markSegments, nextScope, paletteItems, SCOPE_LABEL, type PaletteInput, type PaletteItem, type PaletteScope } from '../shared/palette'
 import type { HistoryEntry } from '../shared/history'
 import type { AppState } from '../shared/types'

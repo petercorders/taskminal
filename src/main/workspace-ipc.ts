@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { redact } from '../shared/redact'
 import { browserTabId, browserTaskId, validBrowserTabsJournal, type BrowserTabsJournal } from '../shared/browser-tabs'
@@ -15,6 +14,7 @@ import { GitWorkflowService } from './git-workflow'
 import { validGitTarget, validWorkflowOptions } from '../shared/git-workflow'
 import { Accounts } from './accounts'
 import { ConversationSearch } from './conversation-search'
+import { openTextEditor } from './text-editor'
 
 export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean, state: () => AppState | null) {
   const secretOptions = () => {
@@ -89,9 +89,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   ipcMain.handle(IPC.workspaceExternal, async (e, dir, p) => {
     const full = await files.path(root(e, dir), path(p))
     // TextEdit/registered editor only: shell.openPath could execute a .command file.
-    await new Promise<void>((ok, fail) =>
-      execFile('/usr/bin/open', ['-t', full], { timeout: 5000 }, (err) => (err ? fail(new Error('편집기를 열지 못했어요')) : ok())),
-    )
+    await openTextEditor(full)
   })
   const browserTab=(value:unknown):string|undefined=>{if(value===undefined)return undefined;if(!browserTabId(value))throw new Error('브라우저 탭 번호를 확인해 주세요');return value}
   ipcMain.handle(IPC.browserTabs,(e,id)=>browser.tabs(win(e),task(e,id)))

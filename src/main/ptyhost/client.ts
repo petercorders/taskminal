@@ -168,7 +168,7 @@ export class HostClient {
   private launch(): Promise<void> {
     return new Promise((resolve, reject) => {
       const env = { ...this.o.env, ELECTRON_RUN_AS_NODE: '1' }
-      const child = spawn(this.o.execPath, [this.o.hostScript, this.o.sockPath, this.o.userData], { detached: true, stdio: 'ignore', cwd: '/', env })
+      const child = spawn(this.o.execPath, [this.o.hostScript, this.o.sockPath, this.o.userData], { detached: true, stdio: 'ignore', cwd: this.o.userData, env, windowsHide: true })
       let settled = false
       // 바로 죽으면(스크립트 없음 등) 기다리지 않고 실패
       child.once('exit', (code) => {

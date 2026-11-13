@@ -1,5 +1,5 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { join, resolve, relative, isAbsolute } from 'node:path'
+import { join, resolve, relative, isAbsolute, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { realpath } from 'node:fs/promises'
 import { IPC } from '../shared/ipc'
@@ -9,7 +9,7 @@ import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
 interface Dependencies { state():AppState|null; revision():number; pendingPaths():string[]; liveCwds():Promise<string[]> }
 const expand=(value:string)=>resolve(value==='~'?homedir():value.startsWith('~/')?join(homedir(),value.slice(2)):value)
-const inside=(parent:string,child:string)=>{const path=relative(parent,child);return path===''||(!isAbsolute(path)&&path!=='..'&&!path.startsWith('../'))}
+const inside=(parent:string,child:string)=>{const path=relative(parent,child);return path===''||(!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep))}
 export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d:Dependencies){
   const taskPaths=()=>d.state()?.tasks.filter(t=>!t.host).flatMap(t=>[t.cwd,...Object.values(t.panes).map(p=>p.cwd)]).map(expand)??[]
   const used=async()=>{const live=await d.liveCwds();return [...taskPaths(),...d.pendingPaths().map(expand),...live]}

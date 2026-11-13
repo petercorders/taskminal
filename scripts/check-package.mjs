@@ -14,7 +14,7 @@ const ASAR_ENTRIES = ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js'
 // 이 밖의 파일(개발 중 생긴 .zsh_history · .zcompdump …)이 들어가면 개발자의 명령 기록이 .app 에 실린다 — 목록 밖은 문제로 본다
 const SHELL_FILES = ['.zshenv', '.zprofile', '.zshrc', '.zlogin', 'taskminal-hooks.zsh']
 // node-pty(lib/utils.js loadNativeModule)가 pty.node 를 찾는 순서 — 처음 있는 곳의 spawn-helper 를 쓴다
-const PTY_DIRS = ['build/Release', 'build/Debug', 'prebuilds/darwin-arm64']
+const ptyDirs = (expectedArch = 'arm64') => ['build/Release', 'build/Debug', `prebuilds/darwin-${expectedArch}`]
 
 const plistValue = (plist, key) => {
   const m = new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`).exec(plist)
@@ -26,7 +26,7 @@ const lipoArch = (bin) => execFileSync('/usr/bin/lipo', ['-archs', bin], { encod
 const codesignVerify = (app) => execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { stdio: 'pipe' })
 
 /** @returns {Promise<string[]>} 문제 목록 (빈 배열 = 통과) */
-export async function checkPackage(appPath, { arch = lipoArch, verify = codesignVerify } = {}) {
+export async function checkPackage(appPath, { arch = lipoArch, verify = codesignVerify, expectedArch = 'arm64' } = {}) {
   const problems = []
   const c = join(appPath, 'Contents')
   const res = join(c, 'Resources')
@@ -55,12 +55,27 @@ export async function checkPackage(appPath, { arch = lipoArch, verify = codesign
 
   // node-pty: 네이티브 모듈 · spawn-helper 는 asar 밖에서만 실행된다. spawn-helper 에 실행 권한이 없으면 posix_spawnp failed
   const ptyRoot = join(res, 'app.asar.unpacked', 'node_modules', 'node-pty')
+  const PTY_DIRS = ptyDirs(expectedArch)
   const ptyDir = PTY_DIRS.find((d) => existsSync(join(ptyRoot, d, 'pty.node')))
   if (!ptyDir) problems.push(`asar 밖 node-pty 에 pty.node 없음 (asarUnpack, 찾는 곳: ${PTY_DIRS.join(' · ')})`)
   else {
     const helper = join(ptyRoot, ptyDir, 'spawn-helper')
     if (!existsSync(helper)) problems.push(`asar 밖 node-pty 에 spawn-helper 없음: ${ptyDir}`)
     else if ((statSync(helper).mode & 0o111) === 0) problems.push(`${ptyDir}/spawn-helper 에 실행 권한이 없음 — 셸이 posix_spawnp failed 로 안 뜬다`)
+    for (const f of ['pty.node', 'spawn-helper']) {
+      const p = join(ptyRoot, ptyDir, f)
+      if (!existsSync(p)) continue
+      try {
+        const expected = expectedArch === 'x64' ? 'x86_64' : expectedArch
+        if (!arch(p).split(/\s+/).includes(expected)) problems.push(`${ptyDir}/${f} 가 ${expectedArch} 가 아님`)
+      } catch (e) {
+        problems.push(`${ptyDir}/${f} 아키텍처 확인 실패: ${String(e).split('\n')[0]}`)
+      }
+    }
+  }
+  const prebuilds = join(ptyRoot, 'prebuilds')
+  if (existsSync(prebuilds)) for (const name of readdirSync(prebuilds)) {
+    if (name !== `darwin-${expectedArch}`) problems.push(`다른 OS/칩의 node-pty 포함: ${name}`)
   }
 
   const zsh = join(res, 'shell', 'zsh')
@@ -81,7 +96,8 @@ export async function checkPackage(appPath, { arch = lipoArch, verify = codesign
     } catch (e) {
       a = `알 수 없음 (${e})`
     }
-    if (!a.split(/\s+/).includes('arm64')) problems.push(`실행 파일이 arm64 가 아님: ${a}`)
+    const expected = expectedArch === 'x64' ? 'x86_64' : expectedArch
+    if (!a.split(/\s+/).includes(expected)) problems.push(`실행 파일이 ${expectedArch} 가 아님: ${a}`)
   }
   // 서명이 깨진 번들(Electron 링커 서명 그대로)은 권한이 'Electron' 이름에 묶이고, 격리 표시가 붙으면 '손상됨' 으로 막힌다
   try {
@@ -104,7 +120,7 @@ const firstLine = (e) => String(e.stderr ?? e).trim().split('\n').filter(Boolean
  * 배포본 검사 (18단계, npm run release 끝) — Developer ID 서명 · 팀 ID 가 node-pty 까지 같은지 · hardened runtime ·
  * Gatekeeper(spctl) · 공증 staple · dmg/zip/latest-mac.yml. @returns {string[]} 문제 목록
  */
-export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl = spctlAssess, stapler = staplerValidate } = {}) {
+export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl = spctlAssess, stapler = staplerValidate, expectedArch = 'arm64' } = {}) {
   const problems = []
   const info = codesign(appPath)
   const team = /TeamIdentifier=(\S+)/.exec(info)?.[1]
@@ -117,6 +133,7 @@ export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl 
   if (yml === null) problems.push('Resources/app-update.yml 없음 — 자동 업데이트가 받는 곳을 모른다 (electron-builder publish)')
   else if (!/provider: github/.test(yml) || !/owner: petercorders/.test(yml) || !/repo: taskminal/.test(yml)) problems.push(`app-update.yml 의 받는 곳이 GitHub petercorders/taskminal 이 아님: ${yml.trim().replace(/\n/g, ' · ')}`)
   const ptyRoot = join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules', 'node-pty')
+  const PTY_DIRS = ptyDirs(expectedArch)
   const ptyDir = PTY_DIRS.find((d) => existsSync(join(ptyRoot, d, 'pty.node')))
   if (ptyDir && team) {
     for (const f of ['spawn-helper', 'pty.node']) {
@@ -137,8 +154,8 @@ export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl 
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   const version = existsSync(plistPath) ? plistValue(readFileSync(plistPath, 'utf8'), 'CFBundleShortVersionString') : null
   const files = existsSync(distDir) ? readdirSync(distDir) : []
-  if (!files.some((f) => f.endsWith('.dmg') && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} 의 .dmg(설치용) 없음`)
-  if (!files.some((f) => f.endsWith('-mac.zip') && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} 의 -mac.zip(자동 업데이트용) 없음`)
+  if (!files.some((f) => f.endsWith(`-${expectedArch}.dmg`) && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} ${expectedArch} 의 .dmg(설치용) 없음`)
+  if (!files.some((f) => (f.endsWith(`-${expectedArch}-mac.zip`) || f.endsWith(`-mac-${expectedArch}.zip`)) && version && f.includes(`-${version}-`))) problems.push(`dist 에 ${version} ${expectedArch} 의 -mac.zip(자동 업데이트용) 없음`)
   if (!files.includes('latest-mac.yml')) problems.push('dist 에 latest-mac.yml(자동 업데이트 목록) 없음')
   return problems
 }
@@ -146,11 +163,13 @@ export function checkRelease(appPath, distDir, { codesign = codesignInfo, spctl 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const app = process.argv[2]
   if (!app) {
-    console.error('사용법: node scripts/check-package.mjs <Taskminal.app 경로> [--release <dist 폴더>]')
+    console.error('사용법: node scripts/check-package.mjs <Taskminal.app 경로> [--arch arm64|x64] [--release <dist 폴더>]')
     process.exit(2)
   }
   const releaseAt = process.argv.indexOf('--release')
-  const problems = [...(await checkPackage(app)), ...(releaseAt > 0 ? checkRelease(app, process.argv[releaseAt + 1] ?? 'dist') : [])]
+  const archAt = process.argv.indexOf('--arch')
+  const expectedArch = archAt > 0 ? process.argv[archAt + 1] : 'arm64'
+  const problems = [...(await checkPackage(app, { expectedArch })), ...(releaseAt > 0 ? checkRelease(app, process.argv[releaseAt + 1] ?? 'dist', { expectedArch }) : [])]
   for (const p of problems) console.log(`✗ ${p}`)
   if (problems.length) process.exit(1)
   console.log(`✓ 패키지 검사 통과: ${app}`)

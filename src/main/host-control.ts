@@ -48,7 +48,7 @@ export function createHostControl(
 ): HostControl {
   const userData = app.getPath('userData')
   const protocol = envInt('TASKMINAL_PTYHOST_PROTOCOL') ?? PTYHOST_PROTOCOL // 시험: 옛 버전 흉내
-  const sockPath = socketPath(userData, protocol, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
+  const sockPath = socketPath(userData, protocol, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'), process.platform)
   const hostScript = process.env['TASKMINAL_PTYHOST_SCRIPT'] ?? join(__dirname, 'host.js')
   const noticeFile = join(userData, 'quit-notice-seen')
   const logFile = join(userData, 'ptyhost.log')
@@ -125,6 +125,7 @@ export function createHostControl(
   // 같은 폴더의 다른 버전 소켓 — 살아 있는 셸이 있으면 알린다
   const prefix = basename(sockPath).replace(/-v\d+\.sock$/, '')
   const otherSockets = (): Array<{ path: string; version: number }> => {
+    if (process.platform === 'win32') return [] // named pipe는 디렉터리의 소켓 파일이 아니다
     try {
       return readdirSync(dirname(sockPath))
         .map((name) => ({ path: join(dirname(sockPath), name), version: socketVersion(name, prefix) }))

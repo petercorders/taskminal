@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { chatStatus, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
-import type { AgentBin } from './find-bin'
+import { agentLaunch, type AgentBin } from './find-bin'
 import { ClaudeSession, type Decision, type SpawnFn } from './claude-adapter'
 import { CodexSession } from './codex-adapter'
 import type { AgentSession } from './session'
@@ -143,7 +143,11 @@ export class ChatManager {
         permission: this.d.permissionFor?.(paneId)??(this.forcedAsk.has(paneId)?'ask':this.d.permission()),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),
         ...(chat.sessionId && chat.forkAt ? { forkAt: chat.forkAt } : {}),
-        spawn: this.d.spawn,
+        spawn: (bin: string, args: string[], opts: { cwd: string; env: Record<string, string> }) => {
+          if (!found.runAsNode) return this.d.spawn(bin, args, opts)
+          const launch = agentLaunch(found, args, opts.env)
+          return this.d.spawn(launch.bin, launch.args, { cwd: opts.cwd, env: launch.env as Record<string, string> })
+        },
         onEvent: (ev: ChatEvent) => {
           if (!entry.closed) this.emit(paneId, entry.sink, ev)
         },

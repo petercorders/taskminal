@@ -433,7 +433,8 @@ export function runningCount(task: Task, activity: Readonly<Record<string, PaneA
 // ─── 소켓 경로 · 도움말 ───────────────────────────────────────
 
 /** `<userData>/cli.sock` — 맥 한도(104바이트)를 넘으면 `<tmp>/taskminal-<해시>-cli.sock` (지킴이 소켓과 같은 규칙) */
-export function cliSocketPath(userData: string, tmp: string, hash: (s: string) => string): string {
+export function cliSocketPath(userData: string, tmp: string, hash: (s: string) => string, platform = 'darwin'): string {
+  if (platform === 'win32') return `\\\\.\\pipe\\taskminal-${hash(userData).slice(0, 24)}-cli`
   const direct = `${userData.replace(/\/+$/, '')}/cli.sock`
   if (new TextEncoder().encode(direct).length < 104) return direct
   return `${tmp.replace(/\/+$/, '')}/taskminal-${hash(userData).slice(0, 16)}-cli.sock`

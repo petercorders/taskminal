@@ -170,13 +170,24 @@ function indexOf(table: readonly Shortcut[]): Map<string, AppCommand> {
 
 /** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. ⌃ 는 표에 ⌃ 가 있는 키만(⌃⌘← 상태 옮기기).
  *  한글을 조합하는 중(isComposing)이어도 ⌘ 가 눌렸으면 단축키다 — ⌘ 없는 조합 키는 처음부터 해당이 없다. */
-export function commandForKey(ev: KeyLike, table: readonly Shortcut[] = DEFAULT_TABLE): AppCommand | null {
+export type PrimaryModifier = 'meta' | 'control'
+const logicalKey = (ev: KeyLike, primary: PrimaryModifier): KeyLike => primary === 'meta' ? ev : {
+  key: ev.key, code: ev.code, shiftKey: ev.shiftKey, altKey: ev.altKey, isComposing: ev.isComposing,
+  metaKey: ev.ctrlKey, ctrlKey: ev.metaKey,
+}
+
+/** 저장된 Command는 OS의 기본 명령 키이다. 기존 별도 Control은 비Mac에서 Super로 구분한다. */
+export const nativeAccel = (accel: string, primary: PrimaryModifier): string => primary === 'meta' ? accel : accel.split('+').map((key) => key === 'Command' ? 'Control' : key === 'Control' ? 'Super' : key).join('+')
+
+export function commandForKey(event: KeyLike, table: readonly Shortcut[] = DEFAULT_TABLE, primary: PrimaryModifier = 'meta'): AppCommand | null {
+  const ev = logicalKey(event, primary)
   if (!ev.metaKey) return null
   return indexOf(table).get(signature(ev.code, ev.shiftKey, ev.altKey, ev.ctrlKey)) ?? null
 }
 
 /** 설정 창에서 누른 키 → accel. ⌘ 가 없거나 꾸밈키만 · 모르는 키면 null. */
-export function accelFromEvent(ev: KeyLike): string | null {
+export function accelFromEvent(event: KeyLike, primary: PrimaryModifier = 'meta'): string | null {
+  const ev = logicalKey(event, primary)
   if (!ev.metaKey) return null
   const k = keyOfCode(ev.code)
   if (!k) return null
@@ -233,8 +244,8 @@ export const repeatable = (command: AppCommand): boolean => !ONCE.has(command)
 
 const SYMBOL: Record<string, string> = { Shift: '⇧', Command: '⌘', Alt: '⌥', Control: '⌃', Up: '↑', Down: '↓', Left: '←', Right: '→', '-': '−' }
 /** 'Shift+Command+D' → '⇧⌘D' (팔레트 · 화면 표시용). Alt 가 Shift 보다 앞에 있어도 macOS 순서(⌥⇧⌘)는 맞추지 않는다 */
-export const accelLabel = (accel: string): string =>
-  accel
+export const accelLabel = (accel: string, primary: PrimaryModifier = 'meta'): string =>
+  primary === 'control' ? nativeAccel(accel, primary).replace(/Control/g, 'Ctrl') : accel
     .split('+')
     .map((p) => SYMBOL[p] ?? p)
     .join('')

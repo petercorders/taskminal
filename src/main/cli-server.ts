@@ -61,14 +61,14 @@ export class CliServer {
         resolve()
       })
     })
-    const old = process.umask(0o077)
+    const old = process.platform === 'win32' ? null : process.umask(0o077)
     try {
       server.listen(path)
     } finally {
-      process.umask(old)
+      if (old !== null) process.umask(old)
     }
     await listening
-    chmodSync(path, 0o600)
+    if (process.platform !== 'win32') chmodSync(path, 0o600)
     this.server = server
   }
 

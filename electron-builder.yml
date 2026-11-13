@@ -1,5 +1,5 @@
-# 14단계 패키징 — `npm run package` (빌드 → .app → 정적 검사). 이 Mac 용: ad-hoc 서명 · dir.
-# 18단계 배포 — `npm run release` (scripts/release.mjs): 같은 설정에 Developer ID 인증서 · dmg + zip 을 더하고 공증(APPLE_KEYCHAIN_PROFILE).
+# `npm run package` — 현재 OS·칩용 빌드 → 설치 파일 → 정적 검사. 게시하지 않는다.
+# `npm run release` — 두 Mac 칩 Developer ID 서명·공증(APPLE_KEYCHAIN_PROFILE), dmg + zip.
 appId: io.peterbong.taskminal
 productName: Taskminal
 directories:
@@ -7,12 +7,13 @@ directories:
 files:
   - out/**
   - package.json
-  # 이 앱은 arm64 mac 만 — 다른 플랫폼의 node-pty 미리 빌드는 넣지 않는다
-  - "!node_modules/node-pty/prebuilds/{win32-*,darwin-x64}/**"
+# OS·칩별 파일 이름이 겹치지 않아 다운로드/업데이트 자산을 안전하게 구분한다.
+artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
 # 네이티브 모듈 · spawn-helper 는 asar 안에서 실행할 수 없다
 asarUnpack:
   - node_modules/node-pty/**
-# node-pty 는 N-API 미리 빌드(prebuilds/darwin-arm64)를 쓴다 — 다시 컴파일하지 않는다
+# node-pty 는 N-API 미리 빌드를 쓴다. Linux 는 해당 OS의 npm ci가 컴파일한다.
+# afterPack 에서 대상과 다른 prebuilds와 오래된 소스 빌드를 패키지에서 제거한다.
 npmRebuild: false
 # 셸 통합 시작 파일 — zsh 가 직접 읽으므로 asar 밖 Resources/shell/zsh 에 (main 이 app.isPackaged 면 여기를 본다).
 # 점 파일(.zshrc …)도 들어간다(electron-builder 의 기본 거르기가 점 파일을 포함 — 변이로 확인, check-package 가 본다)
@@ -42,6 +43,27 @@ mac:
   hardenedRuntime: true
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # Windows 인증서는 아직 없으므로 미서명 빌드. 서명 검증을 했다고 표시하지 않는다.
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  executableName: taskminal
+  icon: resources/icon/icon.png
+  category: Development
+  maintainer: petercorders <petercorders@users.noreply.github.com>
 # 18단계: 자동 업데이트 받는 곳 = GitHub Releases (2026-11-11 사용자 결정, NAS 대신). app-update.yml 을 넣으려고 둔다 —
 # 게시는 하지 않는다(package · release 모두 --publish never). 릴리스 올리기는 사용자 확인 뒤.
 publish:

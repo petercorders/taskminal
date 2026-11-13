@@ -37,7 +37,7 @@ export class AtomicJournal<T> {
    const fd=openSync(tmp,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600)
    try{fchmodSync(fd,0o600);writeFileSync(fd,bytes);fsyncSync(fd)}finally{closeSync(fd)}
    renameSync(tmp,this.file)
-   const folder=openSync(dir,'r');try{fsyncSync(folder)}finally{closeSync(folder)}
+   if(process.platform!=='win32'){const folder=openSync(dir,'r');try{fsyncSync(folder)}finally{closeSync(folder)}}
   }catch{try{rmSync(tmp,{force:true})}catch{};throw new Error('기록을 저장하지 못해 실행을 멈췄어요.')}
  }
 }
