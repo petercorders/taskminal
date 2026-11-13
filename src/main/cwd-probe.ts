@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { parseLsofCwd } from '../shared/cwd'
+import { parseLsofCwd, parseStrictLsofCwds } from '../shared/cwd'
 
 const LSOF = '/usr/sbin/lsof'
 const TIMEOUT_MS = 2000
@@ -16,6 +16,29 @@ export function lsofCwds(pids: readonly number[]): Promise<Record<number, string
     const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
     execFile(LSOF, ['-a', '-d', 'cwd', '-Fpn', '-p', list.join(',')], { timeout: TIMEOUT_MS, env }, (_error, stdout) => {
       resolve(parseLsofCwd(typeof stdout === 'string' ? stdout : ''))
+    })
+  })
+}
+
+/** Worktree mutation guard: every requested PID must have one unambiguous cwd.
+ * Unlike the display probe above, partial output and process failures reject.
+ */
+export async function strictLsofCwds(pids: readonly number[]): Promise<Record<number, string>> {
+  // Validate before invoking a process; duplicate identities are not silently lost.
+  const list = [...pids]
+  if (list.length === 0) return parseStrictLsofCwds('', list)
+  if (list.length > 4096 || list.some(pid => !Number.isInteger(pid) || pid <= 0 || pid >= 2 ** 31) || new Set(list).size !== list.length) {
+    throw new Error('실행 중인 셸의 PID를 확인하지 못했어요')
+  }
+  return new Promise((resolve, reject) => {
+    const env = { ...process.env, LC_ALL: 'en_US.UTF-8' }
+    execFile(LSOF, ['-a', '-d', 'cwd', '-F0pn', '-p', list.join(',')], { timeout: TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024, env }, (error, stdout, stderr) => {
+      if (error || stderr || typeof stdout !== 'string') {
+        reject(new Error('실행 중인 셸의 폴더를 확인하지 못했어요. 정리하지 않았어요.'))
+        return
+      }
+      try { resolve(parseStrictLsofCwds(stdout, list)) }
+      catch (cause) { reject(cause) }
     })
   })
 }

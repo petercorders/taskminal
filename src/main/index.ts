@@ -23,13 +23,14 @@ import { CliServer } from './cli-server'
 import { installCli } from './cli-install'
 import { cliSocketPath, parseUiReply, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
 import { PaneWatch } from '../shared/pane-watch'
-import { lsofCwds } from './cwd-probe'
+import { lsofCwds, strictLsofCwds } from './cwd-probe'
 import { killPort, probePorts } from './port-probe'
 import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import { installWorkflowIpc } from './workflow-ipc'
 import { installScheduleIpc } from './schedule-ipc'
+import { installWorktreeIpc } from './worktree-ipc'
 import type { WorkflowRunner } from './workflow-runner'
 import { installWorkspaceIpc } from './workspace-ipc'
 import type { Accounts } from './accounts'
@@ -262,6 +263,8 @@ const reviewWatch = new ReviewWatch()
 // 상태 백업(17단계) — userData 가 정해진 뒤 만든다
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
+let worktreeRevision=0
+const pendingWorktreeCwds=new Map<symbol,string>()
 let lastWritten: AppState | null = null // 디스크에 있는 상태 — 다음 상태와 비교해 백업 이유를 정한다
 let lastSettingsBackup = 0
 let changedSinceAuto = false
@@ -583,6 +586,16 @@ if (!app.requestSingleInstanceLock()) {
     available:()=>!!stateFile?.canWrite&&!!lastState&&!!mainWindow&&!mainWindow.isDestroyed()&&!mainWindow.webContents.isCrashed()&&!mainWindow.webContents.isLoading(),
     redact:text=>redact(text,secretOpts),report:error=>report('error','schedules','예약 실행을 멈췄어요',error),
   })
+  installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],
+    liveCwds:async()=>{
+      await control().ready
+      if(control().view().state!=='connected')throw new Error('셸 지킴이 상태를 확인하지 못했어요')
+      const sessions=(await control().sessions(false)).filter(s=>!s.exited)
+      const paths=await strictLsofCwds(sessions.map(s=>s.pid))
+      if(sessions.some(s=>!paths[s.pid]))throw new Error('실행 중인 셸의 폴더를 확인하지 못했어요')
+      return Object.values(paths)
+    },
+  })
 
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
@@ -596,8 +609,11 @@ if (!app.requestSingleInstanceLock()) {
     if (rem !== undefined && (typeof rem !== 'object' || rem === null || typeof rem['host'] !== 'string' || !isSshHost(rem['host']) || !isRemotePath(o['cwd']))) {
       throw new Error('잘못된 원격 인자')
     }
-    await control().ready
+    const pendingCwd=Symbol()
+    pendingWorktreeCwds.set(pendingCwd,rem?homedir():o['cwd'])
+    worktreeRevision++
     try {
+      await control().ready
       const ssh = rem ? { file: sshFile(), args: sshArgs({ host: rem['host'] as string, cwd: o['cwd'], paneId, tmux: rem['tmux'] !== false, controlDir: sshControlDir() }) } : undefined
       await control().ptys.spawn(
         event.sender,
@@ -614,6 +630,8 @@ if (!app.requestSingleInstanceLock()) {
     } catch (e) {
       report('error', 'pty-spawn', '셸을 띄우지 못했어요', e)
       throw e
+    } finally {
+      pendingWorktreeCwds.delete(pendingCwd);worktreeRevision++
     }
   })
   // 25단계: 새 일감 대화상자의 호스트 목록 — ~/.ssh/config 를 읽기만(없거나 못 읽으면 빈 목록, Include 는 따라가지 않는다)
@@ -650,6 +668,7 @@ if (!app.requestSingleInstanceLock()) {
     const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
     lastState = loaded.state
+    worktreeRevision++
     stateFile = file
     if (file.canWrite) {
       lastWritten = loaded.state
@@ -683,6 +702,7 @@ if (!app.requestSingleInstanceLock()) {
     if (bytes > MAX_STATE_BYTES) return
     const state = normalizeState(raw, randomUUID)
     lastState = state
+    worktreeRevision++
     if (stateFile?.canWrite) {
       secretOpts = optsFrom(state.settings)
       updatePrefs = prefsFrom(state.settings)

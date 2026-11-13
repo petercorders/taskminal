@@ -83,7 +83,8 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 36 | 대화 기록 통합 검색 | 가린 사용자/assistant 본문·필터·안전한 턴 이동 | 35 | 실제 참여자/계정은 미검증 | 단위1,021·e2e285·변이8·GC, 종료0 (완료: `docs/stages/36-conversation-search.md`, main 미병합) |
 | 37 | 에이전트 작업 흐름 | 전용 대화·순차 DAG·ASK·불명 결과 수동 재시도 | 36 | 실제 공급자 미검증 | 단위1,042·e2e291·핵심 변이6·GC, 종료0 (완료: `docs/stages/37-agent-workflows.md`, main 미병합) |
 | 38 | 앱 실행 중 예약과 결과함 | 기본 꺼짐·놓침 건너뜀·영속 claim·DST·실행 이력 | 37 | 실제 기기 절전/계정 미검증 | 단위1,060·e2e293·변이7·GC, 종료0 (완료: `docs/stages/38-schedules.md`, main 미병합) |
-| 39~40 | worktree 관리·브라우저 탭 | 승인 범위·인수 조건은 `docs/ideas/orca-next-five.md` | 36 | 종료마다 GC, 전체 뒤 UI/UX | 진행 중 |
+| 39 | worktree 수명 관리 | 실제 목록·명시 base 생성·사용/ignored/불명 보호·force 없는 정리 | 38 | 외부 writer 원자적 봉쇄는 제외 | 단위1,121·e2e299·변이8·GC, 종료0 (완료: `docs/stages/39-worktree-management.md`, main 미병합) |
+| 40 | 브라우저 탭 | 승인 범위·인수 조건은 `docs/ideas/orca-next-five.md` | 36 | 종료마다 GC, 전체 뒤 UI/UX | 진행 중 |
 
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.

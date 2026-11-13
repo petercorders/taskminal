@@ -3,6 +3,7 @@ import type { AppState } from './types'
 
 // main · preload 가 함께 쓰는 IPC 채널 이름. renderer 는 채널을 모르고 preload API 만 부른다.
 export const IPC = {
+  worktreesList:'worktrees:list',worktreesCreate:'worktrees:create',worktreesOpen:'worktrees:open',worktreesRemove:'worktrees:remove',
   schedulesView:'schedules:view',schedulesSave:'schedules:save',schedulesRemove:'schedules:remove',schedulesRunNow:'schedules:run-now',
   workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
   conversationsSearch: 'conversations:search',
