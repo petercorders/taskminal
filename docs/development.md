@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-14 (36~40 및 전체 UI/UX 구현·검증·GC 완료; 31~35단계 구현·검증 완료 — 전체 보기 · 사용량/계정 · GitHub · 내장 브라우저 · 파일 탐색. 브랜치 `stage-36-40-orca-followup`, main 미병합. 출시 준비는 8절)
+마지막 갱신: 2026-11-14 (0.1.2 다중 OS 릴리스·홈페이지·Docs·README 공개 완료. 앱 소스 태그 `v0.1.2` = `9936e2e`; 기능 브랜치 `stage-36-40-orca-followup`. main에는 홈페이지·Docs·README만 게시, 앱 기능 미병합. 상세 8절)
 
 ## 1. 지금 어디까지
 
@@ -38,7 +38,9 @@
 | 39 worktree 관리 | 구현·검증·GC 완료. 단위1,121·e2e299·변이8, 전체 종료0. `docs/stages/39-worktree-management.md` |
 | 40 브라우저 탭 후속 | 구현·검증·GC 완료. 단위1,141·e2e304·변이7, 전체 종료0. `docs/stages/40-browser-tabs.md` |
 | 41 전체 UI/UX | 좁은 설정·사이드바 서랍·도구 줄/헤더·초안 보존·늦은 응답/포커스 개선. 단위1,141·e2e316·UI 변이13·GC, 최종 전체 종료0. `docs/stages/41-whole-app-uiux.md`. 승인된 기능 브랜치 push, main 병합 별도 |
-| 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
+| 42 Mac 출시 준비 | 0.1.1 공증 승인, 공개 버전은 43단계의 0.1.2로 대체. `docs/stages/42-release-0.1.1.md` |
+| 43 다중 OS 출시 | **0.1.2 공개 완료** — Mac arm64/x64 서명·공증, Windows x64, Linux x64 AppImage/deb. 네 OS CI·단위1,182·e2e317·서명 앱12 통과, Docs/README/Pages 게시·GC. `docs/stages/43-multi-platform.md` |
+| 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
 31~35 통합 결과: 단위 1,018개·변이 20개 검출. 최종 전체 e2e는 280개 첫 통과·1개 임시 폴더 정리 오류 후 재시도 통과(종료 3, 불안정)였다. 직전 전체 실행은 단위 1,017·e2e 280·종료 0. 정리 재시도 보강 후 기록 시험 별도 결과와 범위·실환경 미검증은 `docs/stages/31-35-verification.md`. 후속 패키징 정적 검사와 실제 .app e2e 11개도 통과했다(PDF worker 포함). 통합 구현 커밋 후 이 브랜치의 push/병합은 별도 진행한다.
@@ -246,15 +248,24 @@
 - python 등으로 파일을 고치면 편집 훅(tsc)이 돌지 않는다 → 고친 뒤 `npm run typecheck`.
 - 열린 대화상자 · `then` 이 가리키는 대상이 그 사이 사라질 수 있다 — 저장할 내용은 연 순간에 떠 두고, 지울 대상은 id 로 다시 찾는다(12단계 리뷰).
 
-## 8. 1차 출시까지 남은 것 (25단계 끝에 모음)
+## 8. 공개 버전과 실제 환경 확인
 
-0~25단계 기능은 모두 `main` 에 있다. 아래는 **사용자 손이 필요한 것 · 실제 환경에서만 확인되는 것** 이다. 하나씩 끝나면 이 절에서 지운다.
+**공개 버전은 0.1.2**, 태그 `v0.1.2`와 앱 산출물 소스는 `9936e2e0796938ab41ad0bfaaaf3a5de9defbc09`다. [릴리스](https://github.com/petercorders/taskminal/releases/tag/v0.1.2) · [홈페이지](https://taskminal.petercoders.com) · [한국어 Docs](https://taskminal.petercoders.com/docs/) · [English Docs](https://taskminal.petercoders.com/en/docs/).
 
-### 사용자 준비물 → 출시
-1. **Developer ID 서명 · 공증** — 준비물은 끝남(2026-11-11): 인증서 'Developer ID Application: KiBong Kim (96CFW3T8G4)' 이 로그인 키체인에, 공증 프로필 `taskminal-notary`(Account Holder Apple ID)가 확인됨. 첫 공증 제출(2026-11-11 22:36, id `5fe32385-…`)은 26단계 이전 빌드라 내보내지 않는다 — **2026-11-13 재조회는 HTTP 403 `A required agreement is missing or has expired`로 차단됐다. 이전 In Progress의 현재 상태는 확인 불가.** Account Holder가 Apple Developer 계정의 미체결/만료 계약을 확인한 뒤 `xcrun notarytool history --keychain-profile taskminal-notary` 로 통과를 보고, **이 폴더에서 최신 main 으로 `npm run release`** 를 다시 돌린다(서명 · 공증 · `spctl -a` · 배포본 검사 `scripts/check-package.mjs` 까지 한 번에, 공증 대기가 길어 백그라운드로).
-2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). release 가 통과하면 `spctl` · `xcrun stapler validate` 확인 → dmg · zip 을 Release 로 올리고 → 홈페이지 `site/assets/site.js` 의 `RELEASE = 'ready'` 로 바꿔 push(내려받기 단추가 OS 를 보고 dmg 로 잇는다).
-3. **/Applications 설치 · Finder 더블클릭 실행** — 개발 앱이 아니라 서명된 .app 으로(14 · 18단계 미확인). 확인할 것: 셸 · 한글 · 최소 환경 PATH(`which node`) · 셸 지킴이 · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지(18단계 verify 중 실제 설치 성공).
-4. **명령줄 도구 설치** — 앱 메뉴 '명령줄 도구 설치…' 가 `/usr/local/bin/taskminal` 링크를 만든다. 쓸 수 없는 폴더면 직접 칠 `sudo mkdir … && sudo ln -sf …` 명령을 돌려준다(`src/main/cli-install.ts`) — 서명된 .app 에서 실제 설치는 미확인(24단계).
+- Mac Apple Silicon·Intel: macOS 13 이상, Developer ID 서명·Apple 공증 Accepted·staple·Gatekeeper 검사 통과. 계약 관련 403은 해소됐다. 최종 제출 `fc226ddf-aa31-4cb9-821c-d307e1e657a7`(Intel), `7a83797b-dbf4-4a41-a631-f05b6fccb15c`(arm64).
+- Windows x64: 미서명 베타. 포트 자동 감지·추가 계정 TUI 전환 미지원, 실행 폴더 확인이 불가능한 worktree 정리는 거절한다.
+- Linux x64: AppImage·DEB 베타. 배포판 의존 라이브러리와 한글용 CJK 폰트가 필요하다. 최소 CI 이미지의 한글 글꼴은 미설치 상태여서 화면은 네모로 표시됐으며, UTF-8 입출력 시험 통과와 글꼴 표시 검증을 구분한다. 설치 안내는 Docs에 있다.
+- 네 OS의 실제 패키지 실행·셸·CLI·reload·정상 종료와 guardian 재연결 CI `43527362077` 모두 통과. Mac 최종 전체는 타입·경계·단위1,182·e2e317 통과(패키지 전용2 skip), 서명 앱 시험12개 통과.
+- GitHub 파일22개 SHA-256·크기와 updater SHA-512 검증, 공개 설치 파일5종 인증 없는 실제 다운로드·SHA-256 일치. 통합 `SHA256SUMS`를 릴리스에 첨부했다.
+- **main `f478672`에는 site/ 및 README만 반영했다. 앱 31~43단계 전체 병합은 하지 않았다.** 공개 앱을 재현할 때 최신 main으로 빌드하지 말고 태그 `v0.1.2`를 별도 작업 위치에서 사용한다. 실행 중인 사용자 앱의 dist나 실제 데이터는 덮지 않는다.
+- README·한국어/영어 Docs·OS 다운로드가 Pages 실행 `43528558080`에서 배포됐다. 소스 변경은 기능 브랜치에 push한다. 기존 `git push origin HEAD:main` 안내를 이 기능 브랜치 전체에 적용하지 않는다.
+
+### 아직 실제 사용자 환경에서 확인할 것
+
+1. `/Applications` 설치·Finder 실행, 실제 Retina·IME·VoiceOver, 실제 Claude·Codex 계정 대화는 이번 검증에 포함하지 않았다.
+2. 실제 Mac 자동 업데이트 설치 후 셸 유지와 명령줄 도구 PATH 링크 설치는 별도 확인이다. updater 메타데이터·다운로드 해시는 검증했다.
+3. Windows NSIS·Linux AppImage/DEB를 사용자 기기에 실제 설치하는 UX, Linux CJK 폰트 설치 후 화면은 별도 확인이다. CI는 각 OS의 unpacked 패키지를 임시 데이터로 실행했다.
+4. Cloudflare 토큰 재발급/삭제와 실제 계정·NAS 접속 등 기존 사용자 확인 항목은 자동 실행하지 않았다.
 
 ### 미확인 (실제 환경 · 계정이 있어야 함)
 | 무엇 | 왜 못 봤나 | 확인 방법 |

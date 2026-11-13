@@ -87,10 +87,13 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 40 | 브라우저 탭 | 일감별6개·기본 기억 꺼짐·선택 탭 지연 복원·수집 세대 검증 | 36 | 실제 사이트/기기 별도 확인 | 단위1,141·e2e304·변이7·GC, 종료0 (완료: `docs/stages/40-browser-tabs.md`, main 미병합) |
 | 41 | 전체 UI/UX 후속 | 초안/삭제 편집·서랍 키보드·도구 줄/고정 헤더·320 CSS px 설정과 제어 개선 | 40 | 실제 계정·VoiceOver·IME·Retina 미검증 | 단위1,141·e2e316·변이13·GC, 최종 전체 종료0 (완료: `docs/stages/41-whole-app-uiux.md`, main 미병합) |
 
+| 42 | Mac 출시 준비 | 0.1.1 서명·공증 승인, 공개 버전은 43단계 0.1.2로 대체 | 41 | 실제 설치 별도 | `docs/stages/42-release-0.1.1.md` |
+| 43 | 다중 OS 출시·Docs·README | Mac arm64/x64·Windows x64·Linux x64, OS 다운로드와 KO/EN 안내 | 42 | Windows 미서명·Linux 의존성·실제 계정 별도 | 단위1,182·e2e317·서명 앱12·네 OS CI·공개 다운로드5 해시·Pages·GC 완료. 앱 태그9936e2e, main은 site/README만. `docs/stages/43-multi-platform.md` |
+
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 
 ## 단계 사이 규칙
 - 단계 하나 = 커밋 하나 이상, 단계 끝에 `npm run typecheck && npx vitest run && npm run e2e` 를 한 번에.
 - 화면이 바뀐 단계는 e2e 스크린샷을 직접 열어 본다.
-- GitHub 원격 저장소는 아직 없다(만들지 · push 할지는 사용자 결정).
+- GitHub 원격: `petercorders/taskminal`. 현재 기능 브랜치는 승인된 push 대상이며, 앱 전체 main 병합은 별도 사용자 지시 대상이다. 홈페이지·Docs·README와 v0.1.2 릴리스는 게시됐다.
