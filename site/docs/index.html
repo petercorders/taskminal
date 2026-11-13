@@ -51,14 +51,19 @@
         <div class="table-wrap"><table>
           <thead><tr><th scope="col">컴퓨터</th><th scope="col">고를 파일</th><th scope="col">설치</th></tr></thead>
           <tbody>
-            <tr><td>Mac · M1 이후</td><td>Apple Silicon <code>.dmg</code></td><td>디스크 이미지를 열고 Taskminal을 응용 프로그램 폴더로 옮깁니다.</td></tr>
-            <tr><td>Mac · Intel</td><td>Intel <code>.dmg</code></td><td>Apple Silicon 파일과 구분해서 내려받습니다. Mac의 ‘이 Mac에 관하여’에서 칩을 확인할 수 있어요.</td></tr>
+            <tr><td>Mac · M1 이후<br>macOS 13 이상</td><td>Apple Silicon <code>.dmg</code></td><td>디스크 이미지를 열고 Taskminal을 응용 프로그램 폴더로 옮깁니다.</td></tr>
+            <tr><td>Mac · Intel<br>macOS 13 이상</td><td>Intel <code>.dmg</code></td><td>Apple Silicon 파일과 구분해서 내려받습니다. Mac의 ‘이 Mac에 관하여’에서 칩을 확인할 수 있어요.</td></tr>
             <tr><td>Windows · x64</td><td><code>.exe</code></td><td>설치 프로그램을 실행해 설치 위치를 선택합니다. 첫 지원 버전은 코드 서명 인증서가 없어 보안 확인이 표시될 수 있어요.</td></tr>
             <tr><td>Linux · x64</td><td><code>.AppImage</code> / <code>.deb</code></td><td>AppImage는 실행 권한을 준 뒤 열고, Debian·Ubuntu 계열은 deb 설치 프로그램을 사용할 수 있어요. 배포판별 시스템 의존성이 필요할 수 있습니다.</td></tr>
           </tbody>
         </table></div>
         <p>공개 Mac 빌드는 Developer ID 서명과 Apple 공증을 거쳐 제공합니다. OS와 칩이 다른 파일은 실행되지 않을 수 있으니, 자동 추천이 없으면 직접 선택하세요.</p>
         <p>Windows·Linux는 초기 지원인 베타입니다. 공개 여부와 해당 버전의 검증 범위는 릴리스 노트에서 함께 확인하세요.</p>
+        <h3>Linux에서 한글이 네모로 보인다면</h3>
+        <p>최소 설치 환경에는 한글을 그릴 CJK 시스템 폰트가 없을 수 있습니다. Debian·Ubuntu에서는 다음 명령으로 폰트를 설치한 뒤 Taskminal을 다시 여세요. 다른 배포판은 동등한 CJK 폰트 패키지를 설치합니다.</p>
+        <pre><code>sudo apt update
+sudo apt install fonts-noto-cjk fontconfig
+fc-cache -f</code></pre>
         <h3>첫 Windows 버전에서 다른 점</h3>
         <p>터미널은 기본적으로 PowerShell을 사용합니다. 포트 자동 감지, 엄격한 실행 폴더 확인이 필요한 worktree 정리, 추가 계정의 TUI 전환은 아직 지원하지 않습니다. 확인할 수 없는 worktree는 안전을 위해 삭제하지 않아요.</p>
         <p>새 버전은 앱 메뉴의 ‘업데이트 확인’ 또는 <strong>설정 → 정보</strong>에서 확인합니다. 앱에서 업데이트를 받을 수 없는 설치 형태는 홈페이지의 새 설치 파일을 사용하세요.</p>

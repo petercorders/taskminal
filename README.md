@@ -39,10 +39,10 @@ Claude Code·Codex는 사용자가 설치하고 로그인한 CLI를 사용합니
 
 | 플랫폼 | 설치 파일 | 알아둘 점 |
 |---|---|---|
-| macOS · Apple Silicon | `.dmg` | M1 이후 Mac용. 공개 Mac 빌드는 Developer ID 서명·Apple 공증 후 제공 |
-| macOS · Intel | `.dmg` | Intel Mac용. Apple Silicon 파일과 구분해서 선택 |
+| macOS · Apple Silicon | `.dmg` | macOS 13 이상 · M1 이후 Mac용. 공개 Mac 빌드는 Developer ID 서명·Apple 공증 후 제공 |
+| macOS · Intel | `.dmg` | macOS 13 이상 · Intel Mac용. Apple Silicon 파일과 구분해서 선택 |
 | Windows · x64 (베타) | `.exe` | 첫 지원 버전. 코드 서명 인증서가 없어 설치 시 보안 확인이 표시될 수 있음 |
-| Linux · x64 (베타) | `.AppImage` / `.deb` | 배포판에 따라 추가 시스템 패키지가 필요할 수 있음 |
+| Linux · x64 (베타) | `.AppImage` / `.deb` | 배포판에 따라 추가 시스템 패키지 필요 · 한글 표시에는 CJK 폰트 필요 |
 
 Windows의 포트 자동 감지, 엄격한 실행 폴더 확인이 필요한 worktree 정리, 추가 계정의 TUI 전환은 아직 지원하지 않습니다. 상세 설치 방법과 제약은 [Docs](https://taskminal.petercoders.com/docs/#install)에서 확인하세요.
 

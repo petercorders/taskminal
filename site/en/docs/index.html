@@ -32,10 +32,15 @@
 
       <section id="install" aria-labelledby="install-h"><h2 id="install-h">Install for your OS and chip</h2><p>Choose your computer in the <a href="../#downloads">download list</a>. Only files available in a verified public release are linked. Platforms without a file are marked “Coming soon”.</p>
         <div class="table-wrap"><table><thead><tr><th scope="col">Computer</th><th scope="col">Installer</th><th scope="col">How to install</th></tr></thead><tbody>
-          <tr><td>Mac · M1 or later</td><td>Apple Silicon <code>.dmg</code></td><td>Open the disk image and move Taskminal into Applications.</td></tr><tr><td>Mac · Intel</td><td>Intel <code>.dmg</code></td><td>Choose the Intel build. Check “About This Mac” if you are unsure which chip you have.</td></tr><tr><td>Windows · x64</td><td><code>.exe</code></td><td>Run the installer and choose a location. Initial Windows builds do not have a code-signing certificate, so a security prompt may appear.</td></tr><tr><td>Linux · x64</td><td><code>.AppImage</code> / <code>.deb</code></td><td>Give the AppImage executable permission before opening it, or use the deb installer on Debian/Ubuntu systems. Distribution-specific system packages may be required.</td></tr>
+          <tr><td>Mac · M1 or later<br>macOS 13 or later</td><td>Apple Silicon <code>.dmg</code></td><td>Open the disk image and move Taskminal into Applications.</td></tr><tr><td>Mac · Intel<br>macOS 13 or later</td><td>Intel <code>.dmg</code></td><td>Choose the Intel build. Check “About This Mac” if you are unsure which chip you have.</td></tr><tr><td>Windows · x64</td><td><code>.exe</code></td><td>Run the installer and choose a location. Initial Windows builds do not have a code-signing certificate, so a security prompt may appear.</td></tr><tr><td>Linux · x64</td><td><code>.AppImage</code> / <code>.deb</code></td><td>Give the AppImage executable permission before opening it, or use the deb installer on Debian/Ubuntu systems. Distribution-specific system packages may be required.</td></tr>
         </tbody></table></div>
         <p>Public Mac builds are Developer ID signed and notarized by Apple. If automatic detection is unavailable, choose the correct OS and chip yourself.</p>
         <p>Windows and Linux support is in beta. Check the release notes for availability and the scope of verification for your version.</p>
+        <h3>Korean text appears as boxes on Linux</h3>
+        <p>Minimal installations may not include a CJK system font. On Debian or Ubuntu, install the fonts below, then reopen Taskminal. On other distributions, install the equivalent CJK font package.</p>
+        <pre><code>sudo apt update
+sudo apt install fonts-noto-cjk fontconfig
+fc-cache -f</code></pre>
         <h3>Initial Windows limitations</h3><p>The terminal uses PowerShell by default. Automatic port discovery, worktree cleanup that requires strict process-directory verification, and TUI switching for additional accounts are not yet supported. Unverified worktrees are kept rather than deleted.</p>
         <p>Check updates through “업데이트 확인” in the app menu or “설정 → 정보” (settings → about). If your installation format cannot update inside the app, use the latest installer from the website.</p>
       </section>
