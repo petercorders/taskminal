@@ -3,7 +3,7 @@ import type { Workflow, WorkflowRun, WorkflowStep, WorkflowView } from '../share
 import { ConfirmDialog } from './ConfirmDialog'
 import './workflow-panel.css'
 
-interface Props { taskId: string; onOpenPane(paneId: string): void }
+interface Props { taskId: string; initialRunId?: string | undefined; onOpenPane(paneId: string): void }
 const labels: Record<WorkflowRun['status'] | WorkflowRun['steps'][number]['status'], string> = {
   pending: '대기', preparing: '준비 중', running: '진행 중', waiting: '응답 대기', done: '완료', failed: '실패', stopped: '중지됨', unknown: '실행 결과 확인 필요',
 }
@@ -11,7 +11,7 @@ const copy = (value: Workflow): Workflow => ({ ...value, steps: value.steps.map(
 const newStep = (after: string[] = []): WorkflowStep => ({ id: crypto.randomUUID(), name: '', agent: 'claude', prompt: '', after })
 const emptyView: WorkflowView = { templates: [], runs: [] }
 
-export function WorkflowPanel({ taskId, onOpenPane }: Props) {
+export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
   const [view, setView] = useState<WorkflowView>(emptyView)
   const [selected, setSelected] = useState('')
   const [draft, setDraft] = useState<Workflow | null>(null)
@@ -97,6 +97,12 @@ export function WorkflowPanel({ taskId, onOpenPane }: Props) {
       void write(() => window.taskminal.workflows.retry(target.id))
     }
   }
+  const openedRun = useRef('')
+  useEffect(() => {
+    if (!initialRunId || openedRun.current === initialRunId) return
+    const target = document.getElementById('workflow-run-' + initialRunId)
+    if (target) { openedRun.current = initialRunId; target.scrollIntoView({ block: 'start' }); target.focus({ preventScroll: true }) }
+  }, [initialRunId, view.runs])
   const runs = view.runs.filter((run) => run.taskId === taskId)
   return <section className="workflow-panel" aria-label="작업 흐름">
     <h2>작업 흐름</h2>
@@ -134,7 +140,7 @@ export function WorkflowPanel({ taskId, onOpenPane }: Props) {
     {error && <div role="alert" className="workflow-error">{error}</div>}
     {readError && <div role="alert" className="workflow-error">{readError} <button type="button" className="button" onClick={() => { void refresh.current() }}>다시 읽기</button></div>}
     <div role="status" className="workflow-meta">{busy ? '요청 처리 중…' : loading ? '불러오는 중…' : !runs.length && !readError ? '아직 실행한 작업 흐름이 없습니다.' : ''}</div>
-    <div className="workflow-runs">{runs.map((run) => <article className="workflow-run" key={run.id} aria-label={`${run.workflow.name} 실행`}>
+    <div className="workflow-runs">{runs.map((run) => <article className="workflow-run" id={"workflow-run-"+run.id} tabIndex={-1} key={run.id} aria-label={`${run.workflow.name} 실행`}>
       <h3>{run.workflow.name}</h3><div className="workflow-meta">{new Date(run.createdAt).toLocaleString()} · {labels[run.status]}</div>
       {run.error && <div className="workflow-error">{run.error}</div>}
       <ol>{run.steps.map((step) => <li key={step.id}>

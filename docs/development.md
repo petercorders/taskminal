@@ -34,7 +34,8 @@
 | 35 파일 탐색·맥락 | 구현·검증 완료(main 미병합). 폴더·텍스트/Markdown/그림/PDF 미리보기·범위/참조 첨부·경계 검사. `docs/stages/35-workspace-files.md` |
 | 36 대화 기록 검색 | 구현·검증·GC 완료. 단위 1,021 · e2e 285 · 변이8, 전체 종료0. `docs/stages/36-conversation-search.md` |
 | 37 에이전트 작업 흐름 | 구현·검증·GC 완료. 단위1,042·e2e291·핵심 변이6, 전체 종료0. `docs/stages/37-agent-workflows.md` |
-| 38~40 후속 Orca 비교 | 승인 계획 `docs/ideas/orca-next-five.md`. 단계마다 GC·커밋, 전체 UI/UX 개선 후 기능 브랜치 push까지 승인됨. main 병합 별도 |
+| 38 예약과 결과함 | 구현·검증·GC 완료. 단위1,060·e2e293·변이7, 전체 종료0. `docs/stages/38-schedules.md` |
+| 39~40 후속 Orca 비교 | 승인 계획 `docs/ideas/orca-next-five.md`. 단계마다 GC·커밋, 전체 UI/UX 개선 후 기능 브랜치 push까지 승인됨. main 병합 별도 |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 

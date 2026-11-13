@@ -142,6 +142,7 @@ export interface ChatApi {
 }
 
 export interface TaskminalApi {
+  schedules: import('../shared/schedules').ScheduleApi
   workflows: import('../shared/workflows').WorkflowApi
   conversations: import('../shared/conversation-search').ConversationApi
   accounts: import('../shared/accounts').AccountsApi

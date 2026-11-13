@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { firstWindow, seedState, waitLoaded } from './helpers'
+import { captureWindow, firstWindow, seedState, waitLoaded } from './helpers'
 import type { Workflow } from '../../src/shared/workflows'
 let data:string,app:ElectronApplication,win:Page
 const workflow:Workflow={id:'wf',name:'구현 검토',steps:[{id:'first',name:'허락',agent:'claude',prompt:'perm',after:[]},{id:'second',name:'검토',agent:'codex',prompt:'review',after:['first']}]}
@@ -48,9 +48,9 @@ test('작업 흐름 편집과 작은 창 확대에서 저장·취소에 접근�
  await panel.getByRole('button',{name:'저장',exact:true}).click()
  await expect(panel.getByRole('combobox',{name:'저장된 작업 흐름'})).not.toHaveValue('')
  await expect.poll(()=>panel.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true)
- await panel.getByRole('button',{name:'새로 만들기',exact:true}).scrollIntoViewIfNeeded()
+ await panel.getByRole('button',{name:'새로 만들기',exact:true}).evaluate(e=>e.scrollIntoView({block:'start'}))
  await expect(panel.getByRole('button',{name:'새로 만들기',exact:true})).toBeInViewport()
- await win.screenshot({path:'test-results/workflows-small-light.png'})
+ await captureWindow(app,'test-results/workflows-small-light.png')
  await panel.getByRole('button',{name:'삭제',exact:true}).click()
  await win.getByRole('alertdialog',{name:'작업 흐름 삭제'}).getByRole('button',{name:'취소'}).click()
  expect((await win.evaluate(()=>window.taskminal.workflows.view())).templates).toHaveLength(1)

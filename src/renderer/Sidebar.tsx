@@ -12,7 +12,7 @@ import { Icon } from './icons'
 
 interface Props {
   onOverview(): void
-  onWorkTool(kind:'files'|'browser'|'git'|'accounts'|'workflow'):void
+  onWorkTool(kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'):void
   state: AppState
   /** paneId → 활동 */
   activity: Readonly<Record<Id, PaneActivity>>
@@ -264,7 +264,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
         </span>
       </header>
       <button type="button" className="sidebar-overview button" onClick={onOverview} disabled={loading}>전체 보기</button>
-      <select className="sidebar-tools-menu" aria-label="작업 도구 선택" value="" onChange={e=>onWorkTool(e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow')}><option value="" disabled>작업 도구</option><option value="accounts">사용량·계정</option><option value="files" disabled={!state.activeTaskId}>파일 탐색</option><option value="browser" disabled={!state.activeTaskId}>브라우저</option><option value="git" disabled={!state.activeTaskId}>GitHub</option><option value="workflow" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>작업 흐름</option></select>
+      <select className="sidebar-tools-menu" aria-label="작업 도구 선택" value="" onChange={e=>onWorkTool(e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule')}><option value="" disabled>작업 도구</option><option value="accounts">사용량·계정</option><option value="files" disabled={!state.activeTaskId}>파일 탐색</option><option value="browser" disabled={!state.activeTaskId}>브라우저</option><option value="git" disabled={!state.activeTaskId}>GitHub</option><option value="workflow" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>작업 흐름</option><option value="schedule" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>예약과 결과함</option></select>
       {state.tasks.length > 0 && (
         <div className="sidebar-tools">
           <div className="sidebar-views" role="radiogroup" aria-label="사이드바 보기">

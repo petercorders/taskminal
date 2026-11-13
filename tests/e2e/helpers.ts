@@ -108,3 +108,9 @@ export function runCli(userData: string, ...args: string[]): Promise<{ code: num
     })
   })
 }
+
+/** Playwright screenshots crop Electron zoomed windows; capture the native viewport for visual review. */
+export async function captureWindow(app: ElectronApplication, path: string): Promise<void> {
+  const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0]!.webContents.capturePage()).toPNG().toString('base64'))
+  writeFileSync(path, Buffer.from(png, 'base64'))
+}

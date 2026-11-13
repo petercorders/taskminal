@@ -29,6 +29,7 @@ import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import { installWorkflowIpc } from './workflow-ipc'
+import { installScheduleIpc } from './schedule-ipc'
 import type { WorkflowRunner } from './workflow-runner'
 import { installWorkspaceIpc } from './workspace-ipc'
 import type { Accounts } from './accounts'
@@ -577,6 +578,10 @@ if (!app.requestSingleInstanceLock()) {
     saved:()=>{stateWriter.flush();return stateFile?.canWrite?lastWritten:null},
     sink:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.webContents:null,
     redact:text=>redact(text,secretOpts),
+  })
+  installScheduleIpc(fromOurWindow,{state:()=>lastState,workflow:workflowRunner,
+    available:()=>!!stateFile?.canWrite&&!!lastState&&!!mainWindow&&!mainWindow.isDestroyed()&&!mainWindow.webContents.isCrashed()&&!mainWindow.webContents.isLoading(),
+    redact:text=>redact(text,secretOpts),report:error=>report('error','schedules','예약 실행을 멈췄어요',error),
   })
 
 

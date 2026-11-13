@@ -23,6 +23,7 @@ export const SHORTCUTS = [
   { command: 'next-attention', accel: 'Shift+Command+A', label: '다음 확인 필요' },
   { command: 'conversation-search', accel: '', label: '대화 기록 찾기' },
   { command: 'workflows', accel: '', label: '작업 흐름' },
+  { command: 'schedules', accel: '', label: '예약과 결과함' },
   { command: 'overview', accel: '', label: '전체 보기' },
   { command: 'accounts', accel: '', label: '사용량·계정' },
   { command: 'workspace-files', accel: '', label: '파일 탐색' },
