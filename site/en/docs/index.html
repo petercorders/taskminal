@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs — Taskminal</title>
+  <meta name="description" content="Install Taskminal, create your first task, connect Claude or Codex, and learn shortcuts, persistent shells and backups on Mac, Windows and Linux.">
+  <meta name="theme-color" content="#0e0f11">
+  <link rel="canonical" href="https://taskminal.petercoders.com/en/docs/">
+  <link rel="alternate" hreflang="ko" href="https://taskminal.petercoders.com/docs/">
+  <link rel="alternate" hreflang="en" href="https://taskminal.petercoders.com/en/docs/">
+  <link rel="icon" href="../../assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../assets/docs.css?v=0.1.2.1">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="docs-header"><div class="header-inner">
+    <a class="brand" href="../"><img src="../../assets/icon.svg" alt="" width="32" height="32">Taskminal <span>Docs</span></a>
+    <nav class="header-links" aria-label="Main navigation"><a href="../">Home</a><a href="../../docs/" lang="ko">한국어</a><a href="https://github.com/petercorders/taskminal/releases">Release notes</a><a class="download" href="../#downloads">Download</a></nav>
+  </div></header>
+  <div class="docs-shell">
+    <nav class="docs-nav" aria-label="Documentation contents">
+      <p class="nav-label">User guide</p><a href="#start">Your first three minutes</a><a href="#install">Installation</a><a href="#agents">Claude · Codex</a><a href="#workspace">Tasks and tools</a><a href="#shortcuts">Keyboard shortcuts</a><a href="#data">Data, backups and quitting</a><a href="#troubleshooting">Troubleshooting</a><a class="nav-divider" href="https://github.com/petercorders/taskminal">View on GitHub ↗</a>
+    </nav>
+    <main id="content" tabindex="-1">
+      <div class="docs-hero"><span class="eyebrow">Taskminal Docs</span><h1>Start a task.<br>Keep your place.</h1><p class="lead">Keep terminals, AI conversations and working context together. Start with three steps, then explore the tools as you need them.</p><div class="hero-links"><a href="#start">Quick start ↓</a><a href="#install">Install on your computer →</a></div></div>
+
+      <section id="start" aria-labelledby="start-h"><h2 id="start-h">Your first three minutes</h2>
+        <ol class="steps"><li><strong>Create a task for your project folder.</strong><p>Choose “새 일감” (new task) in the app and select a folder. A task groups a folder, tabs, conversations and shells.</p></li><li><strong>Start with a conversation or a terminal.</strong><p>Choose Claude, Codex or a shell. You can use the terminal before installing an AI CLI.</p></li><li><strong>Bring up a shell, then switch tasks.</strong><p>Use <kbd>⌘J</kbd> on Mac or <kbd>Ctrl+J</kbd> on Windows and Linux. Return to the task to continue in the same workspace.</p></li></ol>
+        <div class="note"><p><strong>Looking for a command?</strong> Open the command palette with <kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd> and search by name. The current app interface uses Korean labels; this guide includes the labels you need.</p></div>
+      </section>
+
+      <section id="install" aria-labelledby="install-h"><h2 id="install-h">Install for your OS and chip</h2><p>Choose your computer in the <a href="../#downloads">download list</a>. Only files available in a verified public release are linked. Platforms without a file are marked “Coming soon”.</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Installation guide, scroll horizontally to see all columns"><table><thead><tr><th scope="col">Computer</th><th scope="col">Installer</th><th scope="col">How to install</th></tr></thead><tbody>
+          <tr><td>Mac · M1 or later<br>macOS 13 or later</td><td>Apple Silicon <code>.dmg</code></td><td>Open the disk image and move Taskminal into Applications.</td></tr><tr><td>Mac · Intel<br>macOS 13 or later</td><td>Intel <code>.dmg</code></td><td>Choose the Intel build. Check “About This Mac” if you are unsure which chip you have.</td></tr><tr><td>Windows · x64</td><td><code>.exe</code></td><td>Run the installer and choose a location. Initial Windows builds do not have a code-signing certificate, so a security prompt may appear.</td></tr><tr><td>Linux · x64</td><td><code>.AppImage</code> / <code>.deb</code></td><td>Give the AppImage executable permission before opening it, or use the deb installer on Debian/Ubuntu systems. Distribution-specific system packages may be required.</td></tr>
+        </tbody></table></div>
+        <p>Public Mac builds are Developer ID signed and notarized by Apple. If automatic detection is unavailable, choose the correct OS and chip yourself.</p>
+        <p>Windows and Linux support is in beta. Check the release notes for availability and the scope of verification for your version.</p>
+        <h3>Korean text appears as boxes on Linux</h3>
+        <p>Minimal installations may not include a CJK system font. On Debian or Ubuntu, install the fonts below, then reopen Taskminal. On other distributions, install the equivalent CJK font package.</p>
+        <pre><code>sudo apt update
+sudo apt install fonts-noto-cjk fontconfig
+fc-cache -f</code></pre>
+        <h3>Initial Windows limitations</h3><p>The terminal uses PowerShell by default. Automatic port discovery, worktree cleanup that requires strict process-directory verification, and TUI switching for additional accounts are not yet supported. Unverified worktrees are kept rather than deleted.</p>
+        <p>Check updates through “업데이트 확인” in the app menu or “설정 → 정보” (settings → about). If your installation format cannot update inside the app, use the latest installer from the website.</p>
+      </section>
+
+      <section id="agents" aria-labelledby="agents-h"><h2 id="agents-h">Connect Claude or Codex</h2><p>Taskminal runs the Claude Code or Codex CLI installed on your computer. You need an account and login for the service you choose. Service charges and permissions belong to that account.</p><ol><li>Install your chosen CLI and complete its login flow in a regular terminal.</li><li>Check that <code>claude</code> or <code>codex</code> starts from your project folder.</li><li>Choose that agent when creating a task, or find “새 대화 (Claude)” / “새 대화 (Codex)” in the command palette.</li><li>Send a request. Read and answer approval or question cards when they appear.</li></ol>
+        <div class="note"><p><strong>“CLI 없음” or “로그인 필요”?</strong> These mean CLI missing or login required. Confirm the CLI works before reinstalling Taskminal, then use the conversation’s retry/find-again action. “사용량·계정” shows account status.</p></div><p>Manage additional accounts through “사용량·계정”. The default account logs in through its existing CLI; additional accounts use app-specific folders. Saved conversation copies mask secret patterns, while the original messages you send are processed by the agent’s service.</p>
+      </section>
+
+      <section id="workspace" aria-labelledby="workspace-h"><h2 id="workspace-h">Tasks and working tools</h2><p>Use tasks for project folders, statuses and notes. Tabs separate working screens; splits put a conversation and shell side by side within a task.</p><div class="cards"><article class="card"><h3>Recover context</h3><p>Preview text, Markdown, images and PDF files, then attach confirmed files or ranges to a conversation. Search conversation history to find earlier decisions.</p></article><article class="card"><h3>Review changes</h3><p>Read diffs and commit selected changes. GitHub PR/push and worktree tools use the repository’s configured tools and permissions.</p></article><article class="card"><h3>Keep pages close</h3><p>Use the embedded browser to check your development pages. Keep several browser tabs with a task and return to the page you need.</p></article><article class="card"><h3>Organize repeated work</h3><p>Quick commands collect frequent shell commands. Agent workflows, schedules and the result inbox organize repeated requests and their results.</p></article></div><p>On a narrow window, use “작업 도구 선택” (working tools) or the command palette to reach tools whose individual buttons are hidden.</p></section>
+
+      <section id="shortcuts" aria-labelledby="shortcuts-h"><h2 id="shortcuts-h">A few useful shortcuts</h2><p>Primary app commands use Command on Mac and Control on Windows/Linux. You can customize keys in settings and find other commands in the palette.</p><div class="table-wrap" tabindex="0" role="region" aria-label="Keyboard shortcuts, scroll horizontally to see all columns"><table><thead><tr><th scope="col">Action</th><th scope="col">Mac</th><th scope="col">Windows / Linux</th></tr></thead><tbody><tr><td>New task</td><td><kbd>⌘N</kbd></td><td><kbd>Ctrl+N</kbd></td></tr><tr><td>New tab</td><td><kbd>⌘T</kbd></td><td><kbd>Ctrl+T</kbd></td></tr><tr><td>Split right / below</td><td><kbd>⌘D</kbd> / <kbd>⇧⌘D</kbd></td><td><kbd>Ctrl+D</kbd> / <kbd>Ctrl+Shift+D</kbd></td></tr><tr><td>Close current pane</td><td><kbd>⌘W</kbd></td><td><kbd>Ctrl+W</kbd></td></tr><tr><td>Command palette</td><td><kbd>⌘P</kbd></td><td><kbd>Ctrl+P</kbd></td></tr><tr><td>Toggle shell / conversation</td><td><kbd>⌘J</kbd></td><td><kbd>Ctrl+J</kbd></td></tr><tr><td>Review changes</td><td><kbd>⇧⌘G</kbd></td><td><kbd>Ctrl+Shift+G</kbd></td></tr><tr><td>Settings</td><td><kbd>⌘,</kbd></td><td><kbd>Ctrl+,</kbd></td></tr></tbody></table></div></section>
+
+      <section id="data" aria-labelledby="data-h"><h2 id="data-h">Data, backups and quitting</h2><h3>Closing the app can leave shells running</h3><p>A separate guardian keeps shells alive. Reopening the app reconnects to those shells and restores output. To stop everything, choose “셸까지 모두 끝내기” (quit with all shells) in the app menu and review running work before confirming.</p><h3>Back up workspace state</h3><p>Use “설정 → 백업 · 되돌리기” to inspect backups, restore state, and export or import tasks and settings. This does not back up your project source files or external service data; manage those separately with Git or other backups.</p><h3>Local storage and external connections</h3><p>Tasks, settings and records are stored locally. Claude Code and Codex connect to their own services; the embedded browser, GitHub tools and update checks connect to the services you use. Secret-pattern masking is not complete secret detection. Review logs and screenshots before sharing them.</p></section>
+
+      <section id="troubleshooting" aria-labelledby="help-h"><h2 id="help-h">Troubleshooting</h2><details><summary>A shell will not connect, or earlier work is missing.</summary><p>Open “셸 지킴이 보기” in the palette to inspect connections and shells. Try reconnecting first. Restarting the guardian can end existing shells; read the confirmation before proceeding. Do not delete the app data folder as a recovery step.</p></details><details><summary>The agent works in a terminal but not in a conversation.</summary><p>Check the CLI’s installation and login, then use find-again or retry in the conversation. Your shell and the app may use different environments. Check “사용량·계정” and the error message as well.</p></details><details><summary>An update will not download.</summary><p>Check “설정 → 정보” and retry. Use “다시 알리기” to undo skipping a version. If it still fails, download the correct OS/chip installer from the website.</p></details><details><summary>What should I include in a bug report?</summary><p>Include the app version, OS/chip, steps and actual result in a <a href="https://github.com/petercorders/taskminal/issues">GitHub issue</a>. “오류 기록 열기” in the palette opens error logs. Remove secrets, account details and private paths before sharing.</p></details></section>
+      <footer class="docs-footer"><span>Taskminal · User guide · MIT</span><a href="https://github.com/petercorders/taskminal/issues">Suggest a documentation improvement ↗</a></footer>
+    </main>
+  </div>
+</body>
+</html>

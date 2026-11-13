@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Taskminal — 일감마다 터미널을 묶어 두는 Mac 터미널</title>
-<meta name="description" content="탭 · 분할 · 셸 · AI 대화를 일감 하나에 모아 두는 macOS 터미널. 앱을 껐다 켜도 하던 자리 그대로. 무료 · 오픈소스(MIT) · Apple Silicon.">
+<title>Taskminal — 일감마다 터미널을 묶어 두세요</title>
+<meta name="description" content="탭 · 분할 · 셸 · AI 대화를 일감 하나에 모아 두는 터미널. 앱을 껐다 켜도 하던 자리 그대로. 무료 · 오픈소스(MIT) · OS별 설치 파일.">
 <meta name="theme-color" content="#0e0f11">
 <meta name="color-scheme" content="dark">
 <link rel="canonical" href="https://taskminal.petercoders.com/">
@@ -13,8 +13,8 @@
 <link rel="alternate" hreflang="x-default" href="https://taskminal.petercoders.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Taskminal">
-<meta property="og:title" content="Taskminal — 일감마다 터미널을 묶어 두는 Mac 터미널">
-<meta property="og:description" content="탭 · 분할 · 셸 · AI 대화를 일감 하나에 모아 두는 macOS 터미널. 앱을 껐다 켜도 하던 자리 그대로. 무료 · 오픈소스(MIT) · Apple Silicon.">
+<meta property="og:title" content="Taskminal — 일감마다 터미널을 묶어 두세요">
+<meta property="og:description" content="탭 · 분할 · 셸 · AI 대화를 일감 하나에 모아 두는 터미널. 앱을 껐다 켜도 하던 자리 그대로. 무료 · 오픈소스(MIT) · OS별 설치 파일.">
 <meta property="og:url" content="https://taskminal.petercoders.com/">
 <meta property="og:locale" content="ko_KR">
 <meta property="og:locale:alternate" content="en_US">
@@ -23,8 +23,8 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="icon" href="assets/icon-64.png" type="image/png" sizes="64x64">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
-<link rel="stylesheet" href="assets/site.css">
-<script src="assets/site.js" defer></script>
+<link rel="stylesheet" href="assets/site.css?v=0.1.2">
+<script src="assets/site.js?v=0.1.2" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#top">본문으로 건너뛰기</a>
@@ -37,6 +37,7 @@
         Taskminal
       </a>
       <nav aria-label="주 메뉴" style="display: flex; flex-wrap: wrap; gap: 0 22px; flex: 1 1 auto">
+        <a href="/docs/" style="color: #b8bcc2; text-decoration: none; font-size: 15px; padding: 10px 0">Docs</a>
         <a href="#features" style="color: #b8bcc2; text-decoration: none; font-size: 15px; padding: 10px 0">기능</a>
         <a href="#agents" style="color: #b8bcc2; text-decoration: none; font-size: 15px; padding: 10px 0">에이전트</a>
         <a href="#safe" style="color: #b8bcc2; text-decoration: none; font-size: 15px; padding: 10px 0">안전</a>
@@ -66,7 +67,7 @@
       <div class="when" data-when="ready">
         <a href="https://github.com/petercorders/taskminal/releases/latest" style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid #2c3036; color: #b8bcc2; text-decoration: none; font-size: 14px"><span style="padding: 1px 8px; border-radius: 999px; background: #17251b; color: #7fd18b; font-size: 12px; font-weight: 600">새 버전</span>릴리스 노트 보기 →</a>
       </div>
-      <h1 id="hero-h" style="margin: 0; max-width: 860px; font-size: clamp(38px, 6.4vw, 68px); line-height: 1.12; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance">일감마다 터미널을<br>묶어 두는 Mac 터미널</h1>
+      <h1 id="hero-h" style="margin: 0; max-width: 860px; font-size: clamp(38px, 6.4vw, 68px); line-height: 1.12; font-weight: 700; letter-spacing: -0.025em; text-wrap: balance">일감마다 터미널을<br>묶어 두세요</h1>
       <p style="margin: 0; max-width: 640px; font-size: clamp(17px, 2vw, 20px); color: #b8bcc2; text-wrap: balance">탭 · 분할 · 셸 · AI 대화를 일감 하나에 모아 둡니다. 다른 일로 갔다 와도, 앱을 껐다 켜도 하던 자리 그대로예요.</p>
 
       <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; padding-top: 8px">
@@ -85,10 +86,10 @@
         <a href="https://github.com/petercorders/taskminal" style="display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 22px; border-radius: 12px; border: 1px solid #2c3036; color: #e6e7e9; text-decoration: none; font-size: 17px; font-weight: 500">소스 보기 <span aria-hidden="true" style="color: #9aa0a6">→</span></a>
       </div>
       <div class="when" data-when="ready">
-        <p style="margin: 0; font-size: 14px; color: #9aa0a6" data-dl-note>무료 · 오픈소스(MIT) · Apple Silicon(M1 이후) 전용 · Apple 공증 · 앱 안에서 자동 업데이트</p>
+        <p style="margin: 0; font-size: 14px; color: #9aa0a6" data-dl-note>무료 · 오픈소스(MIT) · OS별 설치 파일 · 앱 안에서 업데이트 확인</p>
       </div>
       <div class="when" data-when="soon">
-        <p style="margin: 0; font-size: 14px; color: #9aa0a6">무료 · 오픈소스(MIT) · Apple Silicon(M1 이후) 전용 · 지금은 소스에서 빌드할 수 있어요</p>
+        <p style="margin: 0; font-size: 14px; color: #9aa0a6">무료 · 오픈소스(MIT) · 운영체제별 다운로드는 아래에서 확인하세요</p>
       </div>
     </section>
 
@@ -306,8 +307,8 @@ $ taskminal chat wait --all
           <p style="margin: 0; color: #b8bcc2; font-size: 15px">일감 · 설정을 자동으로 백업하고, 상태 파일이 깨지면 마지막 정상본으로 시작합니다. 내보내기 · 가져오기도.</p>
         </div>
         <div style="padding: 24px; border-radius: 14px; border: 1px solid #23262b; display: flex; flex-direction: column; gap: 8px">
-          <h3 style="margin: 0; font-size: 18px; font-weight: 600">이 Mac 안에서만</h3>
-          <p style="margin: 0; color: #b8bcc2; font-size: 15px">계정 · 서버 없이 동작해요. 셸 소켓은 내 사용자만 열 수 있고, 오류 기록도 이 Mac 에만 남습니다.</p>
+          <h3 style="margin: 0; font-size: 18px; font-weight: 600">내 컴퓨터 안에서만</h3>
+          <p style="margin: 0; color: #b8bcc2; font-size: 15px">계정 · 서버 없이 동작해요. 셸 소켓은 내 사용자만 열 수 있고, 오류 기록도 이 컴퓨터에만 남습니다.</p>
         </div>
       </div>
     </section>
@@ -322,7 +323,7 @@ $ taskminal chat wait --all
           </details>
           <details style="border-bottom: 1px solid #23262b">
             <summary style="display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; font-size: 17px; font-weight: 600">Intel Mac · Windows · Linux 에서도 되나요?<span class="faq-plus" aria-hidden="true" style="color: #9aa0a6; transition: transform .15s">+</span></summary>
-            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">지금은 Apple Silicon(M1 이후) Mac 전용이에요. 다른 환경은 아직 빌드하지 않습니다.</p>
+            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">아래 다운로드 목록에서 Apple Silicon·Intel Mac, Windows, Linux용 파일을 확인할 수 있어요. 검증된 파일이 없는 환경은 준비 중으로 표시합니다.</p>
           </details>
           <details style="border-bottom: 1px solid #23262b">
             <summary style="display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; font-size: 17px; font-weight: 600">어떤 에이전트와 쓸 수 있나요?<span class="faq-plus" aria-hidden="true" style="color: #9aa0a6; transition: transform .15s">+</span></summary>
@@ -330,11 +331,11 @@ $ taskminal chat wait --all
           </details>
           <details style="border-bottom: 1px solid #23262b">
             <summary style="display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; font-size: 17px; font-weight: 600">앱을 끄면 돌던 명령은 어떻게 되나요?<span class="faq-plus" aria-hidden="true" style="color: #9aa0a6; transition: transform .15s">+</span></summary>
-            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">셸은 앱 밖의 지킴이가 붙잡고 있어서 계속 돌아요. 다시 열면 같은 셸에 붙습니다. 셸까지 모두 끝내려면 ⌥⌘Q.</p>
+            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">셸은 앱 밖의 지킴이가 붙잡고 있어서 계속 돌아요. 다시 열면 같은 셸에 붙습니다. 셸까지 모두 끝내려면 앱 메뉴의 ‘셸까지 모두 끝내기’를 선택하세요.</p>
           </details>
           <details style="border-bottom: 1px solid #23262b">
             <summary style="display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; font-size: 17px; font-weight: 600">내 데이터는 어디에 저장되나요?<span class="faq-plus" aria-hidden="true" style="color: #9aa0a6; transition: transform .15s">+</span></summary>
-            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">일감 · 설정 · 출력 기록은 이 Mac 에만 저장돼요. 계정이 없고, Taskminal 이 따로 보내는 곳은 없어요(업데이트 확인만 GitHub 에 해요). 대화 칸의 Claude Code · Codex 는 각자 원래대로 자기 서버와 통신합니다. 저장할 때 비밀값 모양은 가려요.</p>
+            <p style="margin: 0; padding: 0 0 18px; color: #b8bcc2">일감 · 설정 · 출력 기록은 이 컴퓨터에만 저장돼요. 계정이 없고, Taskminal 이 따로 보내는 곳은 없어요(업데이트 확인만 GitHub 에 해요). 대화 칸의 Claude Code · Codex 는 각자 원래대로 자기 서버와 통신합니다. 저장할 때 비밀값 모양은 가려요.</p>
           </details>
           <details style="border-bottom: 1px solid #23262b">
             <summary style="display: flex; justify-content: space-between; gap: 16px; padding: 18px 0; font-size: 17px; font-weight: 600">업데이트는 어떻게 받나요?<span class="faq-plus" aria-hidden="true" style="color: #9aa0a6; transition: transform .15s">+</span></summary>
@@ -356,14 +357,50 @@ $ taskminal chat wait --all
           <div class="when" data-when="soon">
             <a href="https://github.com/petercorders/taskminal" style="display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 24px; border-radius: 12px; background: #a996ff; color: #170f38; text-decoration: none; font-size: 17px; font-weight: 700">GitHub 에서 출시 알림 받기</a>
           </div>
-          <a href="https://github.com/petercorders/taskminal" style="display: inline-flex; align-items: center; height: 52px; padding: 0 22px; border-radius: 12px; border: 1px solid #4a3f86; color: #e6e7e9; text-decoration: none; font-size: 17px">소스 보기</a>
+          <a href="/docs/" style="display: inline-flex; align-items: center; height: 52px; padding: 0 22px; border-radius: 12px; border: 1px solid #4a3f86; color: #e6e7e9; text-decoration: none; font-size: 17px">사용 가이드</a>
         </div>
         <div class="when" data-when="ready">
-          <p style="margin: 0; font-size: 14px; color: #b3acd9" data-dl-note>Apple Silicon(M1 이후) 전용 · Apple 공증</p>
+          <p style="margin: 0; font-size: 14px; color: #b3acd9" data-dl-note>OS별 설치 파일 · Mac 빌드는 Apple 공증</p>
         </div>
         <div class="when" data-when="soon">
-          <p style="margin: 0; font-size: 14px; color: #b3acd9">Apple Silicon(M1 이후) 전용 · 저장소의 Watch › Releases 로 첫 빌드 알림을 받을 수 있어요</p>
+          <p style="margin: 0; font-size: 14px; color: #b3acd9">운영체제별 파일이 준비되면 아래 목록에서 내려받을 수 있어요</p>
         </div>
+      </div>
+
+      <div id="downloads" class="platform-downloads" aria-labelledby="platform-h">
+        <h2 id="platform-h">사용할 컴퓨터에 맞게 내려받기</h2>
+        <p class="download-intro">운영체제와 칩을 골라 주세요. 검증을 마친 설치 파일만 제공해요.</p>
+        <p class="download-status" data-download-status role="status" aria-live="polite">다운로드 확인 중…</p>
+        <div class="download-grid">
+          <article class="download-card" data-platform-download="macArm">
+            <h3>Mac · Apple Silicon</h3><p class="download-format">M1 이후 · .dmg</p>
+            <p class="download-state" data-platform-state>출시 준비 중</p>
+            <a class="download-link" data-platform-link aria-disabled="true" tabindex="-1">출시 준비 중</a>
+          </article>
+          <article class="download-card" data-platform-download="macIntel">
+            <h3>Mac · Intel</h3><p class="download-format">Intel 프로세서 · .dmg</p>
+            <p class="download-state" data-platform-state>출시 준비 중</p>
+            <a class="download-link" data-platform-link aria-disabled="true" tabindex="-1">출시 준비 중</a>
+          </article>
+          <article class="download-card" data-platform-download="windows">
+            <h3>Windows</h3><p class="download-format">64비트 · 설치 프로그램 (.exe)</p>
+            <p class="download-state" data-platform-state>출시 준비 중</p>
+            <a class="download-link" data-platform-link aria-disabled="true" tabindex="-1">출시 준비 중</a>
+          </article>
+          <article class="download-card" data-platform-download="linux">
+            <h3>Linux · AppImage</h3><p class="download-format">64비트 · .AppImage</p>
+            <p class="download-state" data-platform-state>출시 준비 중</p>
+            <a class="download-link" data-platform-link aria-disabled="true" tabindex="-1">출시 준비 중</a>
+          </article>
+          <article class="download-card" data-platform-download="linuxDeb">
+            <h3>Linux · Debian / Ubuntu</h3><p class="download-format">64비트 · .deb</p>
+            <p class="download-state" data-platform-state>출시 준비 중</p>
+            <a class="download-link" data-platform-link aria-disabled="true" tabindex="-1">출시 준비 중</a>
+          </article>
+        </div>
+        <p class="download-caveat">Mac 빌드는 Apple 공증을 거쳐 제공해요. Windows 빌드는 코드 서명 인증서가 없어 설치 시 보안 확인이 표시될 수 있어요. Linux는 배포판에 따라 추가 시스템 패키지가 필요할 수 있어요.</p>
+        <a href="https://github.com/petercorders/taskminal/releases/latest">모든 릴리스와 설치 파일 보기 →</a>
+        <noscript><p>JavaScript 없이도 GitHub 릴리스에서 설치 파일을 확인할 수 있어요.</p></noscript>
       </div>
     </section>
   </main>
@@ -372,11 +409,12 @@ $ taskminal chat wait --all
     <div style="max-width: 1200px; margin: 0 auto; padding: 40px 24px 48px; display: flex; flex-wrap: wrap; gap: 32px 64px; font-size: 14px">
       <div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 10px; color: #9aa0a6">
         <span style="display: inline-flex; align-items: center; gap: 8px; color: #e6e7e9; font-weight: 700"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 200 200"><rect x="8" y="8" width="184" height="184" rx="44" fill="#7a63ec"></rect><rect x="44" y="46" width="112" height="28" rx="9" fill="#170f38"></rect><rect x="86" y="46" width="28" height="108" rx="9" fill="#170f38"></rect><circle cx="146" cy="138" r="31" fill="#170f38"></circle></svg>Taskminal</span>
-        <span>일감마다 터미널을 묶어 두는 Mac 터미널</span>
+        <span>일감마다 터미널을 묶어 두세요</span>
         <span>© 2026 petercoders · MIT License</span>
       </div>
       <nav aria-label="제품" style="display: flex; flex-direction: column; gap: 2px">
         <span style="color: #e6e7e9; font-weight: 600; padding-bottom: 6px">제품</span>
+        <a href="/docs/" style="color: #b8bcc2; text-decoration: none; padding: 6px 0">Docs</a>
         <a href="#features" style="color: #b8bcc2; text-decoration: none; padding: 6px 0">기능</a>
         <a href="#agents" style="color: #b8bcc2; text-decoration: none; padding: 6px 0">에이전트</a>
         <a href="#faq" style="color: #b8bcc2; text-decoration: none; padding: 6px 0">자주 묻는 것</a>
