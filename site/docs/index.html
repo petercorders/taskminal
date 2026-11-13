@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs — Taskminal 사용 안내</title>
+  <meta name="description" content="Taskminal 설치부터 첫 일감, Claude·Codex 연결, 단축키, 셸 유지와 백업까지. Mac·Windows·Linux 사용 안내.">
+  <meta name="theme-color" content="#0e0f11">
+  <link rel="canonical" href="https://taskminal.petercoders.com/docs/">
+  <link rel="alternate" hreflang="ko" href="https://taskminal.petercoders.com/docs/">
+  <link rel="alternate" hreflang="en" href="https://taskminal.petercoders.com/en/docs/">
+  <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/docs.css?v=0.1.2">
+</head>
+<body>
+  <a class="skip" href="#content">본문으로 건너뛰기</a>
+  <header class="docs-header">
+    <div class="header-inner">
+      <a class="brand" href="../"><img src="../assets/icon.svg" alt="" width="32" height="32">Taskminal <span>Docs</span></a>
+      <nav class="header-links" aria-label="주 메뉴">
+        <a href="../">홈페이지</a><a href="../en/docs/" lang="en">English</a><a href="https://github.com/petercorders/taskminal/releases">릴리스 노트</a><a class="download" href="../#downloads">내려받기</a>
+      </nav>
+    </div>
+  </header>
+  <div class="docs-shell">
+    <nav class="docs-nav" aria-label="문서 목차">
+      <p class="nav-label">사용 안내</p>
+      <a href="#start">처음 3분</a><a href="#install">설치와 OS 선택</a><a href="#agents">Claude · Codex 연결</a><a href="#workspace">일감과 작업 도구</a><a href="#shortcuts">단축키</a><a href="#data">저장 · 백업 · 종료</a><a href="#troubleshooting">문제 해결</a><a class="nav-divider" href="https://github.com/petercorders/taskminal">GitHub에서 보기 ↗</a>
+    </nav>
+    <main id="content" tabindex="-1">
+      <div class="docs-hero">
+        <span class="eyebrow">Taskminal Docs</span>
+        <h1>첫 일감부터,<br>하던 일 이어 가기까지.</h1>
+        <p class="lead">터미널·AI 대화·작업 맥락을 일감 하나에 모으는 방법을 안내합니다. 처음이라면 아래 세 단계부터 시작하세요.</p>
+        <div class="hero-links"><a href="#start">빠르게 시작하기 ↓</a><a href="#install">내 컴퓨터에 설치하기 →</a></div>
+      </div>
+
+      <section id="start" aria-labelledby="start-h">
+        <h2 id="start-h">처음 3분</h2>
+        <ol class="steps">
+          <li><strong>프로젝트 폴더로 일감을 만드세요.</strong><p>앱의 ‘새 일감’을 누르고 폴더를 고릅니다. 일감은 폴더·탭·대화·셸을 함께 묶는 단위예요.</p></li>
+          <li><strong>대화 또는 터미널로 시작하세요.</strong><p>Claude·Codex 대화를 고르거나 터미널을 엽니다. AI CLI가 아직 없다면 터미널부터 사용할 수 있어요.</p></li>
+          <li><strong>셸을 꺼내고, 다른 일감으로 옮겨 보세요.</strong><p>Mac은 <kbd>⌘J</kbd>, Windows·Linux는 <kbd>Ctrl+J</kbd>로 셸을 꺼냅니다. 다른 일감으로 이동했다 돌아와도 하던 화면과 세션을 이어 갑니다.</p></li>
+        </ol>
+        <div class="note"><p><strong>필요한 명령을 모르겠다면</strong> <kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd>로 명령 팔레트를 열고 이름으로 찾으세요. ‘파일 탐색’, ‘대화 기록 찾기’, ‘설정’처럼 입력하면 됩니다.</p></div>
+      </section>
+
+      <section id="install" aria-labelledby="install-h">
+        <h2 id="install-h">설치와 OS 선택</h2>
+        <p><a href="../#downloads">홈페이지 다운로드 목록</a>에서 사용할 컴퓨터의 OS와 칩을 고르세요. 검증을 거쳐 공개된 파일만 연결하며, 없는 파일은 ‘출시 준비 중’으로 표시합니다.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">컴퓨터</th><th scope="col">고를 파일</th><th scope="col">설치</th></tr></thead>
+          <tbody>
+            <tr><td>Mac · M1 이후</td><td>Apple Silicon <code>.dmg</code></td><td>디스크 이미지를 열고 Taskminal을 응용 프로그램 폴더로 옮깁니다.</td></tr>
+            <tr><td>Mac · Intel</td><td>Intel <code>.dmg</code></td><td>Apple Silicon 파일과 구분해서 내려받습니다. Mac의 ‘이 Mac에 관하여’에서 칩을 확인할 수 있어요.</td></tr>
+            <tr><td>Windows · x64</td><td><code>.exe</code></td><td>설치 프로그램을 실행해 설치 위치를 선택합니다. 첫 지원 버전은 코드 서명 인증서가 없어 보안 확인이 표시될 수 있어요.</td></tr>
+            <tr><td>Linux · x64</td><td><code>.AppImage</code> / <code>.deb</code></td><td>AppImage는 실행 권한을 준 뒤 열고, Debian·Ubuntu 계열은 deb 설치 프로그램을 사용할 수 있어요. 배포판별 시스템 의존성이 필요할 수 있습니다.</td></tr>
+          </tbody>
+        </table></div>
+        <p>공개 Mac 빌드는 Developer ID 서명과 Apple 공증을 거쳐 제공합니다. OS와 칩이 다른 파일은 실행되지 않을 수 있으니, 자동 추천이 없으면 직접 선택하세요.</p>
+        <p>Windows·Linux는 초기 지원인 베타입니다. 공개 여부와 해당 버전의 검증 범위는 릴리스 노트에서 함께 확인하세요.</p>
+        <h3>첫 Windows 버전에서 다른 점</h3>
+        <p>터미널은 기본적으로 PowerShell을 사용합니다. 포트 자동 감지, 엄격한 실행 폴더 확인이 필요한 worktree 정리, 추가 계정의 TUI 전환은 아직 지원하지 않습니다. 확인할 수 없는 worktree는 안전을 위해 삭제하지 않아요.</p>
+        <p>새 버전은 앱 메뉴의 ‘업데이트 확인’ 또는 <strong>설정 → 정보</strong>에서 확인합니다. 앱에서 업데이트를 받을 수 없는 설치 형태는 홈페이지의 새 설치 파일을 사용하세요.</p>
+      </section>
+
+      <section id="agents" aria-labelledby="agents-h">
+        <h2 id="agents-h">Claude · Codex 연결</h2>
+        <p>Taskminal은 사용자의 컴퓨터에 설치된 Claude Code·Codex CLI를 실행합니다. 각 서비스의 계정·로그인이 필요하며 이용 요금과 접근 권한도 그 계정에 따릅니다.</p>
+        <ol>
+          <li>사용할 에이전트의 CLI를 설치하고, 일반 터미널에서 해당 CLI 안내에 따라 로그인합니다.</li>
+          <li>프로젝트 폴더의 터미널에서 <code>claude</code> 또는 <code>codex</code>가 실행되는지 확인합니다.</li>
+          <li>Taskminal에서 새 일감의 시작 화면으로 해당 에이전트를 고르거나, 명령 팔레트에서 ‘새 대화 (Claude)’ 또는 ‘새 대화 (Codex)’를 선택합니다.</li>
+          <li>작업을 요청하고, 승인·질문 카드가 나타나면 내용을 확인한 뒤 답합니다.</li>
+        </ol>
+        <div class="note"><p><strong>‘CLI 없음’ 또는 ‘로그인 필요’가 보이면</strong> 앱을 다시 설치하기 전에 CLI 실행과 로그인을 먼저 확인하세요. 설치 후에는 대화 화면의 다시 찾기·재시도를 사용합니다. 계정별 상태는 ‘사용량·계정’에서 볼 수 있어요.</p></div>
+        <p>추가 계정은 ‘사용량·계정’에서 관리할 수 있습니다. 기본 계정 로그인은 기존 CLI에서 진행하고, 추가 계정은 앱 전용 폴더를 사용합니다. 대화 기록의 저장본은 비밀값 패턴을 가리지만, 에이전트에 보낸 원문은 해당 서비스가 처리합니다.</p>
+      </section>
+
+      <section id="workspace" aria-labelledby="workspace-h">
+        <h2 id="workspace-h">일감과 작업 도구</h2>
+        <p>폴더별 일감을 만들고 상태·메모로 정리하세요. 탭은 작업 화면을 나누고, 분할은 같은 일감의 대화와 셸을 나란히 보여 줍니다.</p>
+        <div class="cards">
+          <article class="card"><h3>맥락 확인하기</h3><p>파일 탐색에서 텍스트·Markdown·그림·PDF를 미리 보고, 확인한 파일이나 범위를 대화에 첨부합니다. 대화 기록 검색으로 앞서 결정한 내용을 찾으세요.</p></article>
+          <article class="card"><h3>변경 검토하기</h3><p>변경 보기에서 diff를 읽고 선택한 변경을 커밋합니다. GitHub PR·push와 worktree 관리는 필요한 외부 도구와 권한이 갖춰진 저장소에서 사용합니다.</p></article>
+          <article class="card"><h3>화면 함께 보기</h3><p>내장 브라우저에서 개발 중인 페이지를 확인합니다. 여러 브라우저 탭을 일감에 묶어 두고 필요한 화면으로 돌아올 수 있어요.</p></article>
+          <article class="card"><h3>반복 작업 정리하기</h3><p>빠른 명령은 자주 실행하는 셸 명령을 모읍니다. 에이전트 작업 흐름과 예약·결과함으로 반복 요청과 결과를 관리합니다.</p></article>
+        </div>
+        <p>작업 도구 단추가 보이지 않는 작은 창에서는 ‘작업 도구 선택’ 메뉴나 명령 팔레트를 사용하세요.</p>
+      </section>
+
+      <section id="shortcuts" aria-labelledby="shortcuts-h">
+        <h2 id="shortcuts-h">먼저 익힐 단축키</h2>
+        <p>주요 앱 명령은 Mac에서 Command, Windows·Linux에서 Control을 사용합니다. 설정에서 키를 바꿀 수 있고, 나머지 명령은 팔레트에서 찾을 수 있어요.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">동작</th><th scope="col">Mac</th><th scope="col">Windows / Linux</th></tr></thead>
+          <tbody>
+            <tr><td>새 일감</td><td><kbd>⌘N</kbd></td><td><kbd>Ctrl+N</kbd></td></tr>
+            <tr><td>새 탭</td><td><kbd>⌘T</kbd></td><td><kbd>Ctrl+T</kbd></td></tr>
+            <tr><td>오른쪽 / 아래 분할</td><td><kbd>⌘D</kbd> / <kbd>⇧⌘D</kbd></td><td><kbd>Ctrl+D</kbd> / <kbd>Ctrl+Shift+D</kbd></td></tr>
+            <tr><td>현재 pane 닫기</td><td><kbd>⌘W</kbd></td><td><kbd>Ctrl+W</kbd></td></tr>
+            <tr><td>명령 팔레트</td><td><kbd>⌘P</kbd></td><td><kbd>Ctrl+P</kbd></td></tr>
+            <tr><td>셸 꺼내기 · 대화로</td><td><kbd>⌘J</kbd></td><td><kbd>Ctrl+J</kbd></td></tr>
+            <tr><td>변경 보기</td><td><kbd>⇧⌘G</kbd></td><td><kbd>Ctrl+Shift+G</kbd></td></tr>
+            <tr><td>설정</td><td><kbd>⌘,</kbd></td><td><kbd>Ctrl+,</kbd></td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="data" aria-labelledby="data-h">
+        <h2 id="data-h">저장 · 백업 · 종료</h2>
+        <h3>앱을 닫아도 셸은 계속 돌아갈 수 있어요</h3>
+        <p>셸은 앱 밖의 지킴이가 유지합니다. 앱을 다시 열면 같은 셸에 연결하고 출력을 복원해요. 모든 셸을 멈추려면 앱 메뉴의 <strong>‘셸까지 모두 끝내기’</strong>를 사용하세요. 실행 중인 작업을 확인한 뒤 종료합니다.</p>
+        <h3>백업은 작업 공간 상태를 위한 기능이에요</h3>
+        <p><strong>설정 → 백업 · 되돌리기</strong>에서 백업을 확인하거나 일감·설정을 내보내고 가져올 수 있습니다. 프로젝트 소스 파일과 외부 서비스의 데이터까지 백업하는 기능은 아니므로 Git 등으로 별도 관리하세요.</p>
+        <h3>로컬 저장과 외부 연결</h3>
+        <p>Taskminal의 일감·설정·기록은 로컬에 저장됩니다. Claude Code·Codex는 각자의 서버에 연결하고, 내장 브라우저·GitHub 도구·업데이트 확인은 사용 중인 서비스에 연결합니다. 비밀값 패턴 가리기는 완전한 비밀 탐지가 아니므로, 기록이나 화면을 공유하기 전에는 내용을 확인하세요.</p>
+      </section>
+
+      <section id="troubleshooting" aria-labelledby="help-h">
+        <h2 id="help-h">문제 해결</h2>
+        <details><summary>셸이 연결되지 않거나 이전 작업이 보이지 않아요.</summary><p>명령 팔레트에서 ‘셸 지킴이 보기’를 열고 연결 상태와 셸 목록을 확인하세요. 다시 연결을 먼저 시도하고, 지킴이를 다시 시작하면 기존 셸이 끝날 수 있다는 안내를 확인하세요. 사용자 데이터 폴더를 지우는 방식으로 복구하지 마세요.</p></details>
+        <details><summary>에이전트는 터미널에서 되는데 대화 칸에서는 안 돼요.</summary><p>CLI 설치 경로와 로그인을 확인한 뒤 대화 화면에서 다시 찾기·재시도를 사용하세요. 설치한 셸과 앱이 사용하는 환경이 다를 수 있습니다. ‘사용량·계정’의 상태와 오류 메시지도 함께 확인하세요.</p></details>
+        <details><summary>업데이트를 받지 못했어요.</summary><p>설정의 ‘정보’에서 현재 상태를 확인하고 다시 시도하세요. 건너뛴 버전은 ‘다시 알리기’로 되돌릴 수 있습니다. 계속 실패하면 홈페이지에서 OS·칩에 맞는 최신 설치 파일을 내려받으세요.</p></details>
+        <details><summary>문제를 제보할 때 무엇을 보내면 되나요?</summary><p>앱 버전, OS·칩, 재현 순서와 실제 결과를 <a href="https://github.com/petercorders/taskminal/issues">GitHub 이슈</a>에 남겨 주세요. 명령 팔레트의 ‘오류 기록 열기’로 로그를 볼 수 있습니다. 공유 전 비밀값·계정 정보·개인 경로를 확인하세요.</p></details>
+      </section>
+      <footer class="docs-footer"><span>Taskminal · 사용 안내 · MIT</span><a href="https://github.com/petercorders/taskminal/issues">문서에서 빠진 내용 알려주기 ↗</a></footer>
+    </main>
+  </div>
+</body>
+</html>

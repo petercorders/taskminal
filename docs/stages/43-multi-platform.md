@@ -40,3 +40,10 @@
 - 최종 소스 타입 검사·단위 1,174개 통과(`/tmp/taskminal-platform-typecheck-final.log`, `/tmp/taskminal-platform-unit-final.log`). macOS 회귀 e2e 진행 중(`/tmp/taskminal-platform-full-check.log`); 시작 후 보강한 Ctrl 매핑은 Mac의 meta 동작을 그대로 유지하고 별도 단위·네이티브 OS 스모크로 검증한다.
 - 네이티브 CI 검증을 시작하기 위해 후보 소스를 기능 브랜치에 커밋·push한다. 이 시점은 출시 완료가 아니며, 실제 타 OS 실행·서명/공증·공개 릴리스/Pages 확인은 뒤의 결과 절에 기록한다.
 - Windows 첫 지원의 명시적 제한: 포트 자동 감지 없음, 실행 중 폴더의 엄격한 확인이 필요한 worktree 정리는 안전하게 거절, 추가 계정의 TUI 전환은 미지원. 기본 터미널·대화·파일·OS 기본 Ctrl 단축키는 검증 대상이다. Linux AppImage/deb의 실제 설치 UX와 실제 계정 대화는 별도 실환경 검증이다.
+- 추가 사용자 요청: “릴리즈노트도 잘 꾸며줘 Docs도 페이지에 있으면 좋겠어”, “GitHub ReadMe도 잘 꾸며주고”. 한국어·영어 Docs와 홈페이지 연결, README, `docs/releases/v0.1.2.md`를 포함한다. main 게시 범위는 홈페이지·Docs·README로 확장하고 앱 전체 병합은 하지 않는다.
+- CI1(`43520068857`, `eb50598`): Mac arm64 통과. Windows 파일 URL과 실제 경로 비교 차이를 실제 실행에서 발견하고 `src/main/page-origin.ts`로 안전한 파일 URL 변환·일치 확인을 추출했다. 회귀8개와 정확한 옛 비교 구조 변이 검출. Linux 파일명의 builder 아키텍처 별칭도 실제 빌드 결과를 보고 x64로 고정했다.
+- CI2(`43521335446`, `010631e`): Mac arm64 통과. Windows 한글 셸·Ctrl 팔레트·CLI·가짜 Codex·reload, Linux 한글 셸·Ctrl 팔레트·CLI·reload 통과. 둘 다 `Playwright.close()`가 main 정상 종료/실행 래퍼 종료 중 어디서 기다리는지 불명확하여 실제 정상 `app.quit`+main PID 소멸/exit0+수명 로그로 분리 검증한다. 아직 실제 앱 종료 결함이나 도구 결함으로 단정하지 않는다.
+- 버전 증가로 고정된 옛 업데이트 피드/앱 정보 시험이 실패해 현재 package 버전·다음 버전을 쓰도록 수정, 관련 e2e23개 통과. 320px 시험은 창 크기 변경 직후 두 도구 메뉴가 잠시 함께 존재하는 상태를 피하도록 의도한 compact navigation으로 범위를 한정했다.
+- Mac 재실행 `/tmp/taskminal-platform-final-full.log`: 단위1,182 · e2e315 통과, 메뉴 단축키 표시1개 실패. Mac 기존 accelerator 문자열을 보존하도록 수정 후 keys e2e13개 통과. 최종 전체는 다시 확인한다. 앞 실행의 줄 번호가 편집으로 이동하면서 하네스 재시도가 실제 실패6개 중1개만 실행한 사례는 전체 통과로 세지 않는다.
+- 변이: 홈페이지3·런타임7·패키징3·파일URL 옛구조1 모두 검출. GC 도구화: OS 네이티브 구조 검사·스모크·파일 URL 회귀를 실제 구현했다. `r89439e` 승격 후보는 이미 변이 도구로 검사하므로 자동 승격 보류, `rd0536c` 재발 진단은 설치된 소스·실제 러너 대조로 다룬다. 전역 엔트리는 사용자 선택 없이 변경하지 않는다.
+- 이전 후보의 Mac 서명/공증 빌드는 별도 디렉터리에 보존하고 중단했으며 공개하지 않는다. 0.1.1 및 이전 후보의 승인 이력은 새 수정본의 공증 승인으로 대신하지 않는다. 실행 중인 사용자 앱과 원래 dist/mac-arm64는 보존했다.

@@ -74,7 +74,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('split-down'),
         { type: 'separator' },
         item('close-pane'),
-        { role: 'close', label: '창 닫기', accelerator: 'Shift+CommandOrControl+W' },
+        { role: 'close', label: '창 닫기', accelerator: nativeAccel('Shift+Command+W', process.platform === 'darwin' ? 'meta' : 'control') },
       ],
     },
     {
