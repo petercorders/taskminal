@@ -239,6 +239,10 @@ test('요소 선택은 입력값을 제외한 자료로 확인되며 모달과 �
     .not.toContain(true)
   await win.keyboard.press('Escape')
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.setZoomFactor(2))
+  await expect.poll(()=>win.locator('.work-browser-surface').evaluate(e=>{
+    const r=e.getBoundingClientRect(),panel=e.closest('.work-tool-panel')!.getBoundingClientRect()
+    return r.width>0&&r.height>0&&r.top>=Math.max(0,panel.top)&&r.bottom<=Math.min(innerHeight,panel.bottom)&&r.left>=Math.max(0,panel.left)&&r.right<=Math.min(innerWidth,panel.right)
+  })).toBe(true)
   const rect = await win.locator('.work-browser-surface').boundingBox()
   const content = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getContentBounds())
   const x = Math.round(rect!.x * 2),

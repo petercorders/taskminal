@@ -31,6 +31,7 @@ import { addWorktree } from './worktree'
 import { installWorkflowIpc } from './workflow-ipc'
 import { installScheduleIpc } from './schedule-ipc'
 import { installWorktreeIpc } from './worktree-ipc'
+import type { WorkspaceBrowser } from './workspace-browser'
 import type { WorkflowRunner } from './workflow-runner'
 import { installWorkspaceIpc } from './workspace-ipc'
 import type { Accounts } from './accounts'
@@ -94,6 +95,7 @@ let cliServer: CliServer | null = null
 // main 이 받은 마지막 상태 — 새 셸의 TASKMINAL_TASK_ID 를 찾는다. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
 let lastState: AppState | null = null
 let agentAccounts: Accounts | null = null
+let workspaceBrowser:WorkspaceBrowser|null=null
 let workflowRunner: WorkflowRunner | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
 /** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
@@ -575,7 +577,9 @@ if (!app.requestSingleInstanceLock()) {
     return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, sshRetryMs, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
   })
 
-  agentAccounts = installWorkspaceIpc(fromOurWindow, () => lastState)
+  const workspaceTools = installWorkspaceIpc(fromOurWindow, () => lastState)
+  agentAccounts=workspaceTools.accounts
+  workspaceBrowser=workspaceTools.browser
   workflowRunner = installWorkflowIpc(fromOurWindow,{
     state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,
     saved:()=>{stateWriter.flush();return stateFile?.canWrite?lastWritten:null},
@@ -672,6 +676,7 @@ if (!app.requestSingleInstanceLock()) {
     stateFile = file
     if (file.canWrite) {
       lastWritten = loaded.state
+      try{workspaceBrowser?.reconcile()}catch(error){report('error','browser-reconcile','브라우저 탭 기록을 정리하지 못했어요',error)}
       secretOpts = optsFrom(loaded.state.settings)
       updatePrefs = prefsFrom(loaded.state.settings)
       setChatPermission(loaded.state.settings.chatPermission)
@@ -711,6 +716,8 @@ if (!app.requestSingleInstanceLock()) {
     }
     stateWriter.push(state)
     try{workflowRunner?.reconcile()}catch(e){report('error','workflow-stop','작업 흐름을 정리하지 못했어요',e)}
+    try{workspaceBrowser?.reconcileLive()}catch(error){report('error','browser-live-cleanup','브라우저 화면을 정리하지 못했어요',error)}
+    if(stateFile?.canWrite)try{workspaceBrowser?.reconcile()}catch(error){report('error','browser-reconcile','브라우저 탭 기록을 정리하지 못했어요',error)}
   })
 
   // ─── 17단계: 백업 · 되돌리기 · 내보내기/가져오기 ───

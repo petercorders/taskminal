@@ -33,9 +33,14 @@ export interface WorkspaceApi {
   list(root: string, path: string): Promise<WorkspaceEntry[]>
   read(root: string, path: string): Promise<WorkspaceFile>
   external(root: string, path: string): Promise<void>
-  browserShow(id: string, bounds: BrowserBounds | null): Promise<void>
-  browserNavigate(id: string, url: string): Promise<void>
-  browserAction(id: string, action: 'back' | 'forward' | 'reload' | 'stop' | 'close' | 'zoomIn' | 'zoomOut' | 'focus'): Promise<void>
-  browserState(id: string): Promise<BrowserState>
-  browserCapture(id: string, element: boolean): Promise<BrowserCapture>
+  browserTabs(id: string): Promise<import('./browser-tabs').BrowserTaskState>
+  browserCreateTab(id: string): Promise<import('./browser-tabs').BrowserTaskState>
+  browserSelectTab(id: string, tabId: string): Promise<import('./browser-tabs').BrowserTaskState>
+  browserCloseTab(id: string, tabId?: string): Promise<import('./browser-tabs').BrowserTaskState>
+  browserRemember(id: string, enabled: boolean): Promise<import('./browser-tabs').BrowserTaskState>
+  browserShow(id: string, bounds: BrowserBounds | null, tabId?: string): Promise<void>
+  browserNavigate(id: string, url: string, tabId?: string): Promise<void>
+  browserAction(id: string, action: 'back' | 'forward' | 'reload' | 'stop' | 'close' | 'zoomIn' | 'zoomOut' | 'focus', tabId?: string): Promise<void>
+  browserState(id: string, tabId?: string): Promise<BrowserState>
+  browserCapture(id: string, element: boolean, tabId?: string): Promise<BrowserCapture>
 }

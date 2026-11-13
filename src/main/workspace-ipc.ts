@@ -1,5 +1,10 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { redact } from '../shared/redact'
+import { browserTabId, browserTaskId, validBrowserTabsJournal, type BrowserTabsJournal } from '../shared/browser-tabs'
+import { BrowserTabsStore } from './browser-tabs-store'
+import { AtomicJournal } from './atomic-journal'
 import { resolve, join } from 'node:path'
 import { homedir } from 'node:os'
 import { IPC } from '../shared/ipc'
@@ -18,7 +23,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   }
   const conversations = new ConversationSearch(join(app.getPath('userData'),'chat'),state,secretOptions)
   const files = new WorkspaceFiles(secretOptions),
-    browser = new WorkspaceBrowser(secretOptions),
+    browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined)),
     git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json')),
     accounts = new Accounts(join(app.getPath('userData'), 'accounts'))
   const win = (event: IpcMainInvokeEvent) => {
@@ -88,24 +93,38 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
       execFile('/usr/bin/open', ['-t', full], { timeout: 5000 }, (err) => (err ? fail(new Error('편집기를 열지 못했어요')) : ok())),
     )
   })
-  ipcMain.handle(IPC.browserShow, (e, id, b) => {
+  const browserTab=(value:unknown):string|undefined=>{if(value===undefined)return undefined;if(!browserTabId(value))throw new Error('브라우저 탭 번호를 확인해 주세요');return value}
+  ipcMain.handle(IPC.browserTabs,(e,id)=>browser.tabs(win(e),task(e,id)))
+  ipcMain.handle(IPC.browserCreateTab,(e,id)=>browser.create(win(e),task(e,id)))
+  ipcMain.handle(IPC.browserSelectTab,(e,id,tab)=>{const selected=browserTab(tab);if(!selected)throw new Error('선택할 탭이 없어요');return browser.select(win(e),task(e,id),selected)})
+  ipcMain.handle(IPC.browserCloseTab,(e,id,tab)=>browser.closeTab(win(e),task(e,id),browserTab(tab)))
+  ipcMain.handle(IPC.browserRemember,(e,id,value)=>{if(typeof value!=='boolean')throw new Error('주소 저장 설정을 확인해 주세요');return browser.remember(win(e),task(e,id),value)})
+  ipcMain.handle(IPC.browserShow, (e, id, b,tab) => {
+    const owner = win(e), selected = browserTab(tab)
+    // Unmount cleanup may arrive after authoritative state removed/archived
+    // the task. Hiding this window's existing views never creates a resource.
+    if (b === null) {
+      if (!browserTaskId(id)) throw new Error('브라우저 일감 번호를 확인해 주세요')
+      browser.show(owner, id, null, selected)
+      return
+    }
     task(e, id)
     if (
       b !== null &&
       (!b || typeof b !== 'object' || !['x', 'y', 'width', 'height'].every((k) => typeof b[k] === 'number' && Number.isFinite(b[k]) && Math.abs(b[k]) < 20000))
     )
       throw new Error('잘못된 화면 크기')
-    browser.show(win(e), id, b)
+    browser.show(owner, id, b,selected)
   })
-  ipcMain.handle(IPC.browserNavigate, (e, id, url) => browser.navigate(win(e), task(e, id), path(url)))
-  ipcMain.handle(IPC.browserState, (e, id) => browser.state(win(e), task(e, id)))
-  ipcMain.handle(IPC.browserAction, (e, id, a) => {
+  ipcMain.handle(IPC.browserNavigate, (e, id, url,tab) => browser.navigate(win(e), task(e, id), path(url),browserTab(tab)))
+  ipcMain.handle(IPC.browserState, (e, id,tab) => browser.state(win(e), task(e, id),browserTab(tab)))
+  ipcMain.handle(IPC.browserAction, (e, id, a,tab) => {
     if (!['back', 'forward', 'reload', 'stop', 'close', 'zoomIn', 'zoomOut', 'focus'].includes(a)) throw new Error('잘못된 동작')
-    browser.action(win(e), task(e, id), a)
+    browser.action(win(e), task(e, id), a,browserTab(tab))
   })
-  ipcMain.handle(IPC.browserCapture, (e, id, element) => {
+  ipcMain.handle(IPC.browserCapture, (e, id, element,tab) => {
     if (typeof element !== 'boolean') throw new Error('잘못된 캡처')
-    return browser.capture(win(e), task(e, id), element)
+    return browser.capture(win(e), task(e, id), element,browserTab(tab))
   })
   ipcMain.handle(IPC.gitWorkflowView, (e, dir, options) => {
     if (options !== undefined && !validWorkflowOptions(options)) throw new Error('잘못된 원격 설정')
@@ -143,5 +162,5 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     browser.dispose()
     accounts.dispose()
   })
-  return accounts
+  return {accounts,browser}
 }

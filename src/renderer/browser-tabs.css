@@ -1,0 +1,11 @@
+.browser-tabs-row { display:flex; gap:var(--space-2); align-items:center; min-width:0; }
+.browser-tabs { display:flex; gap:var(--space-1); overflow-x:auto; min-width:0; flex:1; padding:var(--space-half); }
+.browser-tab { display:flex; flex-shrink:0; min-width:0; }
+.browser-tab > [role=tab] { min-width:64px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-radius:var(--r-md) 0 0 var(--r-md); }
+.browser-tab > [aria-selected=true] { border-color:var(--accent-ink); background:var(--raised); }
+.browser-tab > button:last-child { min-width:28px; padding-inline:var(--space-2); border-radius:0 var(--r-md) var(--r-md) 0; }
+.browser-remember { display:flex; align-items:center; gap:var(--space-2); font-size:13px; line-height:1.5; }
+/* Keep the page reachable by scrolling when zoomed controls exceed the pane height. */
+.work-browser { flex:0 0 auto; }
+.work-browser-surface { flex:none; min-height:160px; height:clamp(160px,40vh,600px); }
+.browser-remember > input { padding:0; flex:none; }
