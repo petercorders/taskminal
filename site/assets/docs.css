@@ -46,7 +46,10 @@ ul, ol { padding-left: 24px; }
 .card h3 { margin: 0 0 8px; }
 .card p { color: var(--muted); font-size: 14px; margin: 0; }
 .table-wrap { max-width: 100%; overflow-x: auto; margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; text-align: left; }
+.table-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+td code { white-space: nowrap; }
+#install th:nth-child(-n+2), #install td:nth-child(-n+2) { min-width: 140px; }
 th { background: #1b1d23; font-weight: 600; color: #eeeaf6; }
 th, td { padding: 14px 18px; border-bottom: 1px solid var(--line); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }
