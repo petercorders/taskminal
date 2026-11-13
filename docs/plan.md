@@ -73,9 +73,9 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 27 | UX 감사 · 다듬기 | (2026-11-12 사용자 "전부 확인해보고 우리 UI/UX 확인해서 미숙한 부분 제대로 진행해줘") 화면 30장 · 8기준 채점 · 심각도 순 수정(최대 두 번) | 26 | 배율 1 화면에서 WebGL 글자 | 단위 + e2e ux-polish · webgl 배율 (완료: 2026-11-12 브랜치 `stage-27-ux-polish`, 72.5 → 84.4, `docs/stages/27-ux-polish.md`) |
 | 28 | Orca 에서 배워 다듬기 | (2026-11-12 사용자 "앱이 안깔끔해 … Orca 보고 배워서" · "chat ui 정렬" · "간격 정렬") 설정 구조 · 선 아이콘 · 간격 척도 · 대화 정렬 | 27 | Orca 에만 있는 설정 · 기능은 만들지 않음 | 단위 spacing + e2e layout-align (완료: 2026-11-12 브랜치 `stage-28-orca-polish`, 84.4 → 88.8 자체 채점, `docs/stages/28-orca-polish.md`) |
 
-| 29 | UI/UX · 반응형 | 사이드바 폭 · 작은 창/분할 pane의 대화·검토·설정 배치 · 모달 크기 제한 · 보관함/검토/출력 찾기 키보드 · 복구 조회 오류·재시도 | 28 | 실제 계정·레티나·스크린리더는 별도 확인 | e2e archive-ux · uiux-polish · responsive · review, 회귀 변이 9개 (`uiux-sidebar-polish`, main 미병합, `docs/stages/29-uiux-responsive.md`) |
+| 29 | UI/UX · 반응형 | 사이드바 폭 · 작은 창/분할 pane의 대화·검토·설정 배치 · 모달 크기 제한 · 보관함/검토/출력 찾기 키보드 · 복구 조회 오류·재시도 | 28 | 실제 계정·레티나·스크린리더는 별도 확인 | e2e archive-ux · uiux-polish · responsive · review, 회귀 변이 9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/29-uiux-responsive.md`) |
 
-| 30 | 전체 UI/UX 85점 개선 루프 | 고정 40항목 평가·감점 수정·재평가. 라이트 대비 · 보조 패널 · 복사 실패 안내·수명 · 입력 이름 | 29 | 실제 사용자 테스트·접근성 인증으로 표현하지 않음 | 고정표 95점, 관련 e2e·변이9개 (`uiux-sidebar-polish`, main 미병합, `docs/stages/30-uiux-score-loop.md`) |
+| 30 | 전체 UI/UX 85점 개선 루프 | 고정 40항목 평가·감점 수정·재평가. 라이트 대비 · 보조 패널 · 복사 실패 안내·수명 · 입력 이름 | 29 | 실제 사용자 테스트·접근성 인증으로 표현하지 않음 | 고정표 95점, 관련 e2e·변이9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/30-uiux-score-loop.md`) |
 
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 나머지 디자인 맞추기(design-gaps 1 · 2 · 3 · 5 — 전체 보기 · AI 사용량 등)는 사용자와 따로 단계로 나눈다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
