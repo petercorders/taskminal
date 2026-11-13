@@ -1,0 +1,16 @@
+.workflow-panel { display: flex; flex-direction: column; gap: var(--space-4); padding: 0; min-width: 0; color: var(--fg); flex-shrink: 0; }
+.workflow-panel h2, .workflow-panel h3 { margin: 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; }
+.workflow-controls > .field { flex: 1 1 100%; }
+.workflow-editor > fieldset, .workflow-step, .workflow-dependencies { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+.workflow-panel legend { padding: 0 var(--space-1); font-size: 13px; }
+.workflow-panel textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: var(--space-2); background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-md); resize: vertical; font: inherit; font-size: 14px; line-height: 1.5; }
+.workflow-panel textarea:focus-visible { outline: 2px solid var(--accent-ink); }
+.workflow-dependencies label { display: flex; gap: var(--space-2); align-items: center; font-size: 13px; overflow-wrap: anywhere; }
+.workflow-meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-error { color: var(--danger); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-runs { display: flex; flex-direction: column; gap: var(--space-4); }
+.workflow-run { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); padding: var(--space-3); }
+.workflow-run ol { margin: 0; padding-left: var(--space-5); }
+.workflow-run li { padding: var(--space-2) 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.workflow-result { margin: var(--space-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 14px; line-height: 1.5; }

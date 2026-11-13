@@ -819,6 +819,7 @@ function parsePane(id: Id, v: unknown, taskCwd: string): Pane | null {
     pane.kind = 'chat'
     const c = isObj(v.chat) ? v.chat : {}
     const okId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
+    if(okId(v.workflowRunId))pane.workflowRunId=v.workflowRunId
     pane.chat = {
       agent: isChatAgent(c.agent) ? c.agent : 'claude',
       ...(okId(c.sessionId) ? { sessionId: c.sessionId } : {}),

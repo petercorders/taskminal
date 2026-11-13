@@ -175,10 +175,11 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 paneId={pane.id}
                 cwd={pane.cwd}
                 chat={pane.chat ?? { agent: 'claude' }}
+                workflowRunId={pane.workflowRunId}
                 active={visible && focused}
                 visible={visible}
                 focusSignal={focusSignal}
-                permission={chat.permission}
+                permission={pane.workflowRunId ? 'ask' : chat.permission}
                 onPermission={chat.onPermission}
                 onSession={(id) => chat.onSession(pane.id, id)}
                 onToTerminal={() => chat.onToTerminal(pane.id)}

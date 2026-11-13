@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChildLike } from '../../src/main/chat/claude-adapter'
 import { CodexSession } from '../../src/main/chat/codex-adapter'
 import type { ChatEvent } from '../../src/shared/chat'
@@ -13,6 +13,7 @@ class FakeServer extends EventEmitter implements ChildLike {
   loggedIn = true
   /** thread/resume 에 오류로 답한다 (지워진 스레드) */
   failResume = false
+  stall = ''
   threads = 0
   stdout = new EventEmitter()
   stderr = new EventEmitter()
@@ -33,6 +34,7 @@ class FakeServer extends EventEmitter implements ChildLike {
   private onMsg(m: Msg) {
     this.got.push(m)
     if (m.id === undefined || !m.method) return
+    if (m.method === this.stall) return
     const reply = (result: unknown) => queueMicrotask(() => this.out({ id: m.id, result }))
     switch (m.method) {
       case 'initialize':
@@ -60,7 +62,7 @@ class FakeServer extends EventEmitter implements ChildLike {
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean } = {}) {
+function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean; stall?: string } = {}) {
   const servers: FakeServer[] = []
   const events: ChatEvent[] = []
   const saved: string[] = []
@@ -76,6 +78,7 @@ function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; fai
       const c = new FakeServer()
       if (o.loggedIn === false) c.loggedIn = false
       if (o.failResume) c.failResume = true
+      if (o.stall) c.stall = o.stall
       servers.push(c)
       return c
     },
@@ -92,6 +95,94 @@ const done = (turnId: string) => ({ method: 'turn/completed', params: { threadId
 const approval = (id: number, command = 'touch a') => ({ id, method: 'item/commandExecution/requestApproval', params: { threadId: 'thr-1', turnId: 'turn-1', itemId: 'c1', command, cwd: '/tmp/work' } })
 
 describe('CodexSession', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it.each(['initialize', 'account/read', 'thread/start', 'turn/start'])('%s 응답이 없으면 15초 뒤 결과 불명 오류와 함께 프로세스를 떼고 늦은 응답을 버린다', async (stall) => {
+    vi.useFakeTimers()
+    const { s, servers, events } = setup({ stall })
+    s.send('x')
+    await vi.advanceTimersByTimeAsync(0)
+    const old = servers[0]!
+    const request = old.got.find(m => m.method === stall)!
+    expect(request).toBeDefined()
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(old.killed).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(old.killed).toBe(true)
+    expect(s.running).toBe(false)
+    expect(s.busy).toBe(false)
+    expect(events.filter(e => e.t === 'error')).toEqual([{ t: 'error', kind: 'other', uncertain: true, message: expect.stringContaining('이미 실행됐을 수 있어요') }])
+    expect(vi.getTimerCount()).toBe(0)
+    const before = events.length
+    old.out({ id: request.id, result: { turn: { id: 'late' }, thread: { id: 'late' } } })
+    old.emit('exit', 1, null)
+    expect(events).toHaveLength(before)
+    expect(servers).toHaveLength(1)
+    s.send('사용자가 다시 시도')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(servers).toHaveLength(2)
+    expect(servers[1]!.sentMethods()[0]).toBe('initialize')
+    s.fork(undefined, null)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('준비 RPC가 각각 응답해도 첫 턴 수락까지 합계 15초를 넘기지 않는다', async () => {
+    vi.useFakeTimers()
+    const { s, servers, events } = setup({ stall: 'initialize' })
+    s.send('x')
+    const server = servers[0]!
+    await vi.advanceTimersByTimeAsync(10_000)
+    server.stall = 'account/read'
+    server.out({ id: server.got.find(m => m.method === 'initialize')!.id, result: {} })
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(server.killed).toBe(true)
+    expect(events.at(-1)).toMatchObject({ t: 'error', message: expect.stringContaining('이미 실행됐을 수 있어요') })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('응답·exit·fork·kill은 RPC와 준비 타이머를 정리하고 정상 실행 중에는 준비 제한을 적용하지 않는다', async () => {
+    vi.useFakeTimers()
+    const normal = setup()
+    normal.s.send('x')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(normal.servers[0]!.killed).toBe(false)
+    expect(normal.events.some(e => e.t === 'error')).toBe(false)
+    for (const action of ['exit', 'fork', 'kill']) {
+      const f = setup({ stall: 'initialize' })
+      f.s.send('x')
+      if (action === 'exit') f.servers[0]!.emit('exit', 1, null)
+      else if (action === 'fork') f.s.fork(undefined, null)
+      else {
+        f.s.kill()
+        expect(vi.getTimerCount()).toBe(0)
+        f.servers[0]!.emit('exit', 0, null)
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(vi.getTimerCount()).toBe(0)
+      const count = f.events.length
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(f.events).toHaveLength(count)
+    }
+    normal.s.fork(undefined, null)
+  })
+
+  it('turn/interrupt 응답 제한도 프로세스를 떼며 이전 턴을 자동으로 다시 보내지 않는다', async () => {
+    vi.useFakeTimers()
+    const { s, servers, events } = setup({ stall: 'turn/interrupt' })
+    s.send('x')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.interrupt()).toBe(true)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(servers[0]!.killed).toBe(true)
+    expect(s.running).toBe(false)
+    expect(events.at(-1)).toMatchObject({ t: 'error', message: expect.stringContaining('이미 실행됐을 수 있어요') })
+    expect(vi.getTimerCount()).toBe(0)
+    expect(servers[0]!.got.filter(m => m.method === 'turn/start')).toHaveLength(1)
+  })
+
   it('처음 보내기: initialize → initialized → account/read → thread/start → turn/start, 세션 이벤트', async () => {
     const { s, servers, events } = setup()
     expect(s.send('안녕')).toBe(true)

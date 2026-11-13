@@ -24,6 +24,7 @@ import { Icon } from './icons'
 
 interface Props {
   paneId: string
+  workflowRunId?: string
   cwd: string
   /** 에이전트 · 이어 할 세션 · 아직 안 보낸 갈라질 자리 (22단계) */
   chat: { agent: ChatAgent; sessionId?: string; forkAt?: string }
@@ -132,6 +133,7 @@ export function ChatPane(p: Props) {
   // 변경 pane 의 '대화에 묻기' · '고쳐 달라고 하기' (23단계) — 보내지 않고 입력칸에만
   useEffect(() => {
     if (!p.draft) return
+    if (p.workflowRunId) { p.onDraftTaken(p.draft.n); return }
     const add = p.draft.text
     if(p.draft.images) addImages(p.draft.images,0)
     setText((t) => (t ? `${t.replace(/\s+$/, '')}\n${add}` : add))
@@ -234,6 +236,7 @@ export function ChatPane(p: Props) {
 
   /** 실제로 보낸다 — 실행 중이면(main 이 busy) 대기열 맨 앞으로 되돌린다 */
   const dispatchSend = async (item: Queued) => {
+    if (cb.current.workflowRunId) return
     lastSent.current = item
     setHint(null)
     cb.current.onActivity({ type: 'command', text: item.text.split('\n')[0]!.slice(0, 200) })
@@ -291,6 +294,7 @@ export function ChatPane(p: Props) {
     return item
   }
   const send = (raw?: string) => {
+    if (p.workflowRunId) return
     const item = raw !== undefined ? { text: raw.trim(), images: [] } : takeInput()
     if (!item || !item.text) return
     if (running || queue.length > 0) {
@@ -303,6 +307,7 @@ export function ChatPane(p: Props) {
   }
   /** ⌘↩ 지금 보내기 — 입력창 글을 대기열 맨 앞에 두고, 도는 중이면 멈춘 뒤 보낸다 */
   const sendNowKey = () => {
+    if (p.workflowRunId) return
     const item = takeInput()
     if (!running) {
       const q = item ? [item, ...queue] : queue
@@ -334,7 +339,7 @@ export function ChatPane(p: Props) {
     answer(id, { how: 'deny', ...(reason ? { message: reason } : {}) })
     setText('')
     // Codex 승인 답에는 글 칸이 없다 — 거절 이유는 이 턴이 끝난 뒤 다음 턴으로 보낸다
-    if (agent === 'codex' && reason) setQueue((q) => [{ text: reason, images: [] }, ...q])
+    if (!p.workflowRunId && agent === 'codex' && reason) setQueue((q) => [{ text: reason, images: [] }, ...q])
   }
   const submitQuestion = (b: Extract<ChatBlock, { kind: 'question' }>) => {
     const own = text.trim()
@@ -366,6 +371,7 @@ export function ChatPane(p: Props) {
 
   // ─── 그림 (22단계) ───
   const addImages = (more: ChatImage[], skipped: number) => {
+    if (cb.current.workflowRunId) return
     setImages((cur) => {
       const room = Math.max(0, IMAGE_MAX_COUNT - cur.length)
       const over = more.length - room
@@ -374,6 +380,7 @@ export function ChatPane(p: Props) {
     })
   }
   const addFiles = async (files: File[]) => {
+    if (cb.current.workflowRunId) return
     const got = await Promise.all(files.map(readImage))
     addImages(got.filter((x): x is ChatImage => x !== null), got.filter((x) => x === null).length)
   }
@@ -384,6 +391,7 @@ export function ChatPane(p: Props) {
     void addFiles(files)
   }
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    if (p.workflowRunId) { e.preventDefault(); return }
     const reference=e.dataTransfer.getData('application/x-taskminal-file')
     if(reference){
       e.preventDefault()
@@ -401,6 +409,7 @@ export function ChatPane(p: Props) {
     void addFiles(files)
   }
   const pickImages = async () => {
+    if (p.workflowRunId) return
     const r = await window.taskminal.chat.pickImages().catch(() => ({ images: [], skipped: [] }))
     addImages(r.images, r.skipped.length)
     inputRef.current?.focus()
@@ -409,13 +418,13 @@ export function ChatPane(p: Props) {
   // ─── 되감기 · 나누기 (22단계) ───
   const askRewind = (b: Extract<ChatBlock, { kind: 'user' }>) => {
     const plan = rewindPlan(events, b.index, 'rewind')
-    if (!plan || running) return
+    if (!plan || running || p.workflowRunId) return
     setConfirm({ index: b.index, at: b.at, removed: plan.removed })
   }
   const doRewind = async () => {
     const c = confirm
     setConfirm(null)
-    if (!c) return
+    if (!c || p.workflowRunId) return
     const r = await window.taskminal.chat.rewind(p.paneId, c.index, c.at, cb.current.chat).catch(() => null)
     if (!r) return cb.current.onToast('되감지 못했어요.', '그 사이 대화가 바뀌었거나 아직 도는 중이에요.')
     handledEnd.current = r.events.length - 1
@@ -431,6 +440,7 @@ export function ChatPane(p: Props) {
     if (e.nativeEvent.isComposing) return
     if (e.metaKey && e.key === '.') {
       e.preventDefault()
+      if (p.workflowRunId) return
       window.taskminal.chat.interrupt(p.paneId)
       return
     }
@@ -510,9 +520,9 @@ export function ChatPane(p: Props) {
   const renderBlock = (b: ChatBlock) => {
     switch (b.kind) {
       case 'user': {
-        const canBranch = !running && rewindPlan(events, b.index, 'branch') !== null
+        const canBranch = !p.workflowRunId && !running && rewindPlan(events, b.index, 'branch') !== null
         // 앞 턴이 멈춤 · 실패로 끝났으면 되감을 자리가 없다 — 단추를 숨긴다
-        const canRewind = !running && rewindPlan(events, b.index, 'rewind') !== null
+        const canRewind = !p.workflowRunId && !running && rewindPlan(events, b.index, 'rewind') !== null
         return (
           <div key={b.key} className="chat-user" data-testid="chat-block" data-kind="user" data-chat-turn={b.index} tabIndex={-1}>
             <span data-testid="chat-user-text">{b.text}</span>
@@ -662,7 +672,8 @@ export function ChatPane(p: Props) {
             b={b}
             agent={agent}
             onRetry={() => lastSent.current && !running && void dispatchSend(lastSent.current)}
-            canRetry={lastSent.current !== null}
+            canRetry={!p.workflowRunId && lastSent.current !== null}
+            readOnly={!!p.workflowRunId}
             onToTerminal={p.onToTerminal}
             onOpenLogin={p.onOpenLogin}
           />
@@ -708,12 +719,12 @@ export function ChatPane(p: Props) {
           셸 ⌘J
         </button>
         {/* 27단계: '셸' 과 '터미널' 이 같은 뜻으로 읽혀 — 이쪽은 이 대화를 터미널 화면(TUI)으로 바꾸는 것 */}
-        <button type="button" className="chat-switch" onClick={p.onToTerminal} title="이 대화를 같은 세션 그대로 터미널 화면(TUI)으로 바꿔요 (⇧⌘J)" data-testid="chat-to-tui">
+        {!p.workflowRunId && <button type="button" className="chat-switch" onClick={p.onToTerminal} title="이 대화를 같은 세션 그대로 터미널 화면(TUI)으로 바꿔요 (⇧⌘J)" data-testid="chat-to-tui">
           TUI 로 ⇧⌘J
-        </button>
+        </button>}
       </header>
       <div className="chat-list" ref={listRef}>
-        {loaded && events.length === 0 && (
+        {loaded && events.length === 0 && !p.workflowRunId && (
           <div className="chat-empty" data-testid="chat-empty">
             <div className="chat-empty-title">{name} 와 대화를 시작해요</div>
             <div className="dim" title={p.cwd}>
@@ -749,6 +760,7 @@ export function ChatPane(p: Props) {
         )}
       </div>
       <footer className="chat-input-box">
+        {p.workflowRunId && <div className="chat-hint">작업 흐름의 전용 대화입니다. 허락과 질문에 답할 수 있습니다. 실행 중지·재시도는 작업 흐름 패널에서 해 주세요.</div>}
         {hint && (
           <div className="chat-hint" data-testid="chat-hint">
             {hint}
@@ -818,16 +830,17 @@ export function ChatPane(p: Props) {
           aria-label="대화 입력"
           rows={2}
           value={text}
-          placeholder={pending ? (pending.kind === 'question' ? '카드에서 고르거나 직접 써도 돼요' : '허락하거나, 다른 방법을 말해 주세요') : running ? '돌고 있는 동안 쓰면 대기열에 들어가요 (↩) · ⌘↩ 지금 보내기' : '무엇을 할까요?'}
+          readOnly={!!p.workflowRunId && !pending}
+          placeholder={pending ? (pending.kind === 'question' ? '카드에서 고르거나 직접 써도 돼요' : '허락하거나, 다른 방법을 말해 주세요') : p.workflowRunId ? '작업 흐름에서 지시를 보냅니다.' : running ? '돌고 있는 동안 쓰면 대기열에 들어가요 (↩) · ⌘↩ 지금 보내기' : '무엇을 할까요?'}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
         />
         <div className="chat-input-row">
-          <button type="button" className="chat-attach" data-testid="chat-attach" onClick={() => void pickImages()} title="그림 붙이기 (⌘V · 끌어 놓기도 돼요)">
+          {!p.workflowRunId && <button type="button" className="chat-attach" data-testid="chat-attach" onClick={() => void pickImages()} title="그림 붙이기 (⌘V · 끌어 놓기도 돼요)">
             <Icon name="clip" size={14} />
             그림
-          </button>
-          <span className="chat-perm-wrap">
+          </button>}
+          {!p.workflowRunId && <span className="chat-perm-wrap">
             <button type="button" className={`chat-perm${p.permission === 'auto' ? ' auto' : ''}`} data-testid="chat-perm" aria-haspopup="menu" aria-expanded={permMenu} onClick={() => setPermMenu((v) => !v)}>
               허락: {permName} ▾
             </button>
@@ -851,15 +864,15 @@ export function ChatPane(p: Props) {
                 ))}
               </span>
             )}
-          </span>
+          </span>}
           {lastCtx !== undefined && <span className={`chat-ctx${lastCtx >= 90 ? ' warn' : ''}`}>대화 창 {lastCtx}%{lastCtx >= 90 ? ' · /compact 로 줄이기' : ''}</span>}
           {model && (
             <span className="dim small chat-model" data-testid="chat-model">
               {name} · {model}
             </span>
           )}
-          <span className="dim small chat-keys" title="↩ 보내기 · ⇧↩ 줄바꿈 · ⌘↩ 지금 보내기 · ⌘. 멈춤 · ⌘J 셸">⇧↩ 줄바꿈 · ⌘J 셸</span>
-          {running ? (
+          {!p.workflowRunId && <span className="dim small chat-keys" title="↩ 보내기 · ⇧↩ 줄바꿈 · ⌘↩ 지금 보내기 · ⌘. 멈춤 · ⌘J 셸">⇧↩ 줄바꿈 · ⌘J 셸</span>}
+          {!p.workflowRunId && (running ? (
             <button type="button" className="chat-send stop" onClick={() => window.taskminal.chat.interrupt(p.paneId)}>
               멈춤 ⌘.
             </button>
@@ -867,7 +880,7 @@ export function ChatPane(p: Props) {
             <button type="button" className="chat-send" data-testid="chat-send" disabled={!text.trim()} onClick={() => send()}>
               보내기 ↩
             </button>
-          )}
+          ))}
         </div>
         </div>
       </footer>
@@ -880,6 +893,7 @@ function Band({
   agent,
   onRetry,
   canRetry,
+  readOnly,
   onToTerminal,
   onOpenLogin,
 }: {
@@ -887,6 +901,7 @@ function Band({
   agent: ChatAgent
   onRetry(): void
   canRetry: boolean
+  readOnly?: boolean
   onToTerminal(): void
   onOpenLogin(): void
 }) {
@@ -916,9 +931,9 @@ function Band({
     default: {
       title = `작업이 실패했어요${b.ms ? ` · ${duration(b.ms)}` : ''}`
       const code = b.code !== undefined ? ` (종료 코드 ${b.code})` : b.message ? ` (${b.message})` : ''
-      body = `${b.error === 'crash' ? `${name} 가 갑자기 끝났어요. ` : ''}지금까지의 대화와 파일은 그대로예요. 다시 시도해도 같으면 터미널로 열어 보세요.${code}`
+      body = readOnly ? `지금까지의 대화와 파일은 그대로예요. 작업 흐름 패널에서 상태를 확인하고 이어 실행해 주세요.${code}` : `${b.error === 'crash' ? `${name} 가 갑자기 끝났어요. ` : ''}지금까지의 대화와 파일은 그대로예요. 다시 시도해도 같으면 터미널로 열어 보세요.${code}`
       if (b.error === 'crash' && canRetry) body += ' 보낸 글이 이미 들어갔으면 두 번 보일 수 있어요.'
-      actions = [...(canRetry ? [{ label: '다시 시도', run: onRetry }] : []), { label: '터미널로 열기 ⇧⌘J', run: onToTerminal }]
+      actions = [...(canRetry ? [{ label: '다시 시도', run: onRetry }] : []), ...(readOnly ? [] : [{ label: '터미널로 열기 ⇧⌘J', run: onToTerminal }])]
     }
   }
   return (

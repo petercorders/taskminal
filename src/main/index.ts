@@ -28,6 +28,8 @@ import { killPort, probePorts } from './port-probe'
 import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
+import { installWorkflowIpc } from './workflow-ipc'
+import type { WorkflowRunner } from './workflow-runner'
 import { installWorkspaceIpc } from './workspace-ipc'
 import type { Accounts } from './accounts'
 import type { WorktreeResult } from '../shared/worktree'
@@ -90,6 +92,7 @@ let cliServer: CliServer | null = null
 // main 이 받은 마지막 상태 — 새 셸의 TASKMINAL_TASK_ID 를 찾는다. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
 let lastState: AppState | null = null
 let agentAccounts: Accounts | null = null
+let workflowRunner: WorkflowRunner | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
 /** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
 function cliEnv(paneId: string): Record<string, string> {
@@ -238,6 +241,8 @@ const chats = () =>
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
     findBin: (agent) => agentBins.find(agent),
+    reserved:paneId=>!!lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId),
+    permissionFor:paneId=>lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId)?'ask':undefined,
     permission: () => chatPermission,
     channel: IPC.chatEvent,
     appVersion: app.getVersion(),
@@ -398,7 +403,7 @@ function createWindow(): BrowserWindow {
   })
   // 대화의 claude 는 지킴이에 남기지 않는다 — 창이 닫히면 끝내고, 다음 보내기가 --resume 으로 잇는다(새로 고침 · 충돌은 같은 webContents 라 그대로)
   const chatSink = win.webContents
-  win.on('closed', () => chatManager?.closeSink(chatSink))
+  win.on('closed', () => {workflowRunner?.dispose();chatManager?.closeSink(chatSink)})
   // 종료 경로 4개 중 창에 딸린 3개 — 셸은 지킴이에 남기고 떼기만 한다(16단계). 다시 열리면 attach 로 다시 붙는다.
   const wc = win.webContents
   // renderer 가 사라지면(창 닫기 · 새로 고침 · 충돌) 그 renderer 가 알려 준 수도 버린다 — 새 페이지가 다시 보낸다
@@ -407,6 +412,7 @@ function createWindow(): BrowserWindow {
     setBadge(0)
   }
   const detach = () => {
+    workflowRunner?.dispose()
     hostControl?.ptys.detachOwner(wc)
     reviewWatch.stopPrefix(`${wc.id}:`)
     forget()
@@ -566,6 +572,13 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   agentAccounts = installWorkspaceIpc(fromOurWindow, () => lastState)
+  workflowRunner = installWorkflowIpc(fromOurWindow,{
+    state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,
+    saved:()=>{stateWriter.flush();return stateFile?.canWrite?lastWritten:null},
+    sink:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.webContents:null,
+    redact:text=>redact(text,secretOpts),
+  })
+
 
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -672,6 +685,7 @@ if (!app.requestSingleInstanceLock()) {
       updater?.prefsChanged()
     }
     stateWriter.push(state)
+    try{workflowRunner?.reconcile()}catch(e){report('error','workflow-stop','작업 흐름을 정리하지 못했어요',e)}
   })
 
   // ─── 17단계: 백업 · 되돌리기 · 내보내기/가져오기 ───
@@ -896,6 +910,7 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.chatRewind, async (event, paneId: unknown, index: unknown, at: unknown, chat: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     const ref = chatRef(chat)
+    if(typeof paneId==='string'&&lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId))throw new Error('작업 흐름의 실행 대화는 되감을 수 없어요')
     if (!isPaneId(paneId) || !isIndex(index) || typeof at !== 'number' || !ref) return null
     return chats().rewind(paneId, index, at, ref)
   })

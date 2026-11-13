@@ -33,6 +33,7 @@ export interface CodexSessionOptions {
 }
 
 interface Call {
+  timer: ReturnType<typeof setTimeout>
   resolve(v: unknown): void
   reject(e: Error): void
 }
@@ -45,6 +46,7 @@ interface Pending {
 }
 
 const STDERR_KEEP = 2000
+const RPC_TIMEOUT_MS = 15_000
 
 class RpcError extends Error {}
 
@@ -56,6 +58,8 @@ export class CodexSession implements AgentSession {
   private stderr = ''
   private nextId = 0
   private calls = new Map<number, Call>()
+  /** 초기화부터 첫 턴 수락까지의 합계 제한 — 정상 턴 실행 · 사용자 허락 대기에는 적용하지 않는다. */
+  private startupTimer: ReturnType<typeof setTimeout> | undefined
   private pending = new Map<string, Pending>()
   /** '이 명령만 늘 허락' — 같은 명령의 다음 승인 요청은 앱이 바로 accept (이 대화 동안) */
   private always = new Set<string>()
@@ -93,6 +97,7 @@ export class CodexSession implements AgentSession {
 
   private ended(code: number | null, err: string | null) {
     if (this.child === null) return
+    this.clearStartupTimer()
     this.child = null
     this.gen++
     this.pending.clear()
@@ -134,13 +139,33 @@ export class CodexSession implements AgentSession {
 
   private call(method: string, params: Obj): Promise<Obj> {
     const id = ++this.nextId
+    const gen = this.gen
     return new Promise<Obj>((resolve, reject) => {
-      this.calls.set(id, { resolve: (v) => resolve(isObj(v) ? v : {}), reject })
+      const timer = setTimeout(() => {
+        if (gen === this.gen && this.calls.has(id)) this.timedOut()
+      }, RPC_TIMEOUT_MS)
+      const call: Call = {
+        timer,
+        resolve: (v) => { clearTimeout(timer); resolve(isObj(v) ? v : {}) },
+        reject: (e) => { clearTimeout(timer); reject(e) },
+      }
+      this.calls.set(id, call)
       if (!this.write({ id, method, params })) {
         this.calls.delete(id)
-        reject(new RpcError('codex 에 보내지 못했어요'))
+        call.reject(new RpcError('codex 에 보내지 못했어요'))
       }
     })
+  }
+
+  private clearStartupTimer() {
+    if (this.startupTimer !== undefined) clearTimeout(this.startupTimer)
+    this.startupTimer = undefined
+  }
+
+  private timedOut() {
+    // turn/start · interrupt는 이미 처리됐을 수 있다. 프로세스를 떼고 늦은 응답을 버리며 자동 재전송하지 않는다.
+    this.detach()
+    this.o.onEvent({ t: 'error', kind: 'other', uncertain: true, message: 'Codex 응답을 15초 안에 확인하지 못했어요. 요청이 이미 실행됐을 수 있어요. 이전 대화를 확인한 뒤 다시 시도해 주세요.' })
   }
 
   private onLine(line: string) {
@@ -212,6 +237,9 @@ export class CodexSession implements AgentSession {
 
   private async run(text: string, images: readonly ChatImage[]) {
     const gen = this.child ? this.gen : this.gen + 1
+    this.startupTimer = setTimeout(() => {
+      if (gen === this.gen) this.timedOut()
+    }, RPC_TIMEOUT_MS)
     try {
       if (!this.child) {
         this.start()
@@ -245,6 +273,7 @@ export class CodexSession implements AgentSession {
       if (gen !== this.gen) return
       const r = await this.call('turn/start', { threadId: this.threadId, input, approvalPolicy: codexPolicy(this.o.permission).approvalPolicy })
       if (gen !== this.gen) return
+      this.clearStartupTimer()
       const turn = isObj(r['turn']) ? r['turn'] : {}
       if (typeof turn['id'] === 'string' && this.busy) {
         this.turnId = turn['id']
@@ -252,6 +281,7 @@ export class CodexSession implements AgentSession {
       }
     } catch (e) {
       if (gen !== this.gen || !this.busy) return // 프로세스가 끝났다 — ended 가 알렸다
+      this.clearStartupTimer()
       this.busy = false
       this.interruptWanted = false
       // 스레드를 못 열었으면 프로세스를 떼어 낸다 — 남겨 두면 다음 보내기가 준비를 건너뛰고 스레드 없이 turn/start 를 보낸다(리뷰)
@@ -316,6 +346,7 @@ export class CodexSession implements AgentSession {
   /** 떠 있는 프로세스를 바로 떼어 내고(세대 +1) 끝낸다 */
   private detach() {
     const c = this.child
+    this.clearStartupTimer()
     this.child = null
     this.gen++
     this.busy = false
@@ -339,6 +370,8 @@ export class CodexSession implements AgentSession {
   kill() {
     const c = this.child
     if (!c) return
+    this.clearStartupTimer()
+    for (const call of this.calls.values()) clearTimeout(call.timer)
     this.stopping = true
     try {
       c.stdin?.end()

@@ -107,7 +107,7 @@ export type Action =
   /** 셸 안의 cd — OSC 7 · lsof 가 알려 준 폴더 */
   | { type: 'pane/cwd'; paneId: Id; cwd: string }
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
-  | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent }
+  | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent; workflowRunId?: string; label?:string }
   | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent; dir?: SplitDir }
   | { type: 'review/open'; taskId: Id; ids: [Id, Id] }
   | { type: 'chat/rewound'; paneId: Id; forkAt: string | null; sessionId?: string }
@@ -248,7 +248,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return editTask(state, action.id, action.patch)
     case 'chat/add-tab': {
       const ids = [action.tabId, action.paneId]
-      return updateTask(state, action.taskId, (t) => addChatTab(t, () => ids.shift()!, action.agent))
+      return updateTask(state, action.taskId, (t) => {
+        const next=addChatTab(t, () => ids.shift()!, action.agent)
+        if(action.workflowRunId&&next.panes[action.paneId]){
+          next.panes[action.paneId]={...next.panes[action.paneId]!,workflowRunId:action.workflowRunId}
+          next.tabs=next.tabs.map(tab=>tab.id===action.tabId?{...tab,title:action.label??'작업 흐름'}:tab)
+        }
+        return next
+      })
     }
     case 'review/open': {
       const ids = [...action.ids]

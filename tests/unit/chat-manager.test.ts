@@ -18,11 +18,12 @@ class FakeChild extends EventEmitter implements ChildLike {
   }
 }
 
-function setup(found = true, saved: ChatEvent[] = []) {
+function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' = 'ask') {
   const sent: unknown[][] = []
   const stored: ChatEvent[] = []
   const children: FakeChild[] = []
   const envs: Record<string, string>[] = []
+  const args: string[][] = []
   const replaced: { p: string; ev: ChatEvent[] }[] = []
   let release: () => void = () => {}
   const gate = new Promise<void>((r) => (release = r))
@@ -37,6 +38,7 @@ function setup(found = true, saved: ChatEvent[] = []) {
     },
     redactOptions: () => ({}),
     spawn: (_b, _a, o) => {
+      args.push(_a)
       envs.push(o.env)
       const c = new FakeChild()
       children.push(c)
@@ -46,11 +48,11 @@ function setup(found = true, saved: ChatEvent[] = []) {
       await gate
       return found ? { bin: '/x/claude', path: '/login/path' } : null
     },
-    permission: () => 'ask',
+    permission: () => permission,
     channel: 'chat:event',
     now: () => 7,
   })
-  return { m, sink, sent, stored, children, envs, release, replaced }
+  return { m, sink, sent, stored, children, envs, args, release, replaced }
 }
 
 describe('ChatManager', () => {
@@ -231,4 +233,15 @@ describe('AgentBinFinder', () => {
     expect(await f.claude()).toEqual({ bin: '/Users/me/.nvm/bin/claude', path: '/nvm:/b' })
     expect(flags).toEqual(['-lc', '-ilc'])
   })
+})
+
+describe('workflow ownership',()=>{
+ it('rejects ordinary sends and preserves ASK despite global auto changes',async()=>{
+  const t=setup(true,[],'auto');t.release();t.m.claim('owned')
+  expect(await t.m.send(t.sink,'owned','ordinary','/tmp',{agent:'claude'})).toBe('busy')
+  expect(await t.m.send(t.sink,'owned','workflow','/tmp',{agent:'claude'},[],true)).toBe('ok')
+  expect(t.args[0]![t.args[0]!.indexOf('--permission-mode')+1]).toBe('default')
+  t.m.setPermission('auto')
+  expect(t.children[0]!.written.at(-1)).toContain('"mode":"default"')
+ })
 })

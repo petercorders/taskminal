@@ -33,7 +33,8 @@
 | 34 내장 브라우저 | 구현·검증 완료(main 미병합). 일감 보조 pane·웹 격리·요소/화면 확인 후 대화 첨부. `docs/stages/34-workspace-browser.md` |
 | 35 파일 탐색·맥락 | 구현·검증 완료(main 미병합). 폴더·텍스트/Markdown/그림/PDF 미리보기·범위/참조 첨부·경계 검사. `docs/stages/35-workspace-files.md` |
 | 36 대화 기록 검색 | 구현·검증·GC 완료. 단위 1,021 · e2e 285 · 변이8, 전체 종료0. `docs/stages/36-conversation-search.md` |
-| 37~40 후속 Orca 비교 | 승인 계획 `docs/ideas/orca-next-five.md`. 단계마다 GC·커밋, 전체 UI/UX 개선 후 기능 브랜치 push까지 승인됨. main 병합 별도 |
+| 37 에이전트 작업 흐름 | 구현·검증·GC 완료. 단위1,042·e2e291·핵심 변이6, 전체 종료0. `docs/stages/37-agent-workflows.md` |
+| 38~40 후속 Orca 비교 | 승인 계획 `docs/ideas/orca-next-five.md`. 단계마다 GC·커밋, 전체 UI/UX 개선 후 기능 브랜치 push까지 승인됨. main 병합 별도 |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -46,6 +47,7 @@
 - **15단계까지 묻지 말고 이어서 진행한다.** 디자인 맞추기는 15단계 뒤 사용자와 단계로 만든 다음에. 선택은 추천안으로 정해 계획에 적는다. 단계 사이에 멈추지 않고, 보고는 끝에 한 번.
 - 예외 — 반드시 사용자 확인: `/Applications` 에 실제 설치(14단계) · 사용자 Claude Code 설정 바꾸기 · 실제 데이터 폴더(`~/Library/Application Support/Taskminal`) 건드리기. (GitHub push · Pages · 릴리스는 2026-11-11 사용자 "너가 알아서 실행해줘 나한테 묻지마" 로 자율.)
 - **작업 위치 (2026-11-12 옮김)**: Orca 워크스페이스 `~/orca/workspaces/taskminal/taskminal`(Orca 프로젝트 `~/orca/projects/taskminal` 의 worktree, 브랜치 `petercorders/taskminal` → upstream `origin/main`). 커밋 뒤 `git push origin HEAD:main` 으로 올린다. 저장소 로컬 git 이름 · 주소는 `petercorders` · GitHub noreply(전역 설정의 개인 메일을 공개 저장소에 남기지 않으려고). 옛 폴더 `~/taskminal` · `~/taskminal-work` 와 cherry-pick 으로 올리던 흐름(`published-local-main` 태그)은 더 쓰지 않는다 — 문서 안의 옛 경로는 그때의 기록이다.
+- **현재 36~40 후속 작업 예외**: `stage-36-40-orca-followup` 브랜치에서 단계별 GC·커밋 후 `git push -u origin stage-36-40-orca-followup`. 이 작업은 main 직접 push·병합을 포함하지 않는다. 위의 이전 출시 작업 방식보다 승인 계획 `docs/ideas/orca-next-five.md`가 우선한다.
 - 보고 · 커밋 메시지는 한국어.
 
 ## 3. 단계 하나의 순서

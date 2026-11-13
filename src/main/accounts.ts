@@ -117,8 +117,9 @@ export class Accounts {
     this.save()
     return this.env(id)
   }
-  copyBinding(from: string, to: string, agent: ChatAgent) {
+  copyBinding(from: string, to: string, agent: ChatAgent, strict=false) {
     this.list()
+    if(strict&&!this.data.bindings[`${agent}:${from}`])throw new Error('원래 계정 바인딩을 찾지 못했어요')
     this.data.bindings[`${agent}:${to}`] = this.data.bindings[`${agent}:${from}`] ?? `default-${agent}`
     this.save()
   }
