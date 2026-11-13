@@ -142,6 +142,9 @@ export interface ChatApi {
 }
 
 export interface TaskminalApi {
+  accounts: import('../shared/accounts').AccountsApi
+  workspace: import('../shared/workspace').WorkspaceApi
+  gitWorkflow: import('../shared/git-workflow').GitWorkflowApi
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
   pickFolder(): Promise<string | null>

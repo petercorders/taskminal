@@ -21,7 +21,8 @@
   "dependencies": {
     "@xterm/headless": "6.0.0",
     "electron-updater": "6.8.12",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "pdfjs-dist": "6.5.438"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",

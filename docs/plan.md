@@ -72,12 +72,15 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 26 | 대화 중심 · 가독성 | (2026-11-12 사용자 "chat 모드 왜 개발 안했고 · 셀은 왜 있어야 하며 · 가독성은 왜 이렇게 안좋아" · "Orca 좀 제대로 봐봐") 대화 여는 길을 메뉴 · 탭 ▾ 에 · 새 일감 기본 = 대화(설정으로 Codex · 터미널) · 셸은 ⌘J 로 대화 아래에 꺼냄 · 글자 · 대비 · 줄 간격을 재는 e2e | 21 · 22 | Orca 1.4.255 앱 · 홈페이지 모형 · 문서로 패턴 보기 | e2e chat-first · readability(화면 7개 문제 글자 242 → 0) (완료: 2026-11-12 브랜치 `stage-26-chat-first`, `docs/stages/26-chat-first.md`) |
 | 27 | UX 감사 · 다듬기 | (2026-11-12 사용자 "전부 확인해보고 우리 UI/UX 확인해서 미숙한 부분 제대로 진행해줘") 화면 30장 · 8기준 채점 · 심각도 순 수정(최대 두 번) | 26 | 배율 1 화면에서 WebGL 글자 | 단위 + e2e ux-polish · webgl 배율 (완료: 2026-11-12 브랜치 `stage-27-ux-polish`, 72.5 → 84.4, `docs/stages/27-ux-polish.md`) |
 | 28 | Orca 에서 배워 다듬기 | (2026-11-12 사용자 "앱이 안깔끔해 … Orca 보고 배워서" · "chat ui 정렬" · "간격 정렬") 설정 구조 · 선 아이콘 · 간격 척도 · 대화 정렬 | 27 | Orca 에만 있는 설정 · 기능은 만들지 않음 | 단위 spacing + e2e layout-align (완료: 2026-11-12 브랜치 `stage-28-orca-polish`, 84.4 → 88.8 자체 채점, `docs/stages/28-orca-polish.md`) |
-
 | 29 | UI/UX · 반응형 | 사이드바 폭 · 작은 창/분할 pane의 대화·검토·설정 배치 · 모달 크기 제한 · 보관함/검토/출력 찾기 키보드 · 복구 조회 오류·재시도 | 28 | 실제 계정·레티나·스크린리더는 별도 확인 | e2e archive-ux · uiux-polish · responsive · review, 회귀 변이 9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/29-uiux-responsive.md`) |
-
 | 30 | 전체 UI/UX 85점 개선 루프 | 고정 40항목 평가·감점 수정·재평가. 라이트 대비 · 보조 패널 · 복사 실패 안내·수명 · 입력 이름 | 29 | 실제 사용자 테스트·접근성 인증으로 표현하지 않음 | 고정표 95점, 관련 e2e·변이9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/30-uiux-score-loop.md`) |
+| 31 | 전체 작업 보기 | 활동·상태별 카드·검색·정확한 탭/pane 이동 | 30 | 세션 프로세스는 유지 | overview 단위6·e2e3·변이3, `docs/stages/31-overview.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 32 | 사용량·계정 | Codex 한도 조회·계정 추가/로그인/선택·바인딩·인증 환경 격리 | 31 | Claude 한도 수치는 미지원 | 공급자 계약·격리·중복·손상 시험, `docs/stages/32-accounts-usage.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 33 | GitHub 흐름 | push·PR 생성·체크/리뷰·확인 후 병합·불명 결과 복구 | 32 | 실제 GitHub 쓰기로 검증하지 않음 | 실제 bare Git·가짜 gh10·변이4, `docs/stages/33-git-workflow.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 34 | 내장 브라우저 | 일감 보조 pane·탐색·요소/화면 전달·격리 | 33 | 팝업/권한/다운로드 차단 | 로컬 HTTP·실 WebContents·배율·수명, `docs/stages/34-workspace-browser.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 35 | 파일 탐색·대화 맥락 | 경계 검사·텍스트/Markdown/그림/PDF 미리보기·첨부 | 34 | 원격 파일·편집은 별도 | 실제 파일/경합·PDF worker·범위/변경 검증, `docs/stages/35-workspace-files.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
 
-함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 나머지 디자인 맞추기(design-gaps 1 · 2 · 3 · 5 — 전체 보기 · AI 사용량 등)는 사용자와 따로 단계로 나눈다.
+함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 
 ## 단계 사이 규칙

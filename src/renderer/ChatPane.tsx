@@ -49,7 +49,7 @@ interface Props {
   /** 파일을 고친 도구 줄의 'diff 열기 →' — 변경 pane 에서 그 파일 (23단계) */
   onOpenDiff(path: string): void
   /** 변경 pane 의 '대화에 묻기' 가 넣는 글 — n 이 바뀔 때마다 입력칸 끝에 붙인다 */
-  draft: { text: string; n: number } | null
+  draft: { text: string; n: number; images?: ChatImage[] } | null
   /** 글을 받았다 — App 이 지워 두어야 다시 그려질 때 같은 글을 또 붙이지 않는다(리뷰) */
   onDraftTaken(n: number): void
 }
@@ -130,6 +130,7 @@ export function ChatPane(p: Props) {
   useEffect(() => {
     if (!p.draft) return
     const add = p.draft.text
+    if(p.draft.images) addImages(p.draft.images,0)
     setText((t) => (t ? `${t.replace(/\s+$/, '')}\n${add}` : add))
     p.onDraftTaken(p.draft.n)
     requestAnimationFrame(() => inputRef.current?.focus())
@@ -352,6 +353,17 @@ export function ChatPane(p: Props) {
     void addFiles(files)
   }
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    const reference=e.dataTransfer.getData('application/x-taskminal-file')
+    if(reference){
+      e.preventDefault()
+      try{
+        const ref=JSON.parse(reference)
+        if(typeof ref.root!=='string'||typeof ref.path!=='string'||ref.root!==p.cwd){setHint('같은 일감의 파일만 붙일 수 있어요.');return}
+        setText(t=>`${t}${t?'\n':''}파일 참조 (내용 미전달): ${ref.root}/${ref.path}`)
+        setHint('파일 경로를 추가했어요. 내용을 전달하려면 파일 탐색에서 열고 범위를 확인해 주세요.')
+      }catch{setHint('파일 참조를 읽지 못했어요.')}
+      return
+    }
     const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
     if (files.length === 0) return
     e.preventDefault()
@@ -647,7 +659,7 @@ export function ChatPane(p: Props) {
       data-agent={agent}
       data-state={status.state}
       onKeyDown={onKey}
-      onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+      onDragOver={(e) => (e.dataTransfer.types.includes('Files')||e.dataTransfer.types.includes('application/x-taskminal-file')) && e.preventDefault()}
       onDrop={onDrop}
     >
       <header className="chat-head">

@@ -28,6 +28,8 @@ import { killPort, probePorts } from './port-probe'
 import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
+import { installWorkspaceIpc } from './workspace-ipc'
+import type { Accounts } from './accounts'
 import type { WorktreeResult } from '../shared/worktree'
 import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
@@ -87,6 +89,7 @@ let cliSockPath = '' // ready 뒤 정한다(userData)
 let cliServer: CliServer | null = null
 // main 이 받은 마지막 상태 — 새 셸의 TASKMINAL_TASK_ID 를 찾는다. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
 let lastState: AppState | null = null
+let agentAccounts: Accounts | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
 /** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
 function cliEnv(paneId: string): Record<string, string> {
@@ -230,6 +233,7 @@ const chats = () =>
   (chatManager ??= new ChatManager({
     // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
     extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || ''}:${cliBinDir}` }),
+    sessionEnv: (env,paneId,chat) => agentAccounts?.sessionEnvironment(paneId,chat.agent,!!chat.sessionId,env) ?? env,
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
@@ -561,6 +565,8 @@ if (!app.requestSingleInstanceLock()) {
     return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, sshRetryMs, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
   })
 
+  agentAccounts = installWorkspaceIpc(fromOurWindow, () => lastState)
+
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     const o = (opts ?? {}) as Record<string, unknown>
@@ -625,6 +631,7 @@ if (!app.requestSingleInstanceLock()) {
     // 손상이면 마지막 정상 백업으로 (17단계)
     const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
+    lastState = loaded.state
     stateFile = file
     if (file.canWrite) {
       lastWritten = loaded.state
@@ -895,7 +902,10 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.chatBranch, async (event, from: unknown, to: unknown, index: unknown, at: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     if (!isPaneId(from) || !isPaneId(to) || from === to || !isIndex(index) || typeof at !== 'number') return null
-    return chats().branch(from, to, index, at)
+    const source=lastState?.tasks.flatMap(t=>Object.values(t.panes)).find(p=>p.id===from)
+    const result=await chats().branch(from, to, index, at)
+    if(result&&source?.chat)agentAccounts?.copyBinding(from,to,source.chat.agent)
+    return result
   })
   /** 📎 — 그림 파일을 골라 읽는다(renderer 는 파일을 못 읽는다). 크기 · 종류가 맞지 않는 것은 빼고 그 이름을 돌려준다 */
   ipcMain.handle(IPC.chatPickImages, async (event): Promise<{ images: ChatImage[]; skipped: string[] }> => {

@@ -24,7 +24,8 @@ export interface ChatManagerDeps {
   now?: () => number
   appVersion?: string
   /** 에이전트 프로세스에 더할 환경 변수 (24단계 — TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal) */
-  extraEnv?: (paneId: string, path: string) => Record<string, string>
+  extraEnv?: (paneId: string, path: string, chat: ChatRef) => Record<string, string>
+  sessionEnv?: (env: Record<string,string>, paneId:string, chat:ChatRef) => Record<string,string>
 }
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
@@ -125,9 +126,10 @@ export class ChatManager {
         return 'missing'
       }
       const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
+      const initialEnv = { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path, chat) ?? {}) }
       const common = {
         bin: found.bin,
-        env: { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path) ?? {}) },
+        env: this.d.sessionEnv?.(initialEnv,paneId,chat) ?? initialEnv,
         cwd: expandHome(cwd),
         permission: this.d.permission(),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),

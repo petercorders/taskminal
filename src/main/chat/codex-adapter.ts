@@ -79,7 +79,8 @@ export class CodexSession implements AgentSession {
     this.buf = ''
     this.stderr = ''
     this.threadId = undefined
-    const child = this.o.spawn(this.o.bin, ['app-server'], { cwd: this.o.cwd, env: this.o.env })
+    const args=this.o.env['TASKMINAL_ACCOUNT_ISOLATED']==='1'?['app-server','-c','cli_auth_credentials_store="file"']:['app-server']
+    const child = this.o.spawn(this.o.bin, args, { cwd: this.o.cwd, env: this.o.env })
     this.child = child
     child.stdin?.on?.('error', () => {}) // EPIPE — 끝남은 exit 가 알린다
     child.stdout?.on('data', (d: Buffer | string) => gen === this.gen && this.onData(String(d)))

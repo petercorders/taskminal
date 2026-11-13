@@ -4645,3 +4645,104 @@ input[type='checkbox'] {
     justify-content: flex-end;
   }
 }
+
+/* 31~35: 작업 전체 보기와 보조 화면. 기존 토큰·컴포넌트 사용. */
+.workspace { position: relative; flex-direction: column; min-height: 0; }
+.workspace-toolbar, .work-tools-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.workspace-toolbar { min-height: var(--head-h); padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.sidebar-overview { margin: var(--space-2) var(--space-4); text-align: left; }
+.overview { flex: 1; overflow: auto; padding: var(--space-5); min-height: 0; }
+.overview-header, .overview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.overview-header { justify-content: space-between; }
+.overview h1 { font-size: 22px; }
+.overview h2 { font-size: 16px; margin: 0 0 var(--space-3); }
+.overview h3 { font-size: 14px; margin: 0 0 var(--space-2); }
+.overview-controls input { flex: 1; min-width: 160px; }
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: var(--space-4); align-items: start; }
+.overview-column { min-width: 0; }
+.overview-card { padding: var(--space-4); margin-bottom: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); }
+.overview-task-open, .overview-meta, .overview-last { overflow-wrap: anywhere; }
+.overview-task-open { text-align: left; }
+.overview-last { font-size: 14px; line-height: 1.45; }
+.overview-panes { list-style: none; padding: 0; margin: var(--space-3) 0 0; display: grid; gap: var(--space-2); }
+.overview-pane { display: flex; gap: var(--space-2); width: 100%; text-align: left; flex-wrap: wrap; }
+.overview-unread { color: var(--accent-ink); }
+.work-tool-panel { position: absolute; z-index: 12; inset: calc(var(--head-h) + var(--space-2)) 0 0 44%; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: auto; min-width: 0; padding: var(--space-4); gap: var(--space-3); }
+.work-tool-panel > header { justify-content: space-between; }
+.work-tools-open > .task-view { max-width: 44%; }
+.work-tools-row input { flex: 1; min-width: 100px; }
+.work-tools-row strong { overflow-wrap: anywhere; }
+.work-path { overflow-wrap: anywhere; min-width: 0; }
+.workspace-files { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; flex: 1; }
+.work-files-layout { display: grid; grid-template-columns: minmax(100px,28%) minmax(0,1fr); flex: 1; min-height: 0; border-top: 1px solid var(--line); }
+.work-file-list { overflow: auto; border-right: 1px solid var(--line); padding: var(--space-2); }
+.work-file-entry { display: block; width: 100%; border: 0; background: transparent; color: var(--fg); text-align: left; padding: var(--space-2); overflow-wrap: anywhere; min-height: 32px; border-radius: var(--r-sm); }
+.work-file-entry:hover { background: var(--raised); }
+.work-file-preview { overflow: auto; padding: var(--space-3); }
+.work-source { font: 12px/1.5 ui-monospace,monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-radius: var(--r-md); padding: var(--space-3); max-height: 50vh; overflow: auto; }
+.work-line-number { color: var(--muted); display: inline-block; min-width: 32px; user-select: none; }
+.work-preview-image { max-width: 100%; max-height: 45vh; object-fit: contain; }
+.work-pdf { width: 100%; height: 50vh; border: 0; background: var(--bg); }
+.work-browser { display: flex; flex-direction: column; gap: var(--space-2); flex: 1; min-height: 0; }
+.work-browser-surface { flex: 1; min-height: 160px; background: var(--bg); border: 1px solid var(--line); }
+.work-capture { overflow: auto; }
+.work-capture pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.work-accounts { overflow: auto; }
+.work-accounts label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.work-accounts input, .work-accounts select { max-width: 100%; min-width: 0; }
+.work-account-create, .work-usage { padding: var(--space-4); margin-top: var(--space-4); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.work-usage progress { width: 100%; accent-color: var(--accent); }
+.git-workflow { overflow: auto; }
+.git-workflow-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.git-workflow-path { overflow-wrap: anywhere; }
+.git-workflow-field { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; }
+.git-workflow input, .git-workflow textarea, .git-workflow select { max-width: 100%; box-sizing: border-box; }
+.git-workflow-pr, .git-workflow-create { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--r-lg); margin: var(--space-4) 0; }
+@media (max-width: 1100px) {
+  .work-tool-panel { left: 0; }
+  .work-tools-open > .task-view { visibility: hidden; max-width: 100%; }
+}
+@media (max-width: 700px) {
+  .work-files-layout { grid-template-columns: minmax(0,1fr); }
+  .work-file-list { max-height: 25vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .workspace-toolbar { gap: var(--space-1); }
+  .work-tool-panel { top: calc(var(--head-h) * 2); }
+}
+.compact-sidebar-toggle, .compact-overview { display: none; }
+@media (max-width: 520px) {
+  .sidebar { display: none; }
+  .sidebar-revealed .sidebar { display: flex; position: absolute; inset: 0 auto 0 0; z-index: 30; width: min(80vw,248px); box-shadow: 0 0 0 100vmax #0007; }
+  .compact-sidebar-toggle, .compact-overview { display: inline-flex; }
+  .workspace-toolbar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: var(--space-2); }
+  .workspace-toolbar .button { justify-content: center; min-width: 0; }
+  .work-tool-panel { top: 124px; padding: var(--space-3); }
+  .overview { padding: var(--space-3); }
+}
+.work-pdf-canvas { max-width: 100%; height: auto; background: white; }
+.compact-tools-select { display: none; }
+@media (max-width: 520px) {
+  .workspace-toolbar { display: flex; flex-wrap: nowrap; padding: var(--space-1) var(--space-2); }
+  .workspace-toolbar > .button:not(.compact-sidebar-toggle):not(.compact-overview) { display: none; }
+  .compact-tools-select { display: block; min-width: 0; max-width: 40%; }
+  .work-tool-panel { top: calc(var(--head-h) + var(--space-2)); }
+}
+.work-browser-surface { min-height: 0; }
+.work-tool-panel input, .work-tool-panel select, .work-tool-panel textarea, .workspace-toolbar select {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--space-2) var(--space-3); font: inherit; box-sizing: border-box;
+}
+/* 도구 줄이 추가되어도 작은 창의 분할 대화에서 보내기·TUI·셸을 유지한다. */
+@container work-pane (max-width: 300px) {
+  .chat-pane { --chat-gutter: var(--space-2); }
+  .chat-head { gap: var(--space-1); padding: var(--space-1) var(--chat-gutter); }
+  .chat-where { display: none; }
+  .chat-input-box { padding: var(--space-2) var(--chat-gutter); }
+  .chat-composer { padding: var(--space-2); }
+  .chat-input-row { gap: var(--space-1); }
+  .chat-input-row > .chat-model { display: none; }
+}
+.sidebar-tools-menu { display: none; margin: 0 var(--space-4) var(--space-2); background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--space-2); min-width: 0; }
+@media (max-height: 520px) and (min-width: 521px) {
+  .workspace-toolbar { display: none; }
+  .sidebar-tools-menu { display: block; }
+  .work-tool-panel { top: 0; }
+}

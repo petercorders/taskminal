@@ -20,6 +20,31 @@ const subscribe = <A extends unknown[]>(channel: string, listener: (...args: A) 
 }
 
 const api: TaskminalApi = {
+  accounts: {
+    tui: (paneId) => ipcRenderer.invoke(IPC.accountsTui, paneId),
+    list: () => ipcRenderer.invoke(IPC.accountsList),
+    add: (agent, name) => ipcRenderer.invoke(IPC.accountsAdd, agent, name),
+    select: (id) => ipcRenderer.invoke(IPC.accountsSelect, id),
+    status: (id) => ipcRenderer.invoke(IPC.accountsStatus, id),
+    login: (id) => ipcRenderer.invoke(IPC.accountsLogin, id),
+    cancel: (id) => ipcRenderer.invoke(IPC.accountsCancel, id),
+  },
+  workspace: {
+    list: (root, path) => ipcRenderer.invoke(IPC.workspaceList, root, path),
+    read: (root, path) => ipcRenderer.invoke(IPC.workspaceRead, root, path),
+    external: (root, path) => ipcRenderer.invoke(IPC.workspaceExternal, root, path),
+    browserShow: (id, bounds) => ipcRenderer.invoke(IPC.browserShow, id, bounds),
+    browserNavigate: (id, url) => ipcRenderer.invoke(IPC.browserNavigate, id, url),
+    browserAction: (id, action) => ipcRenderer.invoke(IPC.browserAction, id, action),
+    browserState: (id) => ipcRenderer.invoke(IPC.browserState, id),
+    browserCapture: (id, element) => ipcRenderer.invoke(IPC.browserCapture, id, element),
+  },
+  gitWorkflow: {
+    view: (dir, options) => ipcRenderer.invoke(IPC.gitWorkflowView, dir, options),
+    push: (dir, target) => ipcRenderer.invoke(IPC.gitWorkflowPush, dir, target),
+    create: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowCreate, dir, input),
+    merge: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowMerge, dir, input),
+  },
   appInfo: () => ipcRenderer.invoke(IPC.appInfo) as Promise<AppInfo>,
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | null>,
   onCommand: (listener) => subscribe<[unknown]>(IPC.appCommand, listener),

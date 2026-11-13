@@ -3,6 +3,25 @@ import type { AppState } from './types'
 
 // main · preload 가 함께 쓰는 IPC 채널 이름. renderer 는 채널을 모르고 preload API 만 부른다.
 export const IPC = {
+  accountsList: 'accounts:list',
+  accountsTui: 'accounts:tui',
+  accountsAdd: 'accounts:add',
+  accountsSelect: 'accounts:select',
+  accountsStatus: 'accounts:status',
+  accountsLogin: 'accounts:login',
+  accountsCancel: 'accounts:cancel',
+  workspaceList: 'workspace:list',
+  workspaceRead: 'workspace:read',
+  workspaceExternal: 'workspace:external',
+  browserShow: 'browser:show',
+  browserNavigate: 'browser:navigate',
+  browserAction: 'browser:action',
+  browserState: 'browser:state',
+  browserCapture: 'browser:capture',
+  gitWorkflowView: 'git-workflow:view',
+  gitWorkflowPush: 'git-workflow:push',
+  gitWorkflowCreate: 'git-workflow:create',
+  gitWorkflowMerge: 'git-workflow:merge',
   appInfo: 'app:info',
   ptySpawn: 'pty:spawn', // invoke
   ptyWrite: 'pty:write', // send
