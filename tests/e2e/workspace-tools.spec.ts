@@ -27,7 +27,7 @@ test.beforeEach(async () => {
   // 개발 빌드와 실제 .app에서 같은 작업 도구 계약을 검증한다.
   const packaged = process.env['TASKMINAL_E2E_PACKAGED'] === '1'
   app = await electron.launch({
-    ...(packaged ? { executablePath: join(process.cwd(), 'dist/mac-arm64/Taskminal.app/Contents/MacOS/Taskminal') } : { args: ['.'] }),
+    ...(packaged ? { executablePath: process.env['TASKMINAL_E2E_APP_PATH'] || join(process.cwd(), 'dist/mac-arm64/Taskminal.app/Contents/MacOS/Taskminal') } : { args: ['.'] }),
     env: { ...process.env, TASKMINAL_USER_DATA: dir },
   })
   win = await firstWindow(app)
