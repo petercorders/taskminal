@@ -76,6 +76,7 @@ describe('홈페이지 OS별 다운로드', () => {
     expect(p.primary.href).toBe(url)
     expect(p.label.textContent).toContain('Windows')
     expect(p.cards[2].link.href).toBe(url)
+    expect(p.cards[2].attrs.get('aria-label')).toContain('Windows')
     expect(p.cards[1].link.href).toBe('')
     expect(p.cards[1].attrs.get('aria-disabled')).toBe('true')
     expect(p.status.textContent).toContain('v0.1.2')

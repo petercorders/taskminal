@@ -75,17 +75,35 @@ jobs:
         shell: bash
         run: |
           node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));const f='dist/releases/'+p.version+'-${{ matrix.os }}-${{ matrix.arch }}/package-plan.json';const plan=JSON.parse(fs.readFileSync(f));fs.appendFileSync(process.env.GITHUB_OUTPUT,'path='+plan.executable+'\noutput='+plan.output+'\nversion='+p.version+'\n')"
+      - name: Prepare unpacked Linux sandbox helper
+        if: runner.os == 'Linux'
+        env:
+          TASKMINAL_E2E_APP_PATH: ${{ steps.app.outputs.path }}
+        run: |
+          # 설치 전 unpacked 앱은 러너 소유다. 실제 시스템 설치처럼 helper 권한을 준비한다.
+          sandbox_path="$(dirname "$TASKMINAL_E2E_APP_PATH")/chrome-sandbox"
+          test -f "$sandbox_path"
+          sudo chown root:root "$sandbox_path"
+          sudo chmod 4755 "$sandbox_path"
+          stat -c '%a %U:%G %n' "$sandbox_path"
       - name: Run packaged shell and guardian smoke
         if: runner.os != 'Linux'
         run: npx playwright test tests/e2e/platform-smoke.spec.ts --reporter=line
         env:
+          DEBUG: pw:browser
+          ELECTRON_ENABLE_LOGGING: '1'
           TASKMINAL_E2E_PACKAGED: '1'
           TASKMINAL_E2E_APP_PATH: ${{ steps.app.outputs.path }}
           TASKMINAL_EXPECT_VERSION: ${{ steps.app.outputs.version }}
       - name: Run packaged shell and guardian smoke (Xvfb)
         if: runner.os == 'Linux'
-        run: xvfb-run -a npx playwright test tests/e2e/platform-smoke.spec.ts --reporter=line
+        run: |
+          set -o pipefail
+          mkdir -p test-results
+          xvfb-run -a npx playwright test tests/e2e/platform-smoke.spec.ts --reporter=line 2>&1 | tee test-results/native-linux-smoke.log
         env:
+          DEBUG: pw:browser
+          ELECTRON_ENABLE_LOGGING: '1'
           TASKMINAL_E2E_PACKAGED: '1'
           TASKMINAL_E2E_APP_PATH: ${{ steps.app.outputs.path }}
           TASKMINAL_EXPECT_VERSION: ${{ steps.app.outputs.version }}

@@ -55,6 +55,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
 linux:
+  # Linux 대상마다 ${arch}를 x86_64/amd64로 바꾸므로, 지원하는 x64 이름을 고정한다.
+  artifactName: '${productName}-${version}-linux-x64.${ext}'
   target:
     - target: AppImage
       arch: [x64]

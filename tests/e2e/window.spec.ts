@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { firstWindow } from './helpers'
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { spawn } from 'node:child_process'
@@ -32,7 +33,7 @@ test('창이 뜨고 preload → main 왕복으로 앱 정보를 받는다', asyn
   const info = await win.evaluate(() =>
     (globalThis as unknown as { taskminal: { appInfo(): Promise<unknown> } }).taskminal.appInfo(),
   )
-  expect(info).toMatchObject({ name: 'Taskminal', version: '0.1.0' })
+  expect(info).toMatchObject({ name: 'Taskminal', version: (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version })
   expect((info as { shells: string[] }).shells).toContain('/bin/zsh') // 설정에서 고를 수 있는 셸(/etc/shells)
 })
 

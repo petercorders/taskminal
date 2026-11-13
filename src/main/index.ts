@@ -55,6 +55,7 @@ import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
 import { defaultShell } from '../shared/platform'
 import { openTextEditor } from './text-editor'
+import { isAppPage } from './page-origin'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -364,15 +365,7 @@ const stateWriter = new Debouncer<AppState>(
   300,
 )
 
-const isOurPage = (url: string): boolean => {
-  try {
-    const u = new URL(url)
-    if (devServerUrl) return u.origin === new URL(devServerUrl).origin
-    return u.protocol === 'file:' && decodeURIComponent(u.pathname) === rendererFile
-  } catch {
-    return false
-  }
-}
+const isOurPage = (url: string): boolean => isAppPage(url, rendererFile, devServerUrl)
 
 const openExternalIfWeb = (url: unknown): void => {
   const web = webUrl(url) // http(s) 가 아니면 무시

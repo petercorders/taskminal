@@ -100,6 +100,7 @@ export async function wireDownloads() {
     const asset = assets[platform]
     if (link) {
       link.textContent = asset ? t.download : t.missing
+      link.setAttribute('aria-label', `${t[platform]} · ${asset ? t.download : t.missing}`)
       if (asset) {
         link.href = asset.browser_download_url
         link.removeAttribute('aria-disabled')
