@@ -20,6 +20,7 @@ const subscribe = <A extends unknown[]>(channel: string, listener: (...args: A) 
 }
 
 const api: TaskminalApi = {
+  conversations: { search: query=>ipcRenderer.invoke(IPC.conversationsSearch,query), verify: hit=>ipcRenderer.invoke(IPC.conversationsVerify,hit) },
   accounts: {
     tui: (paneId) => ipcRenderer.invoke(IPC.accountsTui, paneId),
     list: () => ipcRenderer.invoke(IPC.accountsList),

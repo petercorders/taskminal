@@ -19,6 +19,7 @@ import {
   type ChatImage,
   type ChatPermission,
 } from '../shared/chat'
+import { conversationMessage } from '../shared/conversation-search'
 import { Icon } from './icons'
 
 interface Props {
@@ -49,6 +50,8 @@ interface Props {
   /** 파일을 고친 도구 줄의 'diff 열기 →' — 변경 pane 에서 그 파일 (23단계) */
   onOpenDiff(path: string): void
   /** 변경 pane 의 '대화에 묻기' 가 넣는 글 — n 이 바뀔 때마다 입력칸 끝에 붙인다 */
+  jump?: { fingerprint:string; at:number; n:number } | null
+  onJumpTaken(n:number):void
   draft: { text: string; n: number; images?: ChatImage[] } | null
   /** 글을 받았다 — App 이 지워 두어야 다시 그려질 때 같은 글을 또 붙이지 않는다(리뷰) */
   onDraftTaken(n: number): void
@@ -184,6 +187,32 @@ export function ChatPane(p: Props) {
 
   const status = useMemo(() => chatStatus(events), [events])
   const blocks = useMemo(() => foldBlocks(events), [events])
+  const consumedJump=useRef<number|null>(null)
+  const shownEvents=useRef(events)
+  shownEvents.current=events
+  useEffect(() => {
+    const jump=p.jump
+    if(!jump||!p.visible||!loaded||consumedJump.current===jump.n)return
+    let cancelled=false
+    void (async()=>{
+      let key:string|undefined
+      for(const event of shownEvents.current){
+        if(event.t!=='user'||event.at!==jump.at)continue
+        const candidate=conversationMessage(event)
+        const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(candidate))
+        const hash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('')
+        if(hash===jump.fingerprint){key=candidate;break}
+      }
+      if(cancelled)return
+      const index=shownEvents.current.findIndex(e=>e.t==='user'&&conversationMessage(e)===key)
+      const node=index>=0&&shownEvents.current.filter(e=>e.t==='user'&&conversationMessage(e)===key).length===1?listRef.current?.querySelector<HTMLElement>(`[data-chat-turn="${index}"]`):null
+      consumedJump.current=jump.n
+      if(node){node.scrollIntoView({block:'center'});node.focus({preventScroll:true})}
+      else cb.current.onToast('대화 기록이 바뀌었어요. 다시 검색해 주세요.')
+      cb.current.onJumpTaken(jump.n)
+    })().catch(()=>{if(!cancelled){consumedJump.current=jump.n;cb.current.onToast('검색 위치를 찾지 못했어요. 다시 검색해 주세요.');cb.current.onJumpTaken(jump.n)}})
+    return()=>{cancelled=true}
+  }, [p.jump?.n, loaded, p.visible])
   const running = status.state === 'run' || status.state === 'wait'
   const pending = blocks.find((b): b is Extract<ChatBlock, { kind: 'permission' | 'question' }> => (b.kind === 'permission' || b.kind === 'question') && b.answer === null)
   const model = useMemo(() => [...events].reverse().find((e): e is Extract<ChatEvent, { t: 'session' }> => e.t === 'session' && !!e.model)?.model, [events])
@@ -194,10 +223,12 @@ export function ChatPane(p: Props) {
     return () => clearInterval(t)
   }, [status.state])
   useEffect(() => {
+    if(p.jump&&consumedJump.current!==p.jump.n)return
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [blocks.length, events.length, confirm])
   useEffect(() => {
+    if(p.jump&&consumedJump.current!==p.jump.n)return
     if (p.active && p.visible && !document.querySelector('[aria-modal="true"]')) inputRef.current?.focus()
   }, [p.active, p.visible, p.focusSignal])
 
@@ -483,7 +514,7 @@ export function ChatPane(p: Props) {
         // 앞 턴이 멈춤 · 실패로 끝났으면 되감을 자리가 없다 — 단추를 숨긴다
         const canRewind = !running && rewindPlan(events, b.index, 'rewind') !== null
         return (
-          <div key={b.key} className="chat-user" data-testid="chat-block" data-kind="user">
+          <div key={b.key} className="chat-user" data-testid="chat-block" data-kind="user" data-chat-turn={b.index} tabIndex={-1}>
             <span data-testid="chat-user-text">{b.text}</span>
             {b.images.length > 0 && (
               <div className="chat-user-images" data-testid="chat-user-images">

@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-13 (31~35단계 구현·검증 완료 — 전체 보기 · 사용량/계정 · GitHub · 내장 브라우저 · 파일 탐색. 브랜치 `stage-31-35-workspace`, main 미병합. 출시 준비는 8절)
+마지막 갱신: 2026-11-14 (36단계 대화 검색 완료·37~40 및 전체 UI/UX 진행 중; 31~35단계 구현·검증 완료 — 전체 보기 · 사용량/계정 · GitHub · 내장 브라우저 · 파일 탐색. 브랜치 `stage-36-40-orca-followup`, main 미병합. 출시 준비는 8절)
 
 ## 1. 지금 어디까지
 
@@ -32,6 +32,8 @@
 | 33 GitHub 흐름 | 구현·검증 완료(main 미병합). 안전한 push·PR 생성·체크/리뷰·SHA 고정 병합 확인·응답 유실 복구. `docs/stages/33-git-workflow.md` |
 | 34 내장 브라우저 | 구현·검증 완료(main 미병합). 일감 보조 pane·웹 격리·요소/화면 확인 후 대화 첨부. `docs/stages/34-workspace-browser.md` |
 | 35 파일 탐색·맥락 | 구현·검증 완료(main 미병합). 폴더·텍스트/Markdown/그림/PDF 미리보기·범위/참조 첨부·경계 검사. `docs/stages/35-workspace-files.md` |
+| 36 대화 기록 검색 | 구현·검증·GC 완료. 단위 1,021 · e2e 285 · 변이8, 전체 종료0. `docs/stages/36-conversation-search.md` |
+| 37~40 후속 Orca 비교 | 승인 계획 `docs/ideas/orca-next-five.md`. 단계마다 GC·커밋, 전체 UI/UX 개선 후 기능 브랜치 push까지 승인됨. main 병합 별도 |
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 

@@ -80,6 +80,9 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 34 | 내장 브라우저 | 일감 보조 pane·탐색·요소/화면 전달·격리 | 33 | 팝업/권한/다운로드 차단 | 로컬 HTTP·실 WebContents·배율·수명, `docs/stages/34-workspace-browser.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
 | 35 | 파일 탐색·대화 맥락 | 경계 검사·텍스트/Markdown/그림/PDF 미리보기·첨부 | 34 | 원격 파일·편집은 별도 | 실제 파일/경합·PDF worker·범위/변경 검증, `docs/stages/35-workspace-files.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
 
+| 36 | 대화 기록 통합 검색 | 가린 사용자/assistant 본문·필터·안전한 턴 이동 | 35 | 실제 참여자/계정은 미검증 | 단위1,021·e2e285·변이8·GC, 종료0 (완료: `docs/stages/36-conversation-search.md`, main 미병합) |
+| 37~40 | 작업 흐름·예약·worktree 관리·브라우저 탭 | 승인 범위·인수 조건은 `docs/ideas/orca-next-five.md` | 36 | 종료마다 GC, 전체 뒤 UI/UX | 진행 중 |
+
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 

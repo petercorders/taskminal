@@ -9,12 +9,14 @@ import { WorkspaceBrowser } from './workspace-browser'
 import { GitWorkflowService } from './git-workflow'
 import { validGitTarget, validWorkflowOptions } from '../shared/git-workflow'
 import { Accounts } from './accounts'
+import { ConversationSearch } from './conversation-search'
 
 export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean, state: () => AppState | null) {
   const secretOptions = () => {
     const settings = state()?.settings
     return { custom: settings?.secretCustom ?? [], allow: new Set(settings?.secretAllow.map((a) => a.hash) ?? []) }
   }
+  const conversations = new ConversationSearch(join(app.getPath('userData'),'chat'),state,secretOptions)
   const files = new WorkspaceFiles(secretOptions),
     browser = new WorkspaceBrowser(secretOptions),
     git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json')),
@@ -52,6 +54,8 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     if (typeof id !== 'string' || id.length > 100) throw new Error('잘못된 계정')
     return id
   }
+  ipcMain.handle(IPC.conversationsSearch,(e,q)=>{win(e);return conversations.search(q)})
+  ipcMain.handle(IPC.conversationsVerify,(e,hit)=>{win(e);return conversations.verify(hit)})
   ipcMain.handle(IPC.accountsList, (e) => {
     win(e)
     return accounts.list()

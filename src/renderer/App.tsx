@@ -29,6 +29,9 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { NewTaskDialog, type NewTaskInitial } from './NewTaskDialog'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
+import { ConversationSearch } from './ConversationSearch'
+import type { ConversationHit } from '../shared/conversation-search'
+import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
 import { AccountsPanel } from './AccountsPanel'
 import { WorkspaceFiles } from './WorkspaceFiles'
@@ -177,6 +180,9 @@ export function App() {
   const [creating, setCreating] = useState<NewTaskInitial | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [conversationOpen,setConversationOpen]=useState(false)
+  const [conversationJump,setConversationJump]=useState<{paneId:string;fingerprint:string;at:number;n:number}|null>(null)
+  const [conversationRestore,setConversationRestore]=useState<ConversationHit|null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
   const [sidebarCompactOpen,setSidebarCompactOpen]=useState(false)
   const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts';url?:string}|null>(null)
@@ -1049,6 +1055,8 @@ export function App() {
   }
 
   const closeDialogs = () => {
+    setConversationOpen(false)
+    setConversationRestore(null)
     setCreating(null)
     setRemoving(null)
     setConfirming(null)
@@ -1230,7 +1238,7 @@ export function App() {
   }
 
   const activeTask = state.tasks.find((t) => t.id === state.activeTaskId) ?? null
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
   const [seenAt, setSeenAt] = useState<Record<string, number>>({})
@@ -1385,10 +1393,25 @@ export function App() {
       const taskId = findPaneTask(stateRef.current, paneId)
       if (taskId) openReview(taskId, 'diff', path)
     },
+    jump: conversationJump,
+    onJumpTaken: (n:number)=>setConversationJump(v=>v?.n===n?null:v),
     draft: chatDraft,
     onDraftTaken: (n: number) => setChatDraft((d) => (d?.n === n ? null : d)),
   }
 
+  const openConversation = async (hit:ConversationHit, signal:AbortSignal) => {
+    const verified=await window.taskminal.conversations.verify(hit)
+    if(signal.aborted)return
+    if (!verified) throw new Error('대화가 바뀌었거나 닫혔어요. 다시 검색해 주세요.')
+    const task=stateRef.current.tasks.find(t=>t.id===hit.taskId)
+    const tab=task?.tabs.find(t=>layoutPaneIds(t.layout).includes(hit.paneId))
+    if(!task||!tab)throw new Error('대화가 닫혔어요.')
+    if(task.archivedAt!==undefined){setConversationRestore(hit);return}
+    dispatch({type:'task/select',id:task.id})
+    dispatch({type:'pane/focus',taskId:task.id,paneId:hit.paneId})
+    setOverviewOpen(false);setWorkTool(null);setConversationOpen(false)
+    setConversationJump({paneId:hit.paneId,fingerprint:hit.fingerprint,at:hit.at,n:Date.now()})
+  }
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
     if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: shownActivity[paneId]?.command ?? act.command } : {}) })
@@ -1430,6 +1453,8 @@ export function App() {
     const font = (how: 'bigger' | 'smaller' | 'reset') =>
       dispatch({ type: 'settings/font', size: stepFontSize(state.settings.fontSize, how) })
     switch (command) {
+      case 'conversation-search':
+        return setConversationOpen(true)
       case 'overview':
         setWorkTool(null)
         return setOverviewOpen(true)
@@ -1825,7 +1850,8 @@ export function App() {
         />
         <main className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
           <nav className="workspace-toolbar" aria-label="작업 도구">
-            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts';if(kind!=='accounts'&&!activeTask)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="accounts">사용량·계정</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option></>}</select>
+            <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
+            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&!activeTask)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option></>}</select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
             <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button>
@@ -2175,6 +2201,8 @@ export function App() {
           onClose={closeDialogs}
         />
       )}
+      {conversationOpen&&<ConversationSearch tasks={state.tasks} activeTaskId={state.activeTaskId} onOpen={openConversation} onClose={()=>{setConversationOpen(false);refocus()}}/>}
+      {conversationRestore&&<ConfirmDialog title="보관한 일감을 되살릴까요?" message="일감을 되살린 뒤 검색 결과를 다시 눌러 주세요. 메시지는 보내지 않아요." confirmLabel="되살리기" onConfirm={()=>{unarchive([conversationRestore.taskId]);setConversationRestore(null)}} onCancel={()=>setConversationRestore(null)}/>}
       {archiveOpen && (
         <ArchivePanel state={state} onRestore={unarchive} onRemove={(t) => (setArchiveOpen(false), setRemoving(t))} onRestoreDeleted={(d) => void restoreDeleted(d)} onClose={closeDialogs} />
       )}

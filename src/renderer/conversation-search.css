@@ -1,0 +1,11 @@
+.dialog.conversation-search { width: min(640px, calc(100vw - var(--space-8))); }
+.conversation-search-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.conversation-search-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
+.conversation-search-archived { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; }
+.conversation-search-status, .conversation-search-meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.conversation-search-results { display: flex; flex-direction: column; gap: var(--space-2); list-style: none; padding: 0; margin: 0; min-width: 0; }
+.conversation-search-results button { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); color: var(--fg); text-align: left; cursor: pointer; }
+.conversation-search-results button:hover { background: var(--raised); }
+.conversation-search-results button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--space-half); }
+.conversation-search-results button:disabled { cursor: wait; }
+.conversation-search-snippet { font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

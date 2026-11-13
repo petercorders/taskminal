@@ -3,6 +3,8 @@ import type { AppState } from './types'
 
 // main · preload 가 함께 쓰는 IPC 채널 이름. renderer 는 채널을 모르고 preload API 만 부른다.
 export const IPC = {
+  conversationsSearch: 'conversations:search',
+  conversationsVerify: 'conversations:verify',
   accountsList: 'accounts:list',
   accountsTui: 'accounts:tui',
   accountsAdd: 'accounts:add',
