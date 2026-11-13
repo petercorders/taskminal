@@ -54,13 +54,16 @@ test('OS별 패키지: 한글 셸·CLI·렌더러 재연결·종료 뒤 지킴�
   }
   let ownedMainPid = 0, guardianPath = '', guardianPid = 0
   const launchers: Array<ReturnType<ElectronApplication['process']>> = []
+  const launcherFor = new WeakMap<ElectronApplication, ReturnType<ElectronApplication['process']>>()
   const lifecycle = join(userData, 'lifecycle.log')
   const alive = (pid: number) => { try { if (pid <= 0) return false; process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM' } }
   const launch = () => step('launch', async () => {
     // Playwright는 chromiumSandbox:true가 없으면 스스로 --no-sandbox를 붙인다.
     const instance = await electron.launch({ executablePath: APP, env, args: [], chromiumSandbox: true, timeout: 20_000 })
-    launchers.push(instance.process())
-    for (const stream of [instance.process().stdout, instance.process().stderr]) stream?.on('data', (data: Buffer) => {
+    const launcher = instance.process()
+    launchers.push(launcher)
+    launcherFor.set(instance, launcher)
+    for (const stream of [launcher.stdout, launcher.stderr]) stream?.on('data', (data: Buffer) => {
       output.push(String(data))
       while (output.join('').length > 64 * 1024) output.shift()
     })
@@ -87,11 +90,13 @@ test('OS별 패키지: 한글 셸·CLI·렌더러 재연결·종료 뒤 지킴�
       add('lifecycle instrumented')
       return process.pid
     }, lifecycle)
-    mark(`owned main PID=${ownedMainPid}, Playwright launcher PID=${instance.process().pid}`)
+    mark(`owned main PID=${ownedMainPid}, Playwright launcher PID=${launcher.pid}`)
     return instance
   })
   const quitNormally = async (instance: ElectronApplication) => {
     const pid = ownedMainPid
+    // 종료 후 Playwright 내부 객체가 지워지므로 시작할 때 보관한 ChildProcess를 쓴다.
+    const launcher = launcherFor.get(instance)!
     // 메뉴의 정상 app.quit 경로. Inspector 평가가 반환된 뒤 실행하여 Playwright.close의 즉시 CDP 분리와 구별한다.
     await instance.evaluate(({ app }) => { setImmediate(() => app.quit()) })
     // Windows의 app.process()는 cmd.exe wrapper일 수 있다. 실제 main의 exit0 기록과 PID 소멸을 함께 확인한다.
@@ -106,7 +111,7 @@ test('OS별 패키지: 한글 셸·CLI·렌더러 재연결·종료 뒤 지킴�
       const deadline = setTimeout(() => { clearInterval(timer); reject(new Error(`normal app.quit main PID ${pid} has not exited`)) }, 9500)
       deadline.unref()
     }), 10_000, 'normal app.quit process exit')
-    mark(`normal app.quit main PID=${pid} exit=0, alive=false; launcher exitCode=${instance.process().exitCode} signal=${instance.process().signalCode}`)
+    mark(`normal app.quit main PID=${pid} exit=0, alive=false; launcher exitCode=${launcher.exitCode} signal=${launcher.signalCode}`)
   }
   let app: ElectronApplication | null = null
   let closed = true
@@ -185,7 +190,8 @@ test('OS별 패키지: 한글 셸·CLI·렌더러 재연결·종료 뒤 지킴�
         mark(`cleanup: kill only owned main PID ${ownedMainPid}`)
         try { process.kill(ownedMainPid, 'SIGKILL') } catch { /* 이미 끝남 */ }
       }
-      if (app.process().exitCode === null && app.process().signalCode === null) app.process().kill('SIGKILL')
+      const launcher = launcherFor.get(app)!
+      if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill('SIGKILL')
     }
     // Windows에서는 살아 있는 셸/지킴이의 cwd 디렉터리를 지울 수 없다. 이 시험의 지킴이만 정상 종료한다.
     if (guardianPath) {
