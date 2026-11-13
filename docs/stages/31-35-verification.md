@@ -60,7 +60,7 @@ UI/UX 리뷰: 부분 검증(로컬 핵심 과업 확인, 실제 보조기술·�
 - GitHub Enterprise·fork 교차 PR·자동 병합·강제 push는 제공하지 않는다. 실제 GitHub 쓰기 대신 로컬 bare Git과 가짜 gh를 사용했다.
 - 브라우저 다중 탭·권한/다운로드·원격 브라우저와 파일 편집/원격 파일 탐색/완전한 CommonMark는 범위 밖이다.
 - PDF/바이너리 대화 첨부는 경로 참조이며 내용을 전달했다고 표시하지 않는다. 실제 공급자 계정에서 메시지/첨부를 보내지 않았다.
-- 실제 Retina·IME·VoiceOver·패키징 후 PDF worker 실행은 별도 확인 대상이다.
+- 실제 Retina·IME·VoiceOver는 별도 확인 대상이다. 패키징 후 PDF worker는 아래 후속 검증에서 확인했다.
 
 ## 하네스 회고
 
@@ -75,3 +75,12 @@ UI/UX 리뷰: 부분 검증(로컬 핵심 과업 확인, 실제 보조기술·�
 - 실패는 전체 출력 검색의 기능 assertion이 아닌 afterEach 임시 userData 삭제 `ENOTEMPTY`다. 삭제 재시도 5회를 보강했고 기존 assertion은 유지했다. 해당 spec 전체 재검증 5개 통과(24.8초, 종료 0), `/tmp/taskminal-history-cleanup-check.log`.
 - 앞선 전체 실행은 단위 1,017·e2e 280·종료 0(`/tmp/taskminal-workspace-final-check.log`). 이후 사용자 지정 가림을 추가해 단위 1개·e2e 1개가 늘었다. 최종 전체 실행을 재시도 없는 통과라고 표현하지 않는다.
 - 파일 라이트/다크·계정 라이트·GitHub 병합·PDF·최소 창 200% 캡처를 직접 열람했다. 구현은 공통 App/IPC를 공유하므로 31~35를 한 커밋으로 묶고 단계별 문서로 범위를 구별한다. main 병합·push는 수행하지 않는다.
+
+## 2026-11-13 후속 패키징 검증
+
+- `npm run package` 종료 0. ad-hoc 서명·hardened runtime의 arm64 .app와 정적 검사를 통과했다. 공증된 배포본을 만든 것은 아니다. 로그 `/tmp/taskminal-workspace-package.log`.
+- 작업 도구 e2e에 `TASKMINAL_E2E_PACKAGED=1` 실행 경로를 추가해 같은 계약을 실제 .app에서도 검증한다. `TASKMINAL_E2E_PACKAGED=1 npx playwright test tests/e2e/packaged.spec.ts tests/e2e/workspace-tools.spec.ts --reporter=line`: 11개 통과, 12.4초. 로그 `/tmp/taskminal-workspace-packaged-e2e.log`.
+- 패키지의 셸/지킴이·한글·파일 범위·사용자 지정 가림·PDF 로컬 worker 렌더/참조 첨부·브라우저 격리/모달/200%·GitHub 확인창을 임시 데이터로 확인했다. 계정/GitHub 쓰기는 기존 가짜 공급자 계약이며 실제 계정을 사용하지 않았다. PDF 화면도 직접 열람했다.
+- 실행 경로 분기 후 개발 빌드의 PDF/사용자 지정 가림 e2e 2개와 typecheck도 종료 0. 제품 코드는 변경하지 않아 전체 회귀·변이를 반복하지 않았다. 이전 전체 회귀의 종료 3 이력은 유지한다.
+- 공증 history 재조회는 HTTP 403 `A required agreement is missing or has expired`로 실패했다. 이전 제출의 최신 상태를 확인하지 못했다. Account Holder의 계약 확인이 필요하며 서명/공증 release 재실행과 게시를 하지 않았다. Apple 공식 안내: https://developer.apple.com/help/account/access/roles (갱신된 계약은 Account Holder가 수락).
+- origin/main을 fetch해 기준 커밋에서 새 변경이 없음을 확인했다. 이 후속 검증은 main 병합·GitHub push를 포함하지 않는다.

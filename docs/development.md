@@ -35,7 +35,7 @@
 | 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
-31~35 통합 결과: 단위 1,018개·변이 20개 검출. 최종 전체 e2e는 280개 첫 통과·1개 임시 폴더 정리 오류 후 재시도 통과(종료 3, 불안정)였다. 직전 전체 실행은 단위 1,017·e2e 280·종료 0. 정리 재시도 보강 후 기록 시험 별도 결과와 범위·실환경 미검증은 `docs/stages/31-35-verification.md`. 통합 구현 커밋 후 멈추며 이 브랜치의 push/병합은 별도 진행한다.
+31~35 통합 결과: 단위 1,018개·변이 20개 검출. 최종 전체 e2e는 280개 첫 통과·1개 임시 폴더 정리 오류 후 재시도 통과(종료 3, 불안정)였다. 직전 전체 실행은 단위 1,017·e2e 280·종료 0. 정리 재시도 보강 후 기록 시험 별도 결과와 범위·실환경 미검증은 `docs/stages/31-35-verification.md`. 후속 패키징 정적 검사와 실제 .app e2e 11개도 통과했다(PDF worker 포함). 통합 구현 커밋 후 이 브랜치의 push/병합은 별도 진행한다.
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
 
@@ -244,7 +244,7 @@
 0~25단계 기능은 모두 `main` 에 있다. 아래는 **사용자 손이 필요한 것 · 실제 환경에서만 확인되는 것** 이다. 하나씩 끝나면 이 절에서 지운다.
 
 ### 사용자 준비물 → 출시
-1. **Developer ID 서명 · 공증** — 준비물은 끝남(2026-11-11): 인증서 'Developer ID Application: KiBong Kim (96CFW3T8G4)' 이 로그인 키체인에, 공증 프로필 `taskminal-notary`(Account Holder Apple ID)가 확인됨. 첫 공증 제출(2026-11-11 22:36, id `5fe32385-…`)은 26단계 이전 빌드라 내보내지 않는다 — Apple 이 이 팀의 첫 공증을 오래 붙잡고 있어 `xcrun notarytool history --keychain-profile taskminal-notary` 로 통과를 본 뒤, **이 폴더에서 최신 main 으로 `npm run release`** 를 다시 돌린다(서명 · 공증 · `spctl -a` · 배포본 검사 `scripts/check-package.mjs` 까지 한 번에, 공증 대기가 길어 백그라운드로).
+1. **Developer ID 서명 · 공증** — 준비물은 끝남(2026-11-11): 인증서 'Developer ID Application: KiBong Kim (96CFW3T8G4)' 이 로그인 키체인에, 공증 프로필 `taskminal-notary`(Account Holder Apple ID)가 확인됨. 첫 공증 제출(2026-11-11 22:36, id `5fe32385-…`)은 26단계 이전 빌드라 내보내지 않는다 — **2026-11-13 재조회는 HTTP 403 `A required agreement is missing or has expired`로 차단됐다. 이전 In Progress의 현재 상태는 확인 불가.** Account Holder가 Apple Developer 계정의 미체결/만료 계약을 확인한 뒤 `xcrun notarytool history --keychain-profile taskminal-notary` 로 통과를 보고, **이 폴더에서 최신 main 으로 `npm run release`** 를 다시 돌린다(서명 · 공증 · `spctl -a` · 배포본 검사 `scripts/check-package.mjs` 까지 한 번에, 공증 대기가 길어 백그라운드로).
 2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). release 가 통과하면 `spctl` · `xcrun stapler validate` 확인 → dmg · zip 을 Release 로 올리고 → 홈페이지 `site/assets/site.js` 의 `RELEASE = 'ready'` 로 바꿔 push(내려받기 단추가 OS 를 보고 dmg 로 잇는다).
 3. **/Applications 설치 · Finder 더블클릭 실행** — 개발 앱이 아니라 서명된 .app 으로(14 · 18단계 미확인). 확인할 것: 셸 · 한글 · 최소 환경 PATH(`which node`) · 셸 지킴이 · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지(18단계 verify 중 실제 설치 성공).
 4. **명령줄 도구 설치** — 앱 메뉴 '명령줄 도구 설치…' 가 `/usr/local/bin/taskminal` 링크를 만든다. 쓸 수 없는 폴더면 직접 칠 `sudo mkdir … && sudo ln -sf …` 명령을 돌려준다(`src/main/cli-install.ts`) — 서명된 .app 에서 실제 설치는 미확인(24단계).
