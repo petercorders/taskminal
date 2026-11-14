@@ -91,3 +91,40 @@ test('provider acceptance timeout records unknown and never advances or automati
  runner.event(sent[0]!.pane,{t:'error',kind:'other',message:'uncertain',uncertain:true});await runner.idle()
  expect(runner.view().runs[0]!.status).toBe('unknown');expect(runner.view().runs[0]!.steps[0]!.status).toBe('unknown');expect(sent).toHaveLength(1)
 })
+
+test('parallel isolated DAG starts independent workers and joins only after both finish',async()=>{
+ const {runner,sent}=fixture()
+ runner.save({...workflow,maxParallel:2,isolate:true,steps:[{...workflow.steps[0]!,id:'a',after:[]},{...workflow.steps[0]!,id:'b',after:[]},{...workflow.steps[1]!,id:'join',after:['a','b']}]})
+ start(runner);await runner.idle();expect(sent).toHaveLength(2)
+ const first=runner.view().runs[0]!
+ runner.event(first.steps[0]!.paneId,{t:'turn_end',ok:true,ms:1,reason:'done'});await runner.idle();expect(sent).toHaveLength(2)
+ runner.event(first.steps[1]!.paneId,{t:'turn_end',ok:true,ms:1,reason:'done'});await runner.idle();expect(sent).toHaveLength(3)
+ expect(runner.view().runs[0]!.steps[2]!.status).toBe('running')
+})
+test('parallel failure fences siblings and retry never reruns successful steps',async()=>{
+ const {runner,sent,closed}=fixture()
+ runner.save({...workflow,maxParallel:3,isolate:true,steps:['a','b','c'].map(id=>({...workflow.steps[0]!,id,after:[]}))})
+ const id=start(runner);await runner.idle();expect(sent).toHaveLength(3)
+ const run=runner.view().runs[0]!
+ runner.event(run.steps[0]!.paneId,{t:'turn_end',ok:true,ms:1,reason:'done'});await runner.idle()
+ runner.event(run.steps[1]!.paneId,{t:'error',kind:'other',message:'failure'});await runner.idle()
+ expect(runner.view().runs[0]!.steps[2]!.status).toBe('stopped');expect(closed).toContain(run.steps[2]!.paneId)
+ runner.retry(id);await runner.idle();expect(sent).toHaveLength(5)
+ expect(runner.view().runs[0]!.steps[0]!.attempt).toBe(1)
+})
+test('parallel shared cwd is rejected and old templates keep sequential behavior',()=>{
+ expect(validWorkflow({...workflow,maxParallel:2})).toBe(false)
+ expect(validWorkflow({...workflow,maxParallel:5,isolate:true})).toBe(false)
+ expect(validWorkflow(workflow)).toBe(true)
+})
+
+test('late preparation of a stopped attempt cannot claim retry panes or dispatch reserved sibling attempts',async()=>{
+ let release:(()=>void)|undefined;let prepares=0
+ const f=fixture({validPane:()=>true,prepare:async(_run,_step,current)=>{prepares++;if(prepares===1){await new Promise<void>(r=>{release=r});expect(current?.()).toBe(false)}}})
+ f.runner.save({...workflow,maxParallel:2,isolate:true,steps:workflow.steps.map(s=>({...s,after:[]}))})
+ const id=start(f.runner);await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+ f.runner.stop(id);f.runner.retry(id);release!();await f.runner.idle()
+ expect(prepares).toBe(3);expect(f.sent).toHaveLength(2)
+ expect(new Set(f.sent.map(s=>s.pane)).size).toBe(2)
+ expect(f.runner.view().runs[0]!.steps.map(s=>s.attempt)).toEqual([2,2])
+})

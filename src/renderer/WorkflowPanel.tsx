@@ -160,7 +160,7 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
       <label className="field"><span>저장된 작업 흐름</span><select value={selected} disabled={busy} onChange={(e) => requestDraft({ taskId, kind: 'template', id: e.target.value })}>
         <option value="">선택하세요</option>{view.templates.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
       </select></label>
-      <button type="button" className="button" disabled={busy} onClick={() => requestDraft({ taskId, kind: 'new', draft: { id: crypto.randomUUID(), name: '', steps: [newStep()] } })}>새로 만들기</button>
+      <button type="button" className="button" disabled={busy} onClick={() => requestDraft({ taskId, kind: 'new', draft: { id: crypto.randomUUID(), name: '', maxParallel: 1, isolate: false, steps: [newStep()] } })}>새로 만들기</button>
       <button type="button" className="button" disabled={busy || !view.templates.some((item) => item.id === selected)} onClick={() => { const item = view.templates.find((item) => item.id === selected); if (item) requestDraft({ taskId, kind: 'edit', draft: copy(item) }) }}>편집</button>
       <button type="button" className="button danger" disabled={busy || !view.templates.some((item) => item.id === selected)} onClick={() => setConfirm({ kind: 'remove', id: selected })}>삭제</button>
       <button type="button" className="button primary" disabled={busy || !view.templates.some((item) => item.id === selected)} onClick={start}>저장된 흐름 실행</button>
@@ -185,6 +185,12 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
       <fieldset disabled={busy}>
         <legend>작업 흐름 편집</legend>
         <label className="field"><span>흐름 이름</span><input required maxLength={100} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+        <label className="field"><span>동시 실행 한도</span><select value={draft.maxParallel ?? 1} onChange={(e) => {
+          const maxParallel = Number(e.target.value)
+          setDraft({ ...draft, maxParallel, isolate: maxParallel > 1 ? true : draft.isolate ?? false })
+        }}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count === 1 ? '1개 · 순차 실행' : `${count}개`}</option>)}</select></label>
+        <label><input type="checkbox" checked={draft.isolate ?? false} disabled={(draft.maxParallel ?? 1) > 1} onChange={(e) => setDraft({ ...draft, isolate: e.target.checked })} /> 단계마다 별도 worktree</label>
+        <div className="workflow-meta">동시 실행은 단계마다 별도 worktree를 사용합니다. 각 단계는 독립된 폴더·브랜치에서 작업하며 변경을 자동으로 합치지 않습니다. 선행 단계가 있으면 모두 완료된 뒤 결과와 작업 폴더 경로를 참고 자료로 받습니다. 실패·중지해도 만든 worktree는 남습니다.</div>
         {draft.steps.map((step, index) => <fieldset className="workflow-step" key={step.id}>
           <legend>{index + 1}단계</legend>
           <label className="field"><span>단계 이름</span><input required maxLength={100} value={step.name} onChange={(e) => editStep(step.id, { name: e.target.value })} /></label>
@@ -192,7 +198,7 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
           <label className="field"><span>보낼 지시</span><textarea required rows={3} maxLength={10000} value={step.prompt} onChange={(e) => editStep(step.id, { prompt: e.target.value })} /></label>
           <fieldset className="workflow-dependencies"><legend>이 단계들이 완료된 뒤 시작</legend>
             {draft.steps.filter((other) => other.id !== step.id).map((other) => <label key={other.id}><input type="checkbox" checked={step.after.includes(other.id)} onChange={(e) => editStep(step.id, { after: e.target.checked ? [...step.after, other.id] : step.after.filter((id) => id !== other.id) })} />{other.name || `${draft.steps.indexOf(other) + 1}단계`}</label>)}
-            <div className="workflow-meta">선택하지 않으면 바로 시작합니다.</div>
+            <div className="workflow-meta">선택하지 않으면 실행할 수 있는 순서에 동시 한도 안에서 시작합니다.</div>
           </fieldset>
           <button type="button" className="button" disabled={draft.steps.length === 1} onClick={() => setDraft({ ...draft, steps: draft.steps.filter((item) => item.id !== step.id).map((item) => ({ ...item, after: item.after.filter((id) => id !== step.id) })) })}>단계 삭제</button>
         </fieldset>)}
@@ -204,9 +210,13 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
     <div role="status" className="workflow-meta">{busy ? '요청 처리 중…' : loading ? '불러오는 중…' : !runs.length && !readError ? '아직 실행한 작업 흐름이 없습니다.' : ''}</div>
     <div className="workflow-runs">{runs.map((run) => <article className="workflow-run" id={"workflow-run-"+run.id} tabIndex={-1} key={run.id} aria-label={`${run.workflow.name} 실행`}>
       <h3>{run.workflow.name}</h3><div className="workflow-meta">{new Date(run.createdAt).toLocaleString()} · {labels[run.status]}</div>
+      <div className="workflow-meta" data-testid="workflow-running-count">실행 중 {run.steps.filter((step) => ['preparing', 'running', 'waiting'].includes(step.status)).length}개 · 동시 한도 {run.workflow.maxParallel ?? 1} (준비·응답 대기 포함)</div>
+      {run.workflow.isolate && <div className="workflow-meta">단계마다 별도 worktree · 변경은 자동으로 합치지 않습니다.</div>}
       {run.error && <div className="workflow-error">{run.error}</div>}
       <ol>{run.steps.map((step) => <li key={step.id}>
         <div>{run.workflow.steps.find((item) => item.id === step.id)?.name || '단계'} · {labels[step.status]} · 시도 {step.attempt}</div>
+        {step.cwd && <div className="workflow-meta" data-testid="workflow-step-cwd">작업 폴더: {step.cwd}</div>}
+        {step.branch && <div className="workflow-meta" data-testid="workflow-step-branch">브랜치: {step.branch}</div>}
         {step.result && <pre className="workflow-result">{step.result}</pre>}
         {step.paneId && <button type="button" className="button" disabled={step.status === 'pending'} onClick={() => onOpenPane(step.paneId)}>대화 열기</button>}
       </li>)}</ol>

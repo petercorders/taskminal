@@ -205,7 +205,7 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const existing=t.panes[req.paneId]
       if(existing)return existing.workflowRunId===req.runId&&existing.chat?.agent===req.agent?done({ok:true}):failed('다른 대화와 겹쳐요')
       if(state.tasks.some(t=>t.panes[req.paneId]||t.tabs.some(tab=>tab.id===req.tabId)))return failed('이미 쓰는 대화 번호예요')
-      return done({ok:true},[{type:'chat/add-tab',taskId:t.id,paneId:req.paneId,tabId:req.tabId,agent:req.agent,workflowRunId:req.runId,label:req.label},...keepFocus(t)],[req.tabId])
+      return done({ok:true},[{type:'chat/add-tab',taskId:t.id,paneId:req.paneId,tabId:req.tabId,agent:req.agent,workflowRunId:req.runId,label:req.label,...(req.cwd?{cwd:req.cwd}:{})},...keepFocus(t)],[req.tabId])
     }
     case 'chat.new': {
       const r = resolveTask(state, req.task, self)

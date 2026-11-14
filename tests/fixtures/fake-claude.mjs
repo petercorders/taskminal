@@ -47,49 +47,51 @@ function ask(request, then) {
 
 function turn(text, images = 0) {
   init()
-  if (text.includes('crash')) {
+  // Workflow context can contain words such as taskminal ('ask'). Match only the directive when requested.
+  const trigger = process.env.FAKE_CLAUDE_MATCH_FIRST_LINE === '1' ? text.split('\n')[0] : text
+  if (trigger.includes('crash')) {
     assistant([{ type: 'text', text: '곧 끝나요' }])
     process.stderr.write('fake crash: boom\n')
     setTimeout(() => process.exit(3), 50)
     return
   }
-  if (text.includes('login')) {
+  if (trigger.includes('login')) {
     out({ type: 'assistant', message: { model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text: 'Not logged in · Please run /login' }] }, error: 'authentication_failed', session_id: sessionId })
     result({ is_error: true, terminal_reason: 'api_error', duration_ms: 30 })
     return
   }
-  if (text.includes('secret')) {
+  if (trigger.includes('secret')) {
     assistant([{ type: 'text', text: '키는 sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKE0123456789 이에요' }])
     result()
     return
   }
   // 24단계: 늦게 끝나는 턴(taskminal chat wait) · 받은 환경 변수(TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal)
-  if (text.includes('later')) {
+  if (trigger.includes('later')) {
     setTimeout(() => {
       assistant([{ type: 'text', text: `늦게 끝남: ${text}` }])
       result()
     }, 1500)
     return
   }
-  if (text.includes('whoami')) {
+  if (trigger.includes('whoami')) {
     const onPath = (process.env.PATH ?? '').split(':').some((d) => d.endsWith('/resources/bin'))
     assistant([{ type: 'text', text: `pane=${process.env.TASKMINAL_PANE_ID ?? '-'} socket=${process.env.TASKMINAL_SOCKET ? 'yes' : 'no'} path=${onPath ? 'yes' : 'no'}` }])
     result()
     return
   }
-  if (text.includes('slow')) {
+  if (trigger.includes('slow')) {
     assistant([{ type: 'text', text: '오래 걸리는 일을 시작해요' }])
     interruptWanted = () => {
       out({ type: 'result', subtype: 'error_during_execution', is_error: true, terminal_reason: 'aborted_streaming', duration_ms: 900, session_id: sessionId })
     }
     return
   }
-  if (text.includes('permdie')) {
+  if (trigger.includes('permdie')) {
     ask({ subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'touch die.txt' }, description: 'die.txt 만들기' }, () => {})
     setTimeout(() => process.exit(1), 300)
     return
   }
-  if (text.includes('perm')) {
+  if (trigger.includes('perm')) {
     const cmd = text.includes('danger') ? 'rm -rf build' : 'touch made.txt'
     assistant([{ type: 'tool_use', id: 'tu-1', name: 'Bash', input: { command: cmd } }])
     ask({ subtype: 'can_use_tool', tool_name: 'Bash', input: { command: cmd }, description: '파일 만들기' }, (resp) => {
@@ -104,7 +106,7 @@ function turn(text, images = 0) {
     })
     return
   }
-  if (text.includes('multi')) {
+  if (trigger.includes('multi')) {
     ask(
       {
         subtype: 'can_use_tool',
@@ -119,7 +121,7 @@ function turn(text, images = 0) {
     )
     return
   }
-  if (text.includes('edit')) {
+  if (trigger.includes('edit')) {
     // 23단계: 파일을 실제로 고치는 Edit 도구 — 대화 diff 카드 'diff 열기' 시험
     const file = `${process.cwd()}/x.txt`
     appendFileSync(file, 'agent line\n')
@@ -129,7 +131,7 @@ function turn(text, images = 0) {
     result()
     return
   }
-  if (text.includes('ask')) {
+  if (trigger.includes('ask')) {
     ask(
       {
         subtype: 'can_use_tool',
