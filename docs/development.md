@@ -34,14 +34,22 @@
 
 ## 2. 진행 방식 (사용자 지시)
 
+### 브랜치·PR 승인 규칙 (2026-11-14 사용자 지시)
+
+- 에이전트는 작업별 `feat/<주제>`, `fix/<주제>`, `chore/<주제>` 브랜치에서 개발하고 해당 브랜치에만 push한다. 독립 작업은 최신 `origin/main`에서 시작한다. 기존 미병합 기능이 필요한 작업은 그 기능 브랜치를 base로 하는 의존 PR로 만들고 관계를 명시한다.
+- `main` 직접 push, main으로의 로컬 병합, PR merge·auto-merge·관리자 우회는 사용자가 **해당 PR과 현재 변경을 명시적으로 승인하기 전에는 금지**한다. 개발·commit·push 승인이나 과거의 포괄적인 자율 진행 지시는 main 반영 승인으로 해석하지 않는다.
+- 사용자가 직접 수행하는 main 작업은 허용한다. 다른 사람의 PR은 `@petercorders`의 승인을 받는다. 에이전트는 사용자 명의의 승인 리뷰를 대신 작성하지 않는다.
+- 공개 릴리스·태그 게시·공증·배포는 별도 명시적 요청이 필요하다. 현재 공개 릴리스는 보류 상태다.
+- 기능 단위 PR에 목적·검증 결과·알려진 한계·의존성을 적는다. 여러 기능이 누적된 기존 브랜치는 이력을 재작성하거나 통째로 main에 합치지 말고, 사용자가 검토할 단위와 순서를 먼저 정한다.
+
 - **15단계까지 묻지 말고 이어서 진행한다.** 디자인 맞추기는 15단계 뒤 사용자와 단계로 만든 다음에. 선택은 추천안으로 정해 계획에 적는다. 단계 사이에 멈추지 않고, 보고는 끝에 한 번.
-- 예외 — 반드시 사용자 확인: `/Applications` 에 실제 설치(14단계) · 사용자 Claude Code 설정 바꾸기 · 실제 데이터 폴더(`~/Library/Application Support/Taskminal`) 건드리기. (GitHub push · Pages · 릴리스는 2026-11-11 사용자 "너가 알아서 실행해줘 나한테 묻지마" 로 자율.)
-- **작업 위치 (2026-11-12 옮김)**: Orca 워크스페이스 `~/orca/workspaces/taskminal/taskminal`(Orca 프로젝트 `~/orca/projects/taskminal` 의 worktree, 브랜치 `petercorders/taskminal` → upstream `origin/main`). 커밋 뒤 `git push origin HEAD:main` 으로 올린다. 저장소 로컬 git 이름 · 주소는 `petercorders` · GitHub noreply(전역 설정의 개인 메일을 공개 저장소에 남기지 않으려고). 옛 폴더 `~/taskminal` · `~/taskminal-work` 와 cherry-pick 으로 올리던 흐름(`published-local-main` 태그)은 더 쓰지 않는다 — 문서 안의 옛 경로는 그때의 기록이다.
+- 사용자 확인: `/Applications` 실제 설치·사용자 Claude Code 설정 변경·실제 데이터 폴더 변경. GitHub main 반영·공개 릴리스·배포도 위 승인 규칙을 따른다. 2026-11-11의 포괄적 자율 승인으로 이를 대신하지 않는다.
+- **작업 위치**: Orca 워크스페이스 `~/orca/workspaces/taskminal/taskminal` 및 작업별 별도 워크스페이스. 저장소 로컬 이름·주소는 `petercorders`·GitHub noreply를 유지한다. 작업 브랜치에 `git push -u origin HEAD`로 올리고 PR을 제출한다. 옛 폴더 경로는 당시 작업 기록이며 main 직접 push 안내는 폐기했다.
 - 보고 · 커밋 메시지는 한국어.
 
 ## 3. 단계 하나의 순서
 
-1. `git checkout -b stage-N-<이름> main` (진행 중인 브랜치가 있으면 그것)
+1. 최신 `origin/main`에서 작업별 브랜치와 별도 워크스페이스를 만든다. 기존 기능에 의존하면 그 브랜치를 base로 하는 PR로 관계를 명시한다.
 2. 계획을 `docs/stages/N-<이름>.md` 에 쓴다 — 라이브러리 동작에 기대는 줄(세는 상한 · dispose 가 무엇을 놓는지 등)은 `node_modules` 소스의 파일 · 줄을 읽고 적는다(15d · 15e 에서 addon 동작을 가정했다가 리뷰가 짚음) — 범위 · 설계 표 · 시험 · `순서 → verify` · 하지 않는 것. 앱 종료 4경로(앱 종료 · 창 닫기 · 새로 고침 · 렌더러 충돌)에서 셸 · 저장이 어떻게 되는지, 열린 대화상자 · 비동기 then 의 대상이 그 사이 사라지면 어떻게 되는지 칸을 둔다. 디자인이 있는 화면이면 **디자인 요소를 할 일 칸에 옮겨 적는다**(빠뜨려서 `docs/design-gaps.md` 가 생겼다).
    점검: `bash ~/.claude/skills/harness-run/scripts/plan-check.sh docs/stages/N-….md` (서버 없는 단계는 계획에 `plan-check: 서버 없음 — <이유>` 한 줄)
 3. 시험 먼저(빨강) → 구현 → 통과. 편집마다 훅이 경계 · tsc · 관련 vitest 를 돌린다 — 실패 메시지를 읽고 고친다.
@@ -50,7 +58,7 @@
    e2e 변이의 5번째 칸: `sh -c 'npm run build >/dev/null && npx playwright test tests/e2e/x.spec.ts -g <이름> --reporter=line'`
 5. 전체 검사: `bash ~/.claude/skills/harness-engineering/stacks/electron/scripts/full-check.sh` — 종료 코드 0 통과 · 1 실패 · 3 불안정(실패한 e2e 를 다시 돌려 통과). 사용자가 앱 실행을 막았으면 `FULL_CHECK_NO_E2E=1` → 종료 코드 4(e2e 미실행) — '통과' 로 쓰지 않는다. `| tail` 로 감싸지 않는다(종료 코드가 사라진다). 화면이 바뀐 단계는 `test-results/*.png` 스크린샷을 직접 열어 본다.
 6. 커밋 전에 단계 문서의 코드 칸(경로 · IPC 채널 이름)을 코드와 대조: `python3 ~/.claude/skills/harness-engineering/stacks/common/scripts/doc-refs-check.py docs/stages/N-….md .` — 종료 코드 1 이면 문서나 코드를 고친다(15b 에서 문서 `app:openLink` ≠ 코드로 리뷰가 짚음, 옛 이름을 일부러 적은 줄은 `<!-- refs-ignore -->`). 그다음 커밋 → `/code-review medium main...stage-N-…` → 고친 것은 **별도 커밋** → 다시 전체 검사
-7. `docs/plan.md` 그 단계 줄에 `(완료: …)` · 이 문서 1절 갱신 → 커밋 → `git checkout main && git merge --ff-only stage-N-…`
+7. 단계 문서·진행 표를 갱신하고 작업 브랜치에 commit·push한다. 검증 근거를 담아 PR을 만들고 사용자 검토를 기다린다. main 반영은 해당 PR에 대한 사용자 명시적 승인 뒤에만 진행한다.
 8. 회고 `/harness-gc electron retro` — retro-collect 출력 끝의 gc 진단(승격 후보 · 승격 후 재발 · 규칙 감사)까지. 도구화 후보는 보고로 끝내지 말고 반영해 실제 입력으로 확인한다.
 9. 메모리 `~/.claude/projects/-Users-gimgibong/memory/project_taskminal.md` 에 단계 한 줄 · `MEMORY.md` 의 Taskminal 줄 갱신
 10. 바로 다음 단계로.
