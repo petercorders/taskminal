@@ -25,7 +25,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   const conversations = new ConversationSearch(join(app.getPath('userData'),'chat'),state,secretOptions)
   const editor = new WorkspaceEditor()
   const files = new WorkspaceFiles(secretOptions),
-    browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined)),
+    browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined),join(app.getPath('userData'),'browser-captures')),
     git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json')),
     accounts = new Accounts(join(app.getPath('userData'), 'accounts'))
   const win = (event: IpcMainInvokeEvent) => {

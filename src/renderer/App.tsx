@@ -1203,6 +1203,7 @@ export function App() {
           try { await window.taskminal.state.save(stateRef.current) }
           catch (err) { return window.taskminal.cli.reply(id, { ok: false, error: `실행 대화를 저장하지 못했어요: ${String(err)}` }) }
         }
+        if ((raw as UiRequest).op==='browser.open'&&e.reply.ok){setOverviewOpen(false);setWorkTool({taskId:(raw as {taskId:string}).taskId,kind:'browser'})}
         window.taskminal.cli.reply(id, e.reply)
         const gone = e.remove ? stateRef.current.tasks.find((t) => t.id === e.remove) : undefined
         if (gone) removeRef.current(gone)

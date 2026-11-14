@@ -199,6 +199,10 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       }
       return done({ ok: true, targets })
     }
+    case 'browser.open': {
+      const task=state.tasks.find(t=>t.id===req.taskId&&!t.host&&t.archivedAt===undefined)
+      return task?done({ok:true},[{type:'task/select',id:task.id}]):failed('브라우저를 열 일감이 없어요')
+    }
     case 'workflow.prepare': {
       const t=state.tasks.find(t=>t.id===req.taskId&&!t.host&&t.archivedAt===undefined)
       if(!t)return failed('일감이 닫혔어요')

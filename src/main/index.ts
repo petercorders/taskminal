@@ -139,6 +139,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 function startCliServer(): void {
   cliServer = new CliServer({
     sockPath: cliSockPath,
+    async browser(command){
+      const win=mainWindow,browser=workspaceBrowser
+      if(!win||win.isDestroyed()||!browser||!lastState?.tasks.some(t=>t.id===command.task&&!t.host&&t.archivedAt===undefined))throw new Error('로컬 일감과 열린 창을 확인해 주세요')
+      if(command.action!=='tabs'){
+        const reply=await askUi({op:'browser.open',taskId:command.task})
+        if(!reply.ok)throw new Error(reply.error)
+      }
+      return browser.automate(win,command)
+    },
     askUi,
     pane: {
       async ready(paneId, ms) {

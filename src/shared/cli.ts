@@ -1,3 +1,4 @@
+import { parseBrowserCommand, validBrowserCommand, type BrowserCommand } from './browser-automation'
 // `taskminal` 명령줄 도구 (24단계) — 인자 해석 · 소켓 요청 모양 · 이름 → id · list 글. 순수 (CLI · main · renderer 가 함께 쓴다).
 import { isObj } from './guards'
 import { formatDuration, taskActivity, type PaneActivity } from './activity'
@@ -21,6 +22,7 @@ export type ChatWhere = 'right' | 'down' | 'tab'
 
 /** 소켓으로 가는 요청. self = 부른 터미널의 pane id (TASKMINAL_PANE_ID) */
 export type CliRequest = { self?: string } & (
+  | ({ op: 'browser' } & BrowserCommand)
   | { op: 'list' }
   | { op: 'task.new'; name: string; cwd?: string; template?: string; group?: string; status?: string }
   | { op: 'task.move'; task?: string; status?: string; group?: string }
@@ -96,6 +98,7 @@ const usage = (error: string): Parsed => ({ kind: 'usage', error })
 
 /** argv = 명령 뒤의 인자들 (node · 스크립트 경로 뺀 것). self 는 부르는 쪽이 붙인다 */
 export function parseArgs(argv: readonly string[]): Parsed {
+  if(argv[0]==='browser'){const parsed=parseBrowserCommand(argv.slice(1));return 'error' in parsed?usage(parsed.error):{kind:'request',req:{op:'browser',...parsed.command},json:parsed.json}}
   const args = [...argv]
   let json = false
   // 맨 앞의 --json 도 받는다 (`taskminal --json list`)
@@ -256,6 +259,7 @@ export function isCliRequest(v: unknown): v is CliRequest {
   if (v['self'] !== undefined && !isPaneId(v['self'])) return false
   const o = v as Record<string, unknown>
   switch (o['op']) {
+    case 'browser':return validBrowserCommand(o)
     case 'list':
       return true
     case 'task.new':
@@ -460,6 +464,12 @@ export const HELP = `taskminal — Taskminal 의 일감 · 탭 · 터미널을 �
   taskminal chat send <pane> "글"
   taskminal chat wait <pane…> | --all [--timeout 30m]   턴이 끝나거나 허락 · 질문을 기다릴 때까지
   taskminal chat read <pane> [--json]               마지막 턴의 에이전트 글
+  taskminal browser tabs <일감 ID> --json
+  taskminal browser navigate <일감 ID> --tab <탭 ID> --url <주소>
+  taskminal browser snapshot <일감 ID> --tab <탭 ID> --json
+  taskminal browser click <일감 ID> --tab <탭 ID> --ref <snapshot 참조>
+  taskminal browser fill <일감 ID> --tab <탭 ID> --ref <참조> --value <글>
+  taskminal browser screenshot <일감 ID> --tab <탭 ID> --json
 
   <일감> = id · 이름 · <pane> = pane id · 일감 이름 · 일감:탭(이름 또는 번호). 생략하면 이 터미널.
   에이전트에게: 일을 마치면 'taskminal task note "다음 할 일 …"', 사람 확인이 필요하면 'taskminal notify "…"'.
@@ -482,8 +492,9 @@ export interface PaneTarget {
 
 /** main 이 창에 묻는 것: 화면 상태를 바꾸는 CLI 요청 그대로 · 이름 풀기(필요하면 그 탭을 띄운다) */
 export type UiRequest =
+  | {op:'browser.open';taskId:string;self?:string}
   | {op:'workflow.prepare'; taskId:string;paneId:string;tabId:string;agent:'claude'|'codex';runId:string;label:string;cwd?:string;self?:string}
-  | Exclude<CliRequest, { op: 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>
+  | Exclude<CliRequest, { op: 'browser' | 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>
   | { op: 'pane.resolve'; pane?: string; self?: string }
   | { op: 'chat.panes'; panes: string[]; all: boolean; task?: string; self?: string }
 
