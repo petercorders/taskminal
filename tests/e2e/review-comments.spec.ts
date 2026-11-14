@@ -139,6 +139,16 @@ test('감시 갱신 전에 첨부해도 최신 diff 재검증이 낡은 의견 �
   await expect(comments()).toHaveAttribute('data-stale', 'true')
   await expect(attach).toBeDisabled()
   await expect(win.locator('[data-testid="task-view"][aria-hidden="false"] [data-testid="chat-input"]')).toHaveCount(0)
+  // A new authoritative snapshot with the exact original diff makes the comment valid again.
+  write('x.txt', 'first\nSECOND-A\nSECOND-B\nthird\nfourth\n')
+  await win.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(comments()).toHaveAttribute('data-stale', 'false')
+  await expect(attach).toBeEnabled()
+  await expect(pane().getByText('변경이 달라졌어요. 현재 diff를 다시 검토하고 줄을 다시 연결해 주세요.', { exact: true })).toHaveCount(0)
+  await attach.scrollIntoViewIfNeeded()
+  await captureWindow(app!, '/tmp/taskminal-49-review-restored.png')
+  await attach.click()
+  await expect(win.locator('[data-testid="task-view"][aria-hidden="false"] [data-testid="chat-input"]')).toHaveValue(/옛 줄에 대한 의견[\s\S]*SECOND-A/)
 })
 
 

@@ -122,3 +122,26 @@ describe('준비·재시도·영속 연결', () => {
     await expect(service.close(result.taskId)).rejects.toThrow('사라졌')
   })
 })
+
+
+describe('손상 기록 격리', () => {
+  it.each(['{broken', '{"links":false,"receipts":[]}'])('기록 %s를 보존하고 이슈 기능만 차단한다', async (bytes) => {
+    const f = fixture()
+    mkdirSync(f.state, { recursive: true })
+    const path = join(f.state, 'issues.json')
+    writeFileSync(path, bytes)
+    let service!: Issues
+    expect(() => { service = f.service() }).not.toThrow()
+    expect(() => service.links()).toThrow('기록')
+    expect(() => service.configure('token')).toThrow('기록')
+    await expect(service.list('github', 'demo/project')).rejects.toThrow('기록')
+    await expect(service.prepare(f.input)).rejects.toThrow('기록')
+    await expect(service.linkPr('task', 'https://github.com/demo/project/pull/1')).rejects.toThrow('기록')
+    await expect(service.close('task')).rejects.toThrow('기록')
+    expect(f.gh).not.toHaveBeenCalled()
+    expect(f.prepare).not.toHaveBeenCalled()
+    expect(readFileSync(path, 'utf8')).toBe(bytes)
+    writeFileSync(path, '{"links":[],"receipts":[]}')
+    expect(f.service().links()).toEqual([])
+  })
+})

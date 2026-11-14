@@ -79,6 +79,9 @@ export function ReviewComments(p: Props) {
       if (mounted.current && available.current && generation.current === epoch) input.current?.focus()
     })
   }, [p.target]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A fresh diff supersedes a failed validation of the previous snapshot.
+  // Matching file signatures and attach-time validation still gate delivery.
+  useEffect(() => { setInvalid(new Set()); setError('') }, [p.files, scope])
   const stale = (c: ReviewCommentTarget) => invalid.has(c.sig) || !p.files.some((f) => f.path === c.path && fileSig(f) === c.sig)
   const active = state.comments.filter((c) => !c.resolved)
   const change = (id: string, fn: (c: Comment) => Comment | null) => {

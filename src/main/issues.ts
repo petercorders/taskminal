@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import type { IssueRecord, IssueProvider, IssuePage, IssueLink, IssuePrepare } from '../shared/issues'
+import { ISSUE_TASK_DELETED } from '../shared/issues'
 import { redact } from '../shared/redact'
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
@@ -36,22 +37,26 @@ const closed = (issue: IssueRecord) => /^(closed|done|completed|canceled|cancell
 export class Issues {
   private token = process.env['LINEAR_API_KEY'] ?? ''
   private readonly journal: AtomicJournal<Journal>
-  private data: Journal
+  private data: Journal = { links: [], receipts: [] }
+  private failure = ''
   private queue: Promise<unknown> = Promise.resolve()
   private readonly worktrees: WorktreeManagement
   constructor(private readonly dir: string, private readonly d: Deps) {
     this.journal = new AtomicJournal(join(dir, 'issues.json'), valid)
-    this.data = this.journal.load({ links: [], receipts: [] })
+    try { this.data = this.journal.load({ links: [], receipts: [] }) }
+    catch { this.failure = '이슈 기록 파일을 읽지 못했어요. 원본은 보존했어요. 기록을 복구한 뒤 앱을 다시 시작해 주세요.' }
     this.worktrees = new WorktreeManagement({ journal: new AtomicJournal<WorktreeJournalState>(join(dir, 'issue-worktrees.json'), validWorktreeJournal) })
   }
+  private ready() { if (this.failure) throw new Error(this.failure) }
   configure(token: string) {
+    this.ready()
     if (typeof token !== 'string' || token.length > 4096 || /[\r\n]/.test(token)) throw new Error('Linear API 토큰을 확인해 주세요')
     this.token = token.trim() || process.env['LINEAR_API_KEY'] || ''
   }
-  links() { return structuredClone(this.data.links) }
+  links() { this.ready(); return structuredClone(this.data.links) }
   private persist(next: Journal) { this.journal.save(next); this.data = next }
   private enqueue<T>(job: () => Promise<T> | T): Promise<T> {
-    const operation = this.queue.catch(() => {}).then(job)
+    const operation = this.queue.catch(() => {}).then(() => { this.ready(); return job() })
     this.queue = operation
     return operation
   }
@@ -97,6 +102,7 @@ export class Issues {
     return { provider: 'linear', id: row.id, key: row.identifier, title: redact(row.title).slice(0, 256), body: redact(typeof row.description === 'string' ? row.description : '').slice(0, 60000), url: url.href, state }
   }
   async list(provider: IssueProvider, from: string, cursor?: string): Promise<IssuePage> {
+    this.ready()
     if (provider === 'github') {
       const repo = source(from), page = cursor ?? '1'
       if (typeof page !== 'string' || !/^[1-9]\d{0,4}$/.test(page)) throw new Error('페이지 번호를 확인해 주세요')
@@ -124,6 +130,7 @@ export class Issues {
     return result
   }
   async prepare(input: IssuePrepare): Promise<IssueLink> {
+    this.ready()
     // Capture before enqueueing: a caller cannot mutate the pending target.
     if (!validInput(input)) return Promise.reject(new Error('이슈와 작업 폴더를 확인해 주세요'))
     const snapshot: IssuePrepare = { requestId: input.requestId, provider: input.provider, id: input.id, source: input.provider === 'github' ? source(input.source) : input.source, root: input.root, worktree: input.worktree, base: input.base.trim() || 'HEAD' }
@@ -134,7 +141,7 @@ export class Issues {
     if (prior && identity(prior.input) !== identity(input)) throw new Error('다른 요청에 사용한 번호입니다')
     if (prior?.done) {
       const link = this.data.links.find(l => l.taskId === prior.taskId)
-      if (!link || !this.d.exists(link.taskId)) throw new Error('연결된 일감이 삭제됐어요. 새 요청으로 준비해 주세요')
+      if (!link || !this.d.exists(link.taskId)) throw new Error(ISSUE_TASK_DELETED + ' 연결된 일감이 삭제됐어요. 새 요청으로 준비해 주세요')
       return structuredClone(link)
     }
     let receipt = prior

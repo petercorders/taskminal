@@ -121,3 +121,19 @@ test('references reject another actual task/tab and a tab closed after snapshot'
  await win.evaluate(tab=>window.taskminal.workspace.browserCloseTab('task',tab),firstTab)
  expect((await cli('click','task','--tab',firstTab,'--ref',ref)).code).toBe(1)
 })
+
+
+test('navigate returns failure for an unreachable page and succeeds on retry', async () => {
+ const tab = JSON.parse((await cli('tabs', 'task')).out).selectedTabId as string
+ const closed = createServer()
+ await new Promise<void>(resolve => closed.listen(0, '127.0.0.1', resolve))
+ const port = (closed.address() as {port: number}).port
+ await new Promise<void>(resolve => closed.close(() => resolve()))
+ const failed = await cli('navigate', 'task', '--tab', tab, '--url', `http://127.0.0.1:${port}/`)
+ expect(failed.code, failed.out).toBe(1)
+ expect(failed.err).toBeTruthy()
+ const retry = await cli('navigate', 'task', '--tab', tab, '--url', url)
+ expect(retry.code, retry.err).toBe(0)
+ expect(JSON.parse(retry.out).error).toBeFalsy()
+ expect((await cli('snapshot', 'task', '--tab', tab)).out).toContain('Test page')
+})

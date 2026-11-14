@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { afterEach, expect, test, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, readFile, rename, symlink, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -30,8 +31,8 @@ test('queued writes revalidate the canonical workspace after waiting, before a s
   // Both initial cwd checks completed successfully while open still holds the mutation queue.
   await checkedBeforeQueue;await new Promise<void>(r=>setImmediate(r))
   await rename(project,join(root,'original'));await symlink(outside,project)
-  release();await expect(blocker).rejects.toThrow()
-  await expect(queuedSave).rejects.toThrow('경계');await expect(queuedTerminal).rejects.toThrow('경계')
+  const rejected = Promise.all([expect(blocker).rejects.toThrow(), expect(queuedSave).rejects.toThrow('경계'), expect(queuedTerminal).rejects.toThrow('경계')])
+  release(); await rejected
   expect(await readFile(join(outside,'note.txt'),'utf8')).toBe('same')
 })
 test('exited terminal retains output but releases the PID before stop or server shutdown', async () => {
@@ -48,4 +49,27 @@ test('exited terminal retains output but releases the PID before stop or server 
   expect(await service.call('tail',[w.id,s.id])).toEqual({data:'finished output',exited:0})
   service.dispose();expect(kill).not.toHaveBeenCalled()
   await expect(service.call('terminal',[w.id,'after-stop'])).rejects.toThrow('종료')
+})
+
+
+test('git diff includes staged and working changes even before the first commit', async () => {
+  temp = await realpath(await mkdtemp(join(tmpdir(), 'tm-remote-git-')))
+  const root = join(temp, 'repo'); await mkdir(root)
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'commit.gpgsign=false', ...args], { cwd: root, encoding: 'utf8' })
+  git('init', '-q'); git('config', 'user.name', 'test'); git('config', 'user.email', 'test@example.invalid')
+  service = new RemoteWorkspaceServer(root, join(temp, 'data'))
+  const w = await service.call('open', ['.', 'open']) as {id: string}
+  const diff = () => service!.call('git', [w.id]) as Promise<{status: string; diff: string}>
+  await writeFile(join(root, 'note.txt'), 'initial staged\n'); git('add', 'note.txt')
+  expect((await diff()).diff).toContain('+initial staged')
+  git('commit', '-qm', 'initial')
+  await writeFile(join(root, 'note.txt'), 'staged change\n'); git('add', 'note.txt')
+  expect((await diff()).status).toContain('M  note.txt')
+  expect((await diff()).diff).toContain('+staged change')
+  await writeFile(join(root, 'note.txt'), 'working change\n')
+  const mixed = await diff()
+  expect(mixed.diff).toContain('+staged change'); expect(mixed.diff).toContain('+working change')
+  git('reset', '-q', 'HEAD')
+  const working = await diff()
+  expect(working.diff).toContain('+working change'); expect(working.diff).not.toContain('+staged change')
 })

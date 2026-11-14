@@ -115,7 +115,13 @@ export class RemoteWorkspaceServer {
       if (file.signature !== r.signature) throw Error('저장 응답 이후 파일이 바뀌었어요. 다시 읽어 주세요')
       return r.ok ? {ok: true, file} : {ok: false, reason: 'conflict', current: file}
     }
-    if (method === 'git' && a.length === 1) return {status: await this.git(cwd, ['status','--porcelain=v1']), diff: await this.git(cwd, ['diff','--no-ext-diff','--no-textconv']), branch: (await this.git(cwd, ['branch','--show-current'])).trim()}
+    if (method === 'git' && a.length === 1) {
+      // Separate diffs also support unborn HEAD and files changed again after staging.
+      const staged = await this.git(cwd, ['diff','--cached','--no-ext-diff','--no-textconv'])
+      const working = await this.git(cwd, ['diff','--no-ext-diff','--no-textconv'])
+      const diff = [staged && '스테이징한 변경\n' + staged, working && '작업 폴더 변경\n' + working].filter(Boolean).join('\n')
+      return {status: await this.git(cwd, ['status','--porcelain=v1']), diff, branch: (await this.git(cwd, ['branch','--show-current'])).trim()}
+    }
     if (method === 'terminal' && a.length === 2) return this.once(a[1], method, [w.id], async () => {
       const current = await this.cwd(w)
       if (w.sessions.length >= 200) throw Error('터미널 한도')

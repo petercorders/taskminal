@@ -194,3 +194,59 @@ for (const mode of ['closed', 'hidden'] as const) test(`느린 연결 조회 중
   await expect.poll(count).toBeGreaterThanOrEqual(2)
   await expect(panel().getByRole('button', { name: '연결 목록 다시 읽기', exact: true })).toBeEnabled()
 })
+
+
+test('삭제된 연결 일감은 확인 후 새 요청으로 준비하고 알 수 없는 실패는 같은 번호로 재시도한다', async () => {
+  await selectIssue()
+  await app.evaluate(({ ipcMain }) => {
+    const ipc = ipcMain as unknown as { _invokeHandlers: Map<string, (...args: any[]) => any>; issueRequests: string[]; loseNextIssueReply?: boolean }
+    const original = ipc._invokeHandlers.get('issues:prepare')!
+    ipc.issueRequests = []
+    ipcMain.removeHandler('issues:prepare')
+    ipcMain.handle('issues:prepare', async (event, input) => {
+      ipc.issueRequests.push(input.requestId)
+      const result = await original(event, input)
+      if (ipc.loseNextIssueReply) { ipc.loseNextIssueReply = false; throw new Error('simulated reply lost') }
+      return result
+    })
+  })
+  const prepare = async () => {
+    await panel().getByRole('button', { name: '연결 일감 준비…', exact: true }).click()
+    await win.getByRole('alertdialog', { name: '연결 일감 준비', exact: true }).getByRole('button', { name: '일감 준비', exact: true }).click()
+  }
+  await prepare()
+  const row = win.locator('[data-testid="task-row"][data-task-name="#7 UI 연결 검증"]')
+  await expect(row).toHaveCount(1)
+  const old = (await win.evaluate(() => window.taskminal.issues.links()))[0]!.taskId
+  await win.getByRole('button', { name: '#7 UI 연결 검증 지우기', exact: true }).click()
+  await win.getByRole('alertdialog', { name: '일감 지우기', exact: true }).getByRole('button', { name: '지우기', exact: true }).click()
+  await expect(row).toHaveCount(0)
+  await prepare()
+  await expect(panel().getByRole('alert')).toContainText('다시 준비하면 새 요청')
+  await panel().getByRole('alert').scrollIntoViewIfNeeded()
+  await captureWindow(app, '/tmp/taskminal-49-issue-retry.png')
+  await app.evaluate(({ ipcMain }) => { (ipcMain as unknown as { loseNextIssueReply: boolean }).loseNextIssueReply = true })
+  await prepare()
+  await expect(row).toHaveCount(1)
+  await expect(panel().getByRole('alert')).toContainText('요청 결과를 확인하지 못했어요')
+  await prepare()
+  await expect(panel().getByRole('status')).toContainText('연결 일감을 준비했어요')
+  const ids = await app.evaluate(({ ipcMain }) => (ipcMain as unknown as { issueRequests: string[] }).issueRequests)
+  expect(ids).toHaveLength(4)
+  expect(ids[0]).toBe(ids[1]); expect(ids[2]).not.toBe(ids[0]); expect(ids[3]).toBe(ids[2])
+  const links = await win.evaluate(() => window.taskminal.issues.links())
+  expect(links).toHaveLength(2); expect(links[1]!.taskId).not.toBe(old)
+  await expect(row).toHaveCount(1)
+})
+
+test('손상된 이슈 기록은 보존하며 앱과 기존 일감은 정상 시작한다', async () => {
+  await app.close()
+  const path = join(data, 'issues', 'issues.json')
+  mkdirSync(join(data, 'issues'), { recursive: true })
+  writeFileSync(path, '{broken')
+  await launch()
+  await expect(win.locator('[data-testid="task-row"][data-task-name="이슈 검증"]')).toHaveCount(1)
+  await expect(panel().getByRole('alert')).toBeVisible()
+  expect(await win.evaluate(async () => { try { await window.taskminal.issues.links(); return false } catch { return true } })).toBe(true)
+  expect(readFileSync(path, 'utf8')).toBe('{broken')
+})

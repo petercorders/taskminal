@@ -418,7 +418,9 @@ export class WorkspaceBrowser {
       const prior=this.state(win,id,tabId).url
       if(command.expectUrl!==undefined&&prior!==command.expectUrl)throw new Error('현재 페이지 주소가 예상과 달라 동작하지 않았어요')
       await this.limited(this.navigate(win,id,command.url!,tabId))
-      return this.state(win,id,tabId)
+      const state = this.state(win,id,tabId)
+      if (state.error) throw new Error(state.error)
+      return state
     }
     for(let attempt=0;attempt<40;attempt++){
       const candidate=this.entries.get(this.key(win,id,tabId!))

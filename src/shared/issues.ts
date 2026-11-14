@@ -1,3 +1,5 @@
+// Stable across Electron IPC, which preserves Error messages but not custom fields.
+export const ISSUE_TASK_DELETED = '[issue-task-deleted]'
 export type IssueProvider = 'github' | 'linear'
 export interface IssueRecord { provider: IssueProvider; id: string; key: string; title: string; body: string; url: string; state: string }
 export interface IssuePage { items: IssueRecord[]; cursor?: string }

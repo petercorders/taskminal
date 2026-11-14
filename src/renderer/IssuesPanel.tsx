@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { IssueApi, IssueLink, IssueRecord } from '../shared/issues'
+import { ISSUE_TASK_DELETED, type IssueApi, type IssueLink, type IssueRecord } from '../shared/issues'
 import { ConfirmDialog } from './ConfirmDialog'
 import './IssuesPanel.css'
 
@@ -151,8 +151,15 @@ export function IssuesPanel(p: Props) {
     if (target.kind === 'prepare') {
       update(key, { requestId: target.input.requestId })
       void mutate(async () => {
-      const result = await p.api.prepare(target.input)
-      update(key, { status: `연결 일감을 준비했어요. 작업 폴더: ${result.root}` })
+        try {
+          const result = await p.api.prepare(target.input)
+          update(key, { status: `연결 일감을 준비했어요. 작업 폴더: ${result.root}` })
+        } catch (reason) {
+          if (!(reason instanceof Error) || !reason.message.includes(ISSUE_TASK_DELETED)) throw reason
+          // Only confirmed deletion releases retry identity; unknown results keep it.
+          for (const [identity, requestId] of requests) if (requestId === target.input.requestId) requests.delete(identity)
+          update(key, { requestId: undefined, status: '', error: '연결 일감이 삭제됐어요. 다시 준비하면 새 요청 번호로 일감을 만듭니다.' })
+        }
       })
     } else void mutate(async () => {
       const current = (await p.api.links()).find((link) => link.taskId === target.link.taskId && link.issue.provider === target.link.issue.provider && link.issue.id === target.link.issue.id)

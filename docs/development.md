@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-14 (44~48 Orca 비교 후속 다섯 기능·UI/UX·GC 완료. 최종 단위1,206·e2e341 통과. 기능 브랜치 `stage-44-48-orca-workflow`; main 미병합·공개0.1.2 유지. 상세9절)
+마지막 갱신: 2026-11-14 (49단계 버그5건 수정·UI 확인·GC 완료. 단위1,209·e2e344 통과. 기능 브랜치 `stage-44-48-orca-workflow`; main 미병합·공개0.1.2 유지. 상세9절)
 
 ## 1. 지금 어디까지
 
@@ -45,6 +45,7 @@
 | 46 브라우저 CLI 자동화 | 탭/탐색 범위 snapshot·click·fill·navigate·가림 screenshot. 단위1,192·e2e334·보안 변이2·GC, 전체 종료0. `docs/stages/46-browser-automation.md` |
 | 47 이슈 연결 | GitHub/Linear 조회·일감/실제 worktree·맥락·PR·명시적 상태 변경. 단위1,201·관련 e2e5·변이2·GC 통과. 보안 기대 목록·임시 정리 시험 정정 후48 최종 전체에 포함해 통과. `docs/stages/47-issue-links.md` |
 | 48 원격 작업 공간 | 서버 소유 파일/CAS·Git·PTY 줄 입력·Claude/Codex 대화·앱 종료 후 재접속. 최종 타입·경계·단위1,206·e2e341 통과(종료0)·변이3·GC 완료. `docs/stages/48-remote-workspace.md`, 운영 방법 `docs/remote-workspaces.md` |
+| 49 전체 점검 버그 수정 | 손상 이슈 기록의 앱 시작 중단·CLI 탐색 실패 응답·삭제한 이슈 일감 재생성·원격 staged diff·리뷰 댓글 서명 복구. 단위1,209·e2e344·변이5·GC 완료, 전체 종료0. `docs/stages/49-five-bugfixes.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -296,3 +297,5 @@
 원격 서버는 loopback + SSH 터널/외부 HTTPS 구성으로 사용한다. 실제 사용자 원격 호스트·공급자 계정·OS 인증정보는 변경하지 않았다. 서버 재시작 때 실행 중 프로세스 생존, 전체 TUI/ANSI 터미널, 네이티브 모바일 앱은 이번 범위에 없다. Retina·VoiceOver·IME·Windows/Linux 실제 GUI와 실제 계정은 별도 확인한다.
 
 최종 검증·UI/UX·GC: `docs/stages/44-48-uiux-gc.md`. 전체 고정 tree `fe62045e30d5cb4d5a7504473239b8a964d156eb`, 로그 `/tmp/taskminal-48-full.log`. 패키지 전용2개는 새 설치 파일을 만들지 않아 skip했다. 각 단계 핵심 변이 총13개 검출. 커밋·push 대상은 이 기능 브랜치다.
+
+49단계 후속 버그 수정: `docs/stages/49-five-bugfixes.md`. 전체 로그 `/tmp/taskminal-49-full.log`, 타입·경계·단위1,209·e2e344 통과(패키지 전용2 skip, 종료0), 변이5 검출·GC 완료. 손상된 이슈 기록은 원본을 보존하고 이슈 기능만 차단한다. 공개0.1.2 교체나 main 병합은 하지 않았다.
