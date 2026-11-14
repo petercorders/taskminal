@@ -18,6 +18,8 @@ export const IPC = {
   accountsCancel: 'accounts:cancel',
   workspaceList: 'workspace:list',
   workspaceRead: 'workspace:read',
+  workspaceEdit: 'workspace:edit',
+  workspaceSave: 'workspace:save',
   workspaceExternal: 'workspace:external',
   browserShow: 'browser:show',
   browserNavigate: 'browser:navigate',

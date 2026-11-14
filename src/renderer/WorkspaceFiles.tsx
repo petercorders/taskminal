@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { WorkspaceEntry, WorkspaceFile } from '../shared/workspace'
 import type { ChatImage } from '../shared/chat'
 import { PdfPreview } from './PdfPreview'
+import { WorkspaceEditor } from './WorkspaceEditor'
 
 export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text: string, images?: ChatImage[]): void }) {
   const [path, setPath] = useState(''),
@@ -13,10 +14,12 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
   const [range, setRange] = useState({ from: 1, to: 100 }),
     [retry, setRetry] = useState(0),
     [rendered, setRendered] = useState(true)
+  const [editing, setEditing] = useState(false)
   const generation = useRef(0)
   useEffect(() => {
     setPath('')
     setFile(null)
+    setEditing(false)
   }, [root])
   useEffect(() => {
     const n = ++generation.current
@@ -41,6 +44,7 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
     }
   }, [root, path, retry])
   const open = async (entry: WorkspaceEntry) => {
+    setEditing(false)
     if (entry.directory) {
       setPath(entry.path)
       return
@@ -138,7 +142,9 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
           {!loading && entries.filter((e) => e.name.toLowerCase().includes(query.toLowerCase())).length === 0 && <p>맞는 파일이 없어요.</p>}
         </div>
         <div className="work-file-preview">
-          {!file ? (
+          {file && editing ? (
+            <WorkspaceEditor key={JSON.stringify([root, file.path])} root={root} path={file.path} onClose={() => void open({ name: file.path.split('/').pop()!, path: file.path, directory: false })} />
+          ) : !file ? (
             <p>파일을 골라 내용을 확인하세요.</p>
           ) : (
             <>
@@ -154,6 +160,7 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
               {file.kind === 'text' && (
                 <>
                   <div className="work-tools-row">
+                    <button className="button" disabled={loading} onClick={() => setEditing(true)}>편집</button>
                     <label>
                       시작 줄
                       <input

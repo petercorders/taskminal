@@ -15,6 +15,7 @@ import { validGitTarget, validWorkflowOptions } from '../shared/git-workflow'
 import { Accounts } from './accounts'
 import { ConversationSearch } from './conversation-search'
 import { openTextEditor } from './text-editor'
+import { WorkspaceEditor } from './workspace-editor'
 
 export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean, state: () => AppState | null) {
   const secretOptions = () => {
@@ -22,6 +23,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     return { custom: settings?.secretCustom ?? [], allow: new Set(settings?.secretAllow.map((a) => a.hash) ?? []) }
   }
   const conversations = new ConversationSearch(join(app.getPath('userData'),'chat'),state,secretOptions)
+  const editor = new WorkspaceEditor()
   const files = new WorkspaceFiles(secretOptions),
     browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined)),
     git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json')),
@@ -86,6 +88,8 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   ipcMain.handle(IPC.accountsCancel, (e, id) => accounts.cancel(accountId(e, id)))
   ipcMain.handle(IPC.workspaceList, (e, dir, p) => files.list(root(e, dir), path(p)))
   ipcMain.handle(IPC.workspaceRead, (e, dir, p) => files.read(root(e, dir), path(p)))
+  ipcMain.handle(IPC.workspaceEdit, (e, dir, p) => editor.read(root(e, dir), path(p)))
+  ipcMain.handle(IPC.workspaceSave, (e, dir, p, input) => editor.save(root(e, dir), path(p), input))
   ipcMain.handle(IPC.workspaceExternal, async (e, dir, p) => {
     const full = await files.path(root(e, dir), path(p))
     // TextEdit/registered editor only: shell.openPath could execute a .command file.

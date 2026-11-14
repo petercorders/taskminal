@@ -18,6 +18,7 @@ import {
 } from '../shared/review'
 import type { ToastSpec } from './Toast'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ReviewComments, type ReviewCommentTarget } from './review-comments'
 
 export type ReviewMode = 'diff' | 'commit' | 'reverted'
 /** App 이 보내는 요청 — ⇧⌘G · ⌘P · 대화 카드 'diff 열기'. n 이 바뀔 때마다 한 번 */
@@ -71,6 +72,7 @@ export function ReviewPane(p: Props) {
   const [mode, setMode] = useState<ReviewMode>('diff')
   const [cur, setCur] = useState<string | null>(null)
   const [sel, setSel] = useState<ReadonlySet<string>>(new Set())
+  const [commentTarget, setCommentTarget] = useState<ReviewCommentTarget | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [seen, setSeen] = useState<ReadonlyMap<string, string>>(new Map())
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(new Set())
@@ -156,6 +158,10 @@ export function ReviewPane(p: Props) {
   const curFile = files.find((f) => f.path === cur) ?? null
   const curSig = curFile ? fileSig(curFile) : ''
   const many = folderView ?? files.length > MANY_FILES
+  const commentSelection: ReviewCommentTarget | null = curFile && sel.size ? {
+    path: curFile.path, sig: curSig,
+    lines: curFile.hunks.flatMap((h, hi) => h.lines.flatMap((line, li) => sel.has(lineKey(hi, li)) ? [{ key: lineKey(hi, li), line: { ...line } }] : [])),
+  } : null
 
   // 파일이 사라지면 첫 파일로 · 고른 줄은 그 파일 diff 가 바뀌면 버린다(엉뚱한 줄을 되돌리지 않게)
   useEffect(() => {
@@ -495,6 +501,10 @@ export function ReviewPane(p: Props) {
         <span className="review-text">
           {l.t === ' ' ? ' ' : l.t} {l.text}
         </span>
+        <button type="button" className="review-comment-line" aria-label={`${curFile?.path} ${l.t === '-' ? '이전' : '현재'} ${no}줄 의견 쓰기`} onClick={(e) => {
+          e.stopPropagation()
+          if (curFile) setCommentTarget({ path: curFile.path, sig: curSig, lines: [{ key: k, line: { ...l } }] })
+        }}>의견 쓰기</button>
         {!picked && (
           <button
             type="button"
@@ -671,6 +681,7 @@ export function ReviewPane(p: Props) {
             <button type="button" onClick={() => askAbout(curFile!.hunks.flatMap((h, hi) => h.lines.filter((_, li) => sel.has(lineKey(hi, li)))))}>
               ✦ 대화에 묻기
             </button>
+            <button type="button" onClick={() => commentSelection && setCommentTarget(commentSelection)}>고른 줄에 의견 쓰기</button>
             <button type="button" onClick={() => setSel(new Set())}>
               고른 줄 풀기
             </button>
@@ -812,6 +823,7 @@ export function ReviewPane(p: Props) {
         )}
       </div>
       {main}
+      {root && <ReviewComments key={JSON.stringify([root, base])} visible={visible && p.active} root={root} base={base} files={files} target={commentTarget} selection={commentSelection} onTargetTaken={() => setCommentTarget(null)} onAskChat={p.onAskChat} />}
       {confirm && (
         <ConfirmDialog
           title={confirm.kind === 'A' ? '새 파일을 지울까요?' : '파일 전체를 되돌릴까요?'}

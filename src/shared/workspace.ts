@@ -3,6 +3,9 @@ export interface WorkspaceEntry {
   path: string
   directory: boolean
 }
+export interface EditableFile { path: string; signature: string; text: string }
+export interface EditorSave { signature: string; text: string }
+export type EditorSaveResult = { ok: true; file: EditableFile } | { ok: false; reason: 'conflict'; current: EditableFile }
 export interface WorkspaceFile {
   path: string
   signature: string
@@ -30,6 +33,8 @@ export interface BrowserCapture {
   dataUrl?: string
 }
 export interface WorkspaceApi {
+  edit(root: string, path: string): Promise<EditableFile>
+  save(root: string, path: string, input: EditorSave): Promise<EditorSaveResult>
   list(root: string, path: string): Promise<WorkspaceEntry[]>
   read(root: string, path: string): Promise<WorkspaceFile>
   external(root: string, path: string): Promise<void>

@@ -34,6 +34,8 @@ const api: TaskminalApi = {
     cancel: (id) => ipcRenderer.invoke(IPC.accountsCancel, id),
   },
   workspace: {
+    edit: (root, path) => ipcRenderer.invoke(IPC.workspaceEdit, root, path),
+    save: (root, path, input) => ipcRenderer.invoke(IPC.workspaceSave, root, path, input),
     list: (root, path) => ipcRenderer.invoke(IPC.workspaceList, root, path),
     read: (root, path) => ipcRenderer.invoke(IPC.workspaceRead, root, path),
     external: (root, path) => ipcRenderer.invoke(IPC.workspaceExternal, root, path),
