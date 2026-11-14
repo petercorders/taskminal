@@ -30,7 +30,7 @@ beforeEach(async () => {
   writeFileSync(join(res, 'app-update.yml'), 'owner: petercorders\nrepo: taskminal\nprovider: github\nupdaterCacheDirName: taskminal-updater\n')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
@@ -47,6 +47,8 @@ beforeEach(async () => {
   mkdirSync(join(res, 'bin'), { recursive: true })
   cpSync(join(__dirname, '../../resources/bin/taskminal'), join(res, 'bin', 'taskminal'))
   chmodSync(join(res, 'bin', 'taskminal'), 0o755)
+  cpSync(join(__dirname, '../../resources/bin/taskminal-server'), join(res, 'bin', 'taskminal-server'))
+  chmodSync(join(res, 'bin', 'taskminal-server'), 0o755)
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
@@ -226,4 +228,9 @@ describe('check-package (18단계)', () => {
       expect(all).toContain('latest-mac.yml')
     })
   })
+})
+
+it('원격 서버 launcher 누락을 막는다', async () => {
+  rmSync(join(appPath, 'Contents/Resources/bin/taskminal-server'))
+  expect(await check()).toContain('원격 서버 도구 없음: Resources/bin/taskminal-server')
 })

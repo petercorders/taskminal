@@ -25,9 +25,12 @@ export function checkPlatformPackage(appPath, { platform, arch }) {
   const asar = join(res, 'app.asar')
   if (!existsSync(asar)) return [`app.asar 없음: ${asar}`]
   const entries = new Set(listPackage(asar, {}).map((e) => e.replace(/^[/\\]/, '').replace(/\\/g, '/')))
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'node_modules/@xterm/headless/package.json']) {
     if (!entries.has(f)) problems.push(`app.asar 안에 ${f} 없음`)
   }
+  const server = join(res,'bin',platform === 'win32' ? 'taskminal-server.cmd' : 'taskminal-server')
+  if (!existsSync(server)) problems.push('원격 서버 도구 없음: ' + server)
+  else if (platform !== 'win32' && (statSync(server).mode & 0o111) === 0) problems.push('원격 서버 실행 권한 없음: ' + server)
   const binary = join(appPath, platform === 'win32' ? 'Taskminal.exe' : 'taskminal')
   const verifyNative = (file) => {
     if (!existsSync(file)) problems.push(`네이티브 파일 없음: ${file}`)

@@ -27,6 +27,7 @@ export const SHORTCUTS = [
   { command: 'worktrees', accel: '', label: '워크트리 관리' },
   { command: 'issues', accel: '', label: '이슈 연결' },
   { command: 'overview', accel: '', label: '전체 보기' },
+  { command: 'remote-workspace', accel: '', label: '원격 작업 공간' },
   { command: 'accounts', accel: '', label: '사용량·계정' },
   { command: 'workspace-files', accel: '', label: '파일 탐색' },
   { command: 'workspace-browser', accel: '', label: '내장 브라우저' },

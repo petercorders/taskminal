@@ -20,6 +20,25 @@ const subscribe = <A extends unknown[]>(channel: string, listener: (...args: A) 
 }
 
 const api: TaskminalApi = {
+  remote: {
+    connect: (url,token) => ipcRenderer.invoke(IPC.remoteRequest,'connect',[url,token]),
+    disconnect: id => ipcRenderer.invoke(IPC.remoteRequest,'disconnect',[id]),
+    workspaces: id => ipcRenderer.invoke(IPC.remoteRequest,'workspaces',[id]),
+    open: (id,path,request) => ipcRenderer.invoke(IPC.remoteRequest,'open',[id,path,request]),
+    files: (id,w,path) => ipcRenderer.invoke(IPC.remoteRequest,'files',[id,w,path]),
+    read: (id,w,path) => ipcRenderer.invoke(IPC.remoteRequest,'read',[id,w,path]),
+    save: (id,w,path,input,request) => ipcRenderer.invoke(IPC.remoteRequest,'save',[id,w,path,input,request]),
+    git: (id,w) => ipcRenderer.invoke(IPC.remoteRequest,'git',[id,w]),
+    terminal: (id,w,request) => ipcRenderer.invoke(IPC.remoteRequest,'terminal',[id,w,request]),
+    tail: (id,w,session) => ipcRenderer.invoke(IPC.remoteRequest,'tail',[id,w,session]),
+    write: (id,w,session,input) => ipcRenderer.invoke(IPC.remoteRequest,'write',[id,w,session,input]),
+    stop: (id,w,session) => ipcRenderer.invoke(IPC.remoteRequest,'stop',[id,w,session]),
+    chat: (id,w,agent,request) => ipcRenderer.invoke(IPC.remoteRequest,'chat',[id,w,agent,request]),
+    send: (id,w,chat,text,request) => ipcRenderer.invoke(IPC.remoteRequest,'send',[id,w,chat,text,request]),
+    history: (id,w,chat) => ipcRenderer.invoke(IPC.remoteRequest,'history',[id,w,chat]),
+    answer: (id,w,chat,request,decision) => ipcRenderer.invoke(IPC.remoteRequest,'answer',[id,w,chat,request,decision]),
+    interrupt: (id,w,chat) => ipcRenderer.invoke(IPC.remoteRequest,'interrupt',[id,w,chat]),
+  },
   issues: { list: (provider, source, cursor) => ipcRenderer.invoke(IPC.issuesList, provider, source, cursor), configure: token => ipcRenderer.invoke(IPC.issuesConfigure, token), links: () => ipcRenderer.invoke(IPC.issuesLinks), prepare: input => ipcRenderer.invoke(IPC.issuesPrepare, input), linkPr: (taskId, url) => ipcRenderer.invoke(IPC.issuesLinkPr, taskId, url), close: taskId => ipcRenderer.invoke(IPC.issuesClose, taskId) },
   worktrees: {list:root=>ipcRenderer.invoke(IPC.worktreesList,root),create:(root,input)=>ipcRenderer.invoke(IPC.worktreesCreate,root,input),open:(root,target)=>ipcRenderer.invoke(IPC.worktreesOpen,root,target),remove:(root,target)=>ipcRenderer.invoke(IPC.worktreesRemove,root,target)},
   schedules: {view:()=>ipcRenderer.invoke(IPC.schedulesView),save:value=>ipcRenderer.invoke(IPC.schedulesSave,value),remove:id=>ipcRenderer.invoke(IPC.schedulesRemove,id),runNow:(id,request)=>ipcRenderer.invoke(IPC.schedulesRunNow,id,request)},

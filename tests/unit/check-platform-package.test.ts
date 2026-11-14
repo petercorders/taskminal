@@ -30,11 +30,14 @@ async function fixture(platform: 'linux' | 'win32') {
   roots.push(root)
   const res = join(root, 'app/resources')
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
   mkdirSync(res, { recursive: true })
+  mkdirSync(join(res,'bin'),{recursive:true})
+  const server=join(res,'bin',platform==='win32'?'taskminal-server.cmd':'taskminal-server')
+  writeFileSync(server,'fixture');chmodSync(server,0o755)
   await createPackage(src, join(res, 'app.asar'))
   const app = join(root, 'app')
   const pty = join(res, 'app.asar.unpacked/node_modules/node-pty')

@@ -30,6 +30,7 @@ import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import { installWorkflowIpc } from './workflow-ipc'
 import { installIssuesIpc } from './issues-ipc'
+import { installRemoteIpc } from './remote/ipc'
 import { installScheduleIpc } from './schedule-ipc'
 import { installWorktreeIpc } from './worktree-ipc'
 import type { WorkspaceBrowser } from './workspace-browser'
@@ -592,6 +593,7 @@ if (!app.requestSingleInstanceLock()) {
   const workspaceTools = installWorkspaceIpc(fromOurWindow, () => lastState)
   agentAccounts=workspaceTools.accounts
   workspaceBrowser=workspaceTools.browser
+  installRemoteIpc(fromOurWindow)
   installIssuesIpc(fromOurWindow, { state: () => lastState, saved: () => { stateWriter.flush(); return stateFile?.canWrite ? lastWritten : null }, ask: askUi })
   workflowRunner = installWorkflowIpc(fromOurWindow,{
     state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,

@@ -90,6 +90,12 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 42 | Mac 출시 준비 | 0.1.1 서명·공증 승인, 공개 버전은 43단계 0.1.2로 대체 | 41 | 실제 설치 별도 | `docs/stages/42-release-0.1.1.md` |
 | 43 | 다중 OS 출시·Docs·README | Mac arm64/x64·Windows x64·Linux x64, OS 다운로드와 KO/EN 안내 | 42 | Windows 미서명·Linux 의존성·실제 계정 별도 | 단위1,182·e2e317·서명 앱12·네 OS CI·공개 다운로드5 해시·Pages·GC 완료. 앱 태그9936e2e, main은 site/README만. `docs/stages/43-multi-platform.md` |
 
+| 44 | 내장 편집·리뷰 의견 | 원문 UTF-8 CAS 저장·초안 보존·diff 서명 줄 코멘트 | 43 | 원문 초안은 메모리만 | `docs/stages/44-editor-review.md` |
+| 45 | 병렬 worker·독립 checkout | 슬롯·DAG·실제 worktree·attempt 재시도 | 44 | 자동 merge 없음 | `docs/stages/45-parallel-workers.md` |
+| 46 | 브라우저 CLI | 명시 task/tab·snapshot refs·click/fill/navigate·개인정보 가림 PNG | 45 | 일반 본문 민감 내용은 직접 확인 | `docs/stages/46-browser-automation.md` |
+| 47 | GitHub·Linear 이슈 | 조회·일감/worktree·맥락·PR·명시적 닫기 | 46 | 실제 계정 별도 | `docs/stages/47-issue-links.md` |
+| 48 | 서버 원격 작업 공간 | 파일/CAS·Git·PTY 줄 입력·구조화 대화·클라이언트 재접속 | 47 | 서버 재시작 생존·전체 TUI·모바일 앱 제외 | `docs/stages/48-remote-workspace.md` |
+
 함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 

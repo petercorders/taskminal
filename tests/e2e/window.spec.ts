@@ -44,8 +44,9 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     // contextBridge 는 contextIsolation 이 꺼져 있으면 노출에 실패하므로 키가 보이는 것 자체가 격리의 증거다.
     apiKeys: Object.keys((globalThis as unknown as { taskminal: object }).taskminal),
     issues: Object.keys(window.taskminal.issues),
+    remote: Object.keys(window.taskminal.remote),
   }))
-  expect(inPage).toEqual({ issues: ['list','configure','links','prepare','linkPr','close'], require: 'undefined', process: 'undefined', apiKeys: ['issues', 'worktrees', 'schedules', 'workflows', 'conversations', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports'] }) // 18단계: 업데이트 · 오류 기록 · 첫 실행 끝 · 19단계: 명령 기록 · 20단계: 포트 · 21단계: 대화 · 23단계: 변경 검토 · 24단계: 명령줄(cli) · 25단계: ~/.ssh/config 호스트 목록(읽기만)
+  expect(inPage).toEqual({ remote: ['connect','disconnect','workspaces','open','files','read','save','git','terminal','tail','write','stop','chat','send','history','answer','interrupt'], issues: ['list','configure','links','prepare','linkPr','close'], require: 'undefined', process: 'undefined', apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'workflows', 'conversations', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports'] }) // 18단계: 업데이트 · 오류 기록 · 첫 실행 끝 · 19단계: 명령 기록 · 20단계: 포트 · 21단계: 대화 · 23단계: 변경 검토 · 24단계: 명령줄(cli) · 25단계: ~/.ssh/config 호스트 목록(읽기만)
 
   // 설정값이 아니라 실제로 돌고 있는 renderer 프로세스가 OS 샌드박스 안인지 본다.
   const sandboxed = await app.evaluate(({ app, BrowserWindow }) => {

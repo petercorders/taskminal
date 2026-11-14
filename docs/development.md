@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-14 (0.1.2 다중 OS 릴리스·홈페이지·Docs·README 공개 완료. 앱 소스 태그 `v0.1.2` = `9936e2e`; 기능 브랜치 `stage-36-40-orca-followup`. main에는 홈페이지·Docs·README만 게시, 앱 기능 미병합. 상세 8절)
+마지막 갱신: 2026-11-14 (44~48 Orca 비교 후속 다섯 기능·UI/UX·GC 완료. 최종 단위1,206·e2e341 통과. 기능 브랜치 `stage-44-48-orca-workflow`; main 미병합·공개0.1.2 유지. 상세9절)
 
 ## 1. 지금 어디까지
 
@@ -40,6 +40,11 @@
 | 41 전체 UI/UX | 좁은 설정·사이드바 서랍·도구 줄/헤더·초안 보존·늦은 응답/포커스 개선. 단위1,141·e2e316·UI 변이13·GC, 최종 전체 종료0. `docs/stages/41-whole-app-uiux.md`. 승인된 기능 브랜치 push, main 병합 별도 |
 | 42 Mac 출시 준비 | 0.1.1 공증 승인, 공개 버전은 43단계의 0.1.2로 대체. `docs/stages/42-release-0.1.1.md` |
 | 43 다중 OS 출시 | **0.1.2 공개 완료** — Mac arm64/x64 서명·공증, Windows x64, Linux x64 AppImage/deb. 네 OS CI·단위1,182·e2e317·서명 앱12 통과, Docs/README/Pages 게시·GC. `docs/stages/43-multi-platform.md` |
+| 44 내장 편집·리뷰 의견 | 원문 UTF-8 편집·서명 충돌·메모리 초안·줄/범위 코멘트. 단위1,186·e2e328·변이3·GC, 전체 종료0. `docs/stages/44-editor-review.md` |
+| 45 병렬 worker | 1~4개 슬롯·DAG 의존성·실제 독립 worktree·중단/재시도 attempt 경계. 단위1,191·e2e330·변이3·GC, 전체 종료0. `docs/stages/45-parallel-workers.md` |
+| 46 브라우저 CLI 자동화 | 탭/탐색 범위 snapshot·click·fill·navigate·가림 screenshot. 단위1,192·e2e334·보안 변이2·GC, 전체 종료0. `docs/stages/46-browser-automation.md` |
+| 47 이슈 연결 | GitHub/Linear 조회·일감/실제 worktree·맥락·PR·명시적 상태 변경. 단위1,201·관련 e2e5·변이2·GC 통과. 보안 기대 목록·임시 정리 시험 정정 후48 최종 전체에 포함해 통과. `docs/stages/47-issue-links.md` |
+| 48 원격 작업 공간 | 서버 소유 파일/CAS·Git·PTY 줄 입력·Claude/Codex 대화·앱 종료 후 재접속. 최종 타입·경계·단위1,206·e2e341 통과(종료0)·변이3·GC 완료. `docs/stages/48-remote-workspace.md`, 운영 방법 `docs/remote-workspaces.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -282,3 +287,12 @@
 
 ### 알려진 불안정
 7절. 24단계 고침(붙기 전 친 키를 모아 보냄) 뒤 25단계까지의 전체 검사 결과는 25단계 결과 절(`docs/stages/25-archive-remote.md`)에 적는다.
+
+
+## 9. 44~48 후속 개발 이어받기
+
+작업 위치 `/Users/gimgibong/orca/workspaces/taskminal/taskminal`, 브랜치 `stage-44-48-orca-workflow`. 공개 0.1.2와 main의 사이트는 이 변경으로 교체하지 않는다. 이번 feature push는 Pages·네이티브 릴리스를 트리거하지 않는다. 원래 main에는 기존 31~41 앱 기능도 미병합이므로 이 브랜치 전체를 main에 올리는 것은 별도 사용자 요청이다. 새 공개 버전·재공증·기능 병합은 실행하지 않았다.
+
+원격 서버는 loopback + SSH 터널/외부 HTTPS 구성으로 사용한다. 실제 사용자 원격 호스트·공급자 계정·OS 인증정보는 변경하지 않았다. 서버 재시작 때 실행 중 프로세스 생존, 전체 TUI/ANSI 터미널, 네이티브 모바일 앱은 이번 범위에 없다. Retina·VoiceOver·IME·Windows/Linux 실제 GUI와 실제 계정은 별도 확인한다.
+
+최종 검증·UI/UX·GC: `docs/stages/44-48-uiux-gc.md`. 전체 고정 tree `fe62045e30d5cb4d5a7504473239b8a964d156eb`, 로그 `/tmp/taskminal-48-full.log`. 패키지 전용2개는 새 설치 파일을 만들지 않아 skip했다. 각 단계 핵심 변이 총13개 검출. 커밋·push 대상은 이 기능 브랜치다.

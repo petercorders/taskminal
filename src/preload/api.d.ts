@@ -142,6 +142,7 @@ export interface ChatApi {
 }
 
 export interface TaskminalApi {
+  remote: import('../shared/remote-workspace').RemoteApi
   issues: import('../shared/issues').IssueApi
   worktrees: import('../shared/worktree-management').WorktreeApi
   schedules: import('../shared/schedules').ScheduleApi
