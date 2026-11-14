@@ -29,6 +29,7 @@ import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
 import { installWorkflowIpc } from './workflow-ipc'
+import { installIssuesIpc } from './issues-ipc'
 import { installScheduleIpc } from './schedule-ipc'
 import { installWorktreeIpc } from './worktree-ipc'
 import type { WorkspaceBrowser } from './workspace-browser'
@@ -591,6 +592,7 @@ if (!app.requestSingleInstanceLock()) {
   const workspaceTools = installWorkspaceIpc(fromOurWindow, () => lastState)
   agentAccounts=workspaceTools.accounts
   workspaceBrowser=workspaceTools.browser
+  installIssuesIpc(fromOurWindow, { state: () => lastState, saved: () => { stateWriter.flush(); return stateFile?.canWrite ? lastWritten : null }, ask: askUi })
   workflowRunner = installWorkflowIpc(fromOurWindow,{
     state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,
     saved:()=>{stateWriter.flush();return stateFile?.canWrite?lastWritten:null},

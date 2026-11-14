@@ -43,6 +43,7 @@ import { GitWorkflow } from './GitWorkflow'
 import { WorkflowPanel } from './WorkflowPanel'
 import { SchedulePanel } from './SchedulePanel'
 import { WorktreePanel } from './WorktreePanel'
+import { IssuesPanel } from './IssuesPanel'
 import type { ChatImage } from '../shared/chat'
 import { ArchivePanel } from './ArchivePanel'
 import { WeeklyPanel } from './WeeklyPanel'
@@ -202,7 +203,7 @@ export function App() {
     observer.observe(toolbar); measure()
     return () => observer.disconnect()
   }, [])
-  const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree';url?:string;runId?:string}|null>(null)
+  const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues';url?:string;runId?:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
   // 설정을 열 때 보일 칸 (⌘P '셸 지킴이 보기' 등) — 닫으면 지운다
@@ -1199,7 +1200,7 @@ export function App() {
         if (e.seeTabs.length > 0) setSeenTabs((cur) => (e.seeTabs.every((t) => cur.has(t)) ? cur : new Set([...cur, ...e.seeTabs])))
         if (e.notify) updateActivityRef.current(e.notify.paneId, { type: 'notify', text: e.notify.text })
         // 실행기가 첫 지시를 보내기 전에 예약한 pane 이 디스크와 main 상태에 있어야 한다.
-        if ((raw as UiRequest).op === 'workflow.prepare' && e.reply.ok) {
+        if (['workflow.prepare', 'issue.prepare'].includes((raw as UiRequest).op) && e.reply.ok) {
           try { await window.taskminal.state.save(stateRef.current) }
           catch (err) { return window.taskminal.cli.reply(id, { ok: false, error: `실행 대화를 저장하지 못했어요: ${String(err)}` }) }
         }
@@ -1498,6 +1499,10 @@ export function App() {
       case 'accounts':
         setOverviewOpen(false)
         return setWorkTool({taskId:task?.id??'',kind:'accounts'})
+      case 'issues':
+        if(!task||task.host)return
+        setOverviewOpen(false)
+        return setWorkTool({taskId:task.id,kind:'issues'})
       case 'worktrees':
         if(!task||task.host)return
         setOverviewOpen(false)
@@ -1875,7 +1880,7 @@ export function App() {
         <CompactSidebar open={sidebarCompactOpen} onClose={() => setSidebarCompactOpen(false)}>
         <Sidebar
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
-          onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees'} as const)[kind]))}
+          onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees',issues:'issues'} as const)[kind]))}
           state={viewState}
           onArchive={(t) => sidebarAction(() => archive([t.id]))}
           archivedCount={state.tasks.length - viewState.tasks.length}
@@ -1918,7 +1923,7 @@ export function App() {
         <main ref={workspaceElement} className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
             <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
-            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option></>}</>}</select>
+            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option></>}</>}</select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
             <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button>
@@ -1926,10 +1931,11 @@ export function App() {
             {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'workflow'})}}>작업 흐름</button>}
             {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'schedule'})}}>예약과 결과함</button>}
             {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'worktree'})}}>워크트리 관리</button>}
+            {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'issues'})}}>이슈 연결</button>}
           </nav>
           {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
           {workTool && (workTool.kind==='accounts'||activeTask?.id===workTool.taskId) && <aside className="work-tool-panel" aria-label="작업 보조 화면">
-            <header className="work-tools-row"><strong>{workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
+            <header className="work-tools-row"><strong>{workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':workTool.kind==='issues'?'이슈 연결':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
@@ -1942,6 +1948,7 @@ export function App() {
                 setWorkTool(null);refocus()
               }}/>}
               {workTool.kind==='schedule'&&<SchedulePanel key={activeTask.id} taskId={activeTask.id} onOpenRun={runId=>{void window.taskminal.workflows.view().then(view=>{const run=view.runs.find(r=>r.id===runId&&r.taskId===activeTask.id);const task=stateRef.current.tasks.find(t=>t.id===activeTask.id&&!t.host&&t.archivedAt===undefined);if(!run||!task)return showToast({text:'실행 기록이나 일감이 사라졌어요.'});if(stateRef.current.activeTaskId!==task.id)return;setWorkTool(old=>old===workTool&&old?.kind==='schedule'&&old.taskId===task.id?{taskId:task.id,kind:'workflow',runId}:old)}).catch(()=>showToast({text:'실행 기록을 읽지 못했어요.'}))}}/>}
+              {workTool.kind==='issues'&&<IssuesPanel key={activeTask.id} api={window.taskminal.issues} taskId={activeTask.id} root={activeTask.cwd} onOpenTask={id=>{const target=stateRef.current.tasks.find(task=>task.id===id&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id});setWorkTool(null);refocus()}} onAttach={(taskId,text)=>{const target=stateRef.current.tasks.find(task=>task.id===taskId&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id:taskId});askChat(taskId,text);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='workflow'&&<WorkflowPanel key={activeTask.id} taskId={activeTask.id} initialRunId={workTool.runId} onOpenPane={paneId=>{const task=stateRef.current.tasks.find(t=>t.id===activeTask.id);if(!task?.panes[paneId])return showToast({text:'실행 대화가 사라졌어요.'});setWorkTool(null);gotoPane(paneId)}}/>}
             </>}
           </aside>}

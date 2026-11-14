@@ -25,6 +25,7 @@ export const SHORTCUTS = [
   { command: 'workflows', accel: '', label: '작업 흐름' },
   { command: 'schedules', accel: '', label: '예약과 결과함' },
   { command: 'worktrees', accel: '', label: '워크트리 관리' },
+  { command: 'issues', accel: '', label: '이슈 연결' },
   { command: 'overview', accel: '', label: '전체 보기' },
   { command: 'accounts', accel: '', label: '사용량·계정' },
   { command: 'workspace-files', accel: '', label: '파일 탐색' },

@@ -492,6 +492,7 @@ export interface PaneTarget {
 
 /** main 이 창에 묻는 것: 화면 상태를 바꾸는 CLI 요청 그대로 · 이름 풀기(필요하면 그 탭을 띄운다) */
 export type UiRequest =
+  | {op:'issue.prepare'; taskId:string;root:string;issue:import('./issues').IssueRecord;self?:string}
   | {op:'browser.open';taskId:string;self?:string}
   | {op:'workflow.prepare'; taskId:string;paneId:string;tabId:string;agent:'claude'|'codex';runId:string;label:string;cwd?:string;self?:string}
   | Exclude<CliRequest, { op: 'browser' | 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>

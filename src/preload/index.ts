@@ -20,6 +20,7 @@ const subscribe = <A extends unknown[]>(channel: string, listener: (...args: A) 
 }
 
 const api: TaskminalApi = {
+  issues: { list: (provider, source, cursor) => ipcRenderer.invoke(IPC.issuesList, provider, source, cursor), configure: token => ipcRenderer.invoke(IPC.issuesConfigure, token), links: () => ipcRenderer.invoke(IPC.issuesLinks), prepare: input => ipcRenderer.invoke(IPC.issuesPrepare, input), linkPr: (taskId, url) => ipcRenderer.invoke(IPC.issuesLinkPr, taskId, url), close: taskId => ipcRenderer.invoke(IPC.issuesClose, taskId) },
   worktrees: {list:root=>ipcRenderer.invoke(IPC.worktreesList,root),create:(root,input)=>ipcRenderer.invoke(IPC.worktreesCreate,root,input),open:(root,target)=>ipcRenderer.invoke(IPC.worktreesOpen,root,target),remove:(root,target)=>ipcRenderer.invoke(IPC.worktreesRemove,root,target)},
   schedules: {view:()=>ipcRenderer.invoke(IPC.schedulesView),save:value=>ipcRenderer.invoke(IPC.schedulesSave,value),remove:id=>ipcRenderer.invoke(IPC.schedulesRemove,id),runNow:(id,request)=>ipcRenderer.invoke(IPC.schedulesRunNow,id,request)},
   workflows: {view:()=>ipcRenderer.invoke(IPC.workflowsView),save:w=>ipcRenderer.invoke(IPC.workflowsSave,w),remove:id=>ipcRenderer.invoke(IPC.workflowsRemove,id),start:input=>ipcRenderer.invoke(IPC.workflowsStart,input),stop:id=>ipcRenderer.invoke(IPC.workflowsStop,id),retry:id=>ipcRenderer.invoke(IPC.workflowsRetry,id)},
