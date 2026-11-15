@@ -22,11 +22,12 @@ export function validRemoteResult(method: string, v: unknown): boolean {
     case 'save': return obj(v) && (v.ok===true ? file(v.file) : v.ok===false && v.reason==='conflict' && file(v.current))
     case 'git': return obj(v) && str(v.status,2_000_000) && str(v.diff,2_000_000) && str(v.branch)
     case 'terminal': return terminal(v)
+    case 'stream': return obj(v)&&id(v.epoch)&&str(v.data,200_000)&&Number.isSafeInteger(v.offset)&&Number.isSafeInteger(v.start)&&(v.start as number)>=0&&(v.offset as number)>=(v.start as number)&&v.data.length<=(v.offset as number)-(v.start as number)&&(v.exited===undefined||Number.isSafeInteger(v.exited))
     case 'tail': return obj(v) && str(v.data,1_000_000) && (v.exited===undefined || Number.isSafeInteger(v.exited))
     case 'chat': return chat(v)
     case 'history': return obj(v) && Array.isArray(v.events) && v.events.length<=50000 && v.events.every(event) && Number.isSafeInteger(v.upTo) && (v.upTo as number)>=0
     case 'answer': return typeof v==='boolean'
-    case 'write': case 'stop': case 'send': case 'interrupt': return v===null
+    case 'resize': case 'write': case 'stop': case 'send': case 'interrupt': return v===null
     default: return false
   }
 }

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { RemoteClients } from '../../src/main/remote/client'
-import { seedState, firstWindow, waitLoaded, captureWindow } from './helpers'
+import { stopRemoteTerminalHost, seedState, firstWindow, waitLoaded, captureWindow } from './helpers'
 const require = createRequire(resolve('package.json'))
 const electronBin = require('electron') as string
 let temp: string, root: string, data: string, url: string, token: string, server: ChildProcess, app: ElectronApplication | undefined
@@ -17,7 +17,7 @@ test.beforeEach(async () => {
   const info = await new Promise<{url:string;tokenFile:string}>((resolve,reject) => { let buffer=''; let errors=''; const timeout=setTimeout(()=>reject(Error('server timeout '+errors)),15000); server.stderr?.on('data',d=>errors+=d); server.once('exit',code=>{clearTimeout(timeout);reject(Error('server exited '+code+' '+errors))}); server.stdout?.on('data',d=>{buffer+=d;const line=buffer.split('\n')[0];if(line){try{const info=JSON.parse(line);clearTimeout(timeout);resolve(info)}catch{}}}) })
   url=info.url; token=readFileSync(info.tokenFile,'utf8'); expect(token).toMatch(/^[a-f0-9]{64}$/); expect(statSync(info.tokenFile).mode&0o777).toBe(0o600)
 })
-test.afterEach(async()=> { await app?.close(); app=undefined; if(server?.exitCode===null){ const done=new Promise<void>(r=>server.once('exit',()=>r())); server.kill('SIGTERM'); await done } rmSync(temp,{recursive:true,force:true,maxRetries:5}) })
+test.afterEach(async()=> { await app?.close(); app=undefined; if(server?.exitCode===null){ const done=new Promise<void>(r=>server.once('exit',()=>r())); server.kill('SIGTERM'); await done } await stopRemoteTerminalHost(data); rmSync(temp,{recursive:true,force:true,maxRetries:5}) })
 const rpc=async(method:string,args:unknown[],secret=token,origin?:string)=>{ const response=await fetch(url+'/rpc',{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json',...(origin?{Origin:origin}:{})},body:JSON.stringify({method,args})});return {status:response.status,...await response.json()} }
 test('server owns terminal/chat across client disconnect with auth, paths, CAS and request fences',async()=>{
   expect((await rpc('workspaces',[],'wrong')).status).toBe(403)

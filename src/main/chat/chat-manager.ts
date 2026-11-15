@@ -32,6 +32,8 @@ export interface ChatManagerDeps {
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
 export interface ChatRef {
+  model?:string
+  effort?:'low'|'medium'|'high'
   agent: ChatAgent
   sessionId?: string
   /** 되감기 · 나누기 뒤 아직 보내지 않았다 — 다음 띄울 때 여기서 가른다 */
@@ -137,6 +139,7 @@ export class ChatManager {
       const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
       const initialEnv = { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path, chat) ?? {}) }
       const common = {
+        ...(chat.model?{model:chat.model}:{}),...(chat.effort?{effort:chat.effort}:{}),
         bin: found.bin,
         env: this.d.sessionEnv?.(initialEnv,paneId,chat) ?? initialEnv,
         cwd: expandHome(cwd),

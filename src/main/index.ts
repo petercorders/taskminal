@@ -1,3 +1,4 @@
+import { installDevelopmentIpc } from './development-ipc'
 import { app, BrowserWindow, clipboard, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { autoUpdater, type ProgressInfo } from 'electron-updater'
 import { createHash, randomUUID } from 'node:crypto'
@@ -141,6 +142,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 function startCliServer(): void {
   cliServer = new CliServer({
     sockPath: cliSockPath,
+    workflow(command){
+      const runner=workflowRunner;if(!runner)throw Error('작업 흐름을 준비하지 못했어요')
+      if(command.action==='view')return runner.view()
+      if(typeof command.runId!=='string')throw Error('실행 번호를 확인해 주세요')
+      if(command.action==='append')runner.append(command.runId,command.input as import('../shared/workflows').WorkflowStep)
+      else if(command.action==='message')runner.message(command.runId,command.input as import('../shared/workflows').WorkflowMessage)
+      else runner.answerMessage(command.runId,command.messageId!,command.text!)
+      return runner.view()
+    },
     async browser(command){
       const win=mainWindow,browser=workspaceBrowser
       if(!win||win.isDestroyed()||!browser||!lastState?.tasks.some(t=>t.id===command.task&&!t.host&&t.archivedAt===undefined))throw new Error('로컬 일감과 열린 창을 확인해 주세요')
@@ -594,6 +604,7 @@ if (!app.requestSingleInstanceLock()) {
   agentAccounts=workspaceTools.accounts
   workspaceBrowser=workspaceTools.browser
   installRemoteIpc(fromOurWindow)
+  installDevelopmentIpc(fromOurWindow,()=>lastState)
   installIssuesIpc(fromOurWindow, { state: () => lastState, saved: () => { stateWriter.flush(); return stateFile?.canWrite ? lastWritten : null }, ask: askUi })
   workflowRunner = installWorkflowIpc(fromOurWindow,{
     state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,

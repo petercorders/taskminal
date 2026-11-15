@@ -30,6 +30,8 @@ const api: TaskminalApi = {
     save: (id,w,path,input,request) => ipcRenderer.invoke(IPC.remoteRequest,'save',[id,w,path,input,request]),
     git: (id,w) => ipcRenderer.invoke(IPC.remoteRequest,'git',[id,w]),
     terminal: (id,w,request) => ipcRenderer.invoke(IPC.remoteRequest,'terminal',[id,w,request]),
+    stream: (id,w,session,offset) => ipcRenderer.invoke(IPC.remoteRequest,'stream',[id,w,session,offset]),
+    resize: (id,w,session,cols,rows) => ipcRenderer.invoke(IPC.remoteRequest,'resize',[id,w,session,cols,rows]),
     tail: (id,w,session) => ipcRenderer.invoke(IPC.remoteRequest,'tail',[id,w,session]),
     write: (id,w,session,input) => ipcRenderer.invoke(IPC.remoteRequest,'write',[id,w,session,input]),
     stop: (id,w,session) => ipcRenderer.invoke(IPC.remoteRequest,'stop',[id,w,session]),
@@ -42,7 +44,8 @@ const api: TaskminalApi = {
   issues: { list: (provider, source, cursor) => ipcRenderer.invoke(IPC.issuesList, provider, source, cursor), configure: token => ipcRenderer.invoke(IPC.issuesConfigure, token), links: () => ipcRenderer.invoke(IPC.issuesLinks), prepare: input => ipcRenderer.invoke(IPC.issuesPrepare, input), linkPr: (taskId, url) => ipcRenderer.invoke(IPC.issuesLinkPr, taskId, url), close: taskId => ipcRenderer.invoke(IPC.issuesClose, taskId) },
   worktrees: {list:root=>ipcRenderer.invoke(IPC.worktreesList,root),create:(root,input)=>ipcRenderer.invoke(IPC.worktreesCreate,root,input),open:(root,target)=>ipcRenderer.invoke(IPC.worktreesOpen,root,target),remove:(root,target)=>ipcRenderer.invoke(IPC.worktreesRemove,root,target)},
   schedules: {view:()=>ipcRenderer.invoke(IPC.schedulesView),save:value=>ipcRenderer.invoke(IPC.schedulesSave,value),remove:id=>ipcRenderer.invoke(IPC.schedulesRemove,id),runNow:(id,request)=>ipcRenderer.invoke(IPC.schedulesRunNow,id,request)},
-  workflows: {view:()=>ipcRenderer.invoke(IPC.workflowsView),save:w=>ipcRenderer.invoke(IPC.workflowsSave,w),remove:id=>ipcRenderer.invoke(IPC.workflowsRemove,id),start:input=>ipcRenderer.invoke(IPC.workflowsStart,input),stop:id=>ipcRenderer.invoke(IPC.workflowsStop,id),retry:id=>ipcRenderer.invoke(IPC.workflowsRetry,id)},
+  development: {preview:(root,target)=>ipcRenderer.invoke(IPC.developmentRequest,'preview',[root,target]),prepare:(root,plan,id)=>ipcRenderer.invoke(IPC.developmentRequest,'prepare',[root,plan,id]),preparations:root=>ipcRenderer.invoke(IPC.developmentRequest,'preparations',[root]),cancel:(root,id)=>ipcRenderer.invoke(IPC.developmentRequest,'cancel',[root,id]),inspect:(root,path)=>ipcRenderer.invoke(IPC.developmentRequest,'inspect',[root,path]),install:(root,preview)=>ipcRenderer.invoke(IPC.developmentRequest,'install',[root,preview]),extensions:root=>ipcRenderer.invoke(IPC.developmentRequest,'extensions',[root]),enable:(root,id,enabled)=>ipcRenderer.invoke(IPC.developmentRequest,'enable',[root,id,enabled]),uninstall:(root,id)=>ipcRenderer.invoke(IPC.developmentRequest,'uninstall',[root,id])},
+  workflows: {append:(id,step)=>ipcRenderer.invoke(IPC.workflowsAppend,id,step),message:(id,message)=>ipcRenderer.invoke(IPC.workflowsMessage,id,message),answerMessage:(id,message,text)=>ipcRenderer.invoke(IPC.workflowsAnswer,id,message,text),view:()=>ipcRenderer.invoke(IPC.workflowsView),save:w=>ipcRenderer.invoke(IPC.workflowsSave,w),remove:id=>ipcRenderer.invoke(IPC.workflowsRemove,id),start:input=>ipcRenderer.invoke(IPC.workflowsStart,input),stop:id=>ipcRenderer.invoke(IPC.workflowsStop,id),retry:id=>ipcRenderer.invoke(IPC.workflowsRetry,id)},
   conversations: { search: query=>ipcRenderer.invoke(IPC.conversationsSearch,query), verify: hit=>ipcRenderer.invoke(IPC.conversationsVerify,hit) },
   accounts: {
     tui: (paneId) => ipcRenderer.invoke(IPC.accountsTui, paneId),

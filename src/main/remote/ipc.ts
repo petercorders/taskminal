@@ -2,7 +2,7 @@ import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { RemoteClients } from './client'
 
 import { IPC } from '../../shared/ipc'
-const arity: Record<string, number> = {workspaces:0,open:2,files:2,read:2,save:4,git:1,terminal:2,tail:2,write:3,stop:2,chat:3,send:4,history:2,answer:4,interrupt:2}
+const arity: Record<string, number> = {workspaces:0,open:2,files:2,read:2,save:4,git:1,terminal:2,tail:2,stream:3,resize:4,write:3,stop:2,chat:3,send:4,history:2,answer:4,interrupt:2}
 export function installRemoteIpc(trusted: (e: IpcMainInvokeEvent) => boolean) {
   const clients = new RemoteClients()
   ipcMain.handle(IPC.remoteRequest, async (e, method: unknown, args: unknown) => {

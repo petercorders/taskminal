@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Workflow, WorkflowRun, WorkflowStep, WorkflowView } from '../shared/workflows'
 import { ConfirmDialog } from './ConfirmDialog'
+import { WorkflowSupervision } from './WorkflowSupervision'
 import './workflow-panel.css'
 
 interface Props { taskId: string; initialRunId?: string | undefined; onOpenPane(paneId: string): void }
@@ -195,6 +196,10 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
           <legend>{index + 1}단계</legend>
           <label className="field"><span>단계 이름</span><input required maxLength={100} value={step.name} onChange={(e) => editStep(step.id, { name: e.target.value })} /></label>
           <label className="field"><span>에이전트</span><select value={step.agent} onChange={(e) => editStep(step.id, { agent: e.target.value === 'codex' ? 'codex' : 'claude' })}><option value="claude">Claude</option><option value="codex">Codex</option></select></label>
+          <details><summary>모델 설정 (선택)</summary>
+            <label className="field"><span>단계 모델</span><input maxLength={128} placeholder="공급자 CLI가 지원하는 모델 이름" value={step.model ?? ''} onChange={e=>editStep(step.id,{model:e.target.value||undefined,...(!e.target.value?{effort:undefined}:{})})}/></label>
+            <label className="field"><span>단계 effort</span><select disabled={!step.model} value={step.effort??''} onChange={e=>editStep(step.id,{effort:(e.target.value||undefined) as WorkflowStep['effort']})}><option value="">공급자 기본값</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select></label>
+          </details>
           <label className="field"><span>보낼 지시</span><textarea required rows={3} maxLength={10000} value={step.prompt} onChange={(e) => editStep(step.id, { prompt: e.target.value })} /></label>
           <fieldset className="workflow-dependencies"><legend>이 단계들이 완료된 뒤 시작</legend>
             {draft.steps.filter((other) => other.id !== step.id).map((other) => <label key={other.id}><input type="checkbox" checked={step.after.includes(other.id)} onChange={(e) => editStep(step.id, { after: e.target.checked ? [...step.after, other.id] : step.after.filter((id) => id !== other.id) })} />{other.name || `${draft.steps.indexOf(other) + 1}단계`}</label>)}
@@ -220,6 +225,7 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
         {step.result && <pre className="workflow-result">{step.result}</pre>}
         {step.paneId && <button type="button" className="button" disabled={step.status === 'pending'} onClick={() => onOpenPane(step.paneId)}>대화 열기</button>}
       </li>)}</ol>
+      <WorkflowSupervision key={run.id} run={run} onChanged={() => refresh.current()} />
       {['preparing', 'running', 'waiting'].includes(run.status) && <button type="button" className="button" disabled={busy} onClick={() => { void write(() => window.taskminal.workflows.stop(run.id)) }}>실행 중지</button>}
       {['failed', 'stopped', 'unknown'].includes(run.status) && <button type="button" className="button" disabled={busy} onClick={() => setConfirm({ kind: 'retry', id: run.id })}>이어 실행…</button>}
     </article>)}</div>

@@ -1,0 +1,16 @@
+.code-editor { --code-keyword: #d7a5ff; --code-string: #abd39c; --code-number: #e5b567; --code-function: #79b8ff; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.code-editor-host { min-width: 0; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.code-editor .cm-editor { height: 320px; max-height: 65vh; color: var(--fg); background: var(--bg); font-size: 13px; }
+.code-editor .cm-scroller { overflow: auto; font-family: ui-monospace, monospace; line-height: 1.6; }
+.code-editor .cm-content { min-height: 220px; caret-color: var(--fg); }
+.code-editor .cm-gutters { color: var(--muted); background: var(--bg); border-color: var(--line); }
+.code-editor .cm-focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+.code-editor .cm-activeLine, .code-editor .cm-activeLineGutter { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.code-editor .cm-selectionBackground, .code-editor .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.code-editor .cm-cursor { border-left-color: var(--fg); }
+.code-editor .cm-panels { color: var(--fg); background: var(--bg); border-color: var(--line); }
+.code-editor .cm-search { white-space: normal; }
+.code-editor .cm-textfield { max-width: 100%; box-sizing: border-box; color: var(--fg); background: var(--bg); border-color: var(--line); }
+.code-editor .cm-button { color: var(--fg); background: var(--bg); border-color: var(--line); }
+
+[data-theme="light"] .code-editor { --code-keyword: #7833a8; --code-string: #277227; --code-number: #995000; --code-function: #185fa4; }

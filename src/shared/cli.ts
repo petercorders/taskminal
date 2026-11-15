@@ -22,6 +22,7 @@ export type ChatWhere = 'right' | 'down' | 'tab'
 
 /** 소켓으로 가는 요청. self = 부른 터미널의 pane id (TASKMINAL_PANE_ID) */
 export type CliRequest = { self?: string } & (
+  | {op:'workflow';action:'view'|'append'|'message'|'answer';runId?:string;input?:unknown;messageId?:string;text?:string}
   | ({ op: 'browser' } & BrowserCommand)
   | { op: 'list' }
   | { op: 'task.new'; name: string; cwd?: string; template?: string; group?: string; status?: string }
@@ -98,6 +99,14 @@ const usage = (error: string): Parsed => ({ kind: 'usage', error })
 
 /** argv = 명령 뒤의 인자들 (node · 스크립트 경로 뺀 것). self 는 부르는 쪽이 붙인다 */
 export function parseArgs(argv: readonly string[]): Parsed {
+  if(argv[0]==='workflow'){
+    const args=argv.slice(1).filter(a=>a!=='--json'),json=argv.includes('--json'),action=args[0]
+    if(action==='view'&&args.length===1)return {kind:'request',req:{op:'workflow',action},json}
+    if((action==='append'||action==='message')&&args.length===3){try{return {kind:'request',req:{op:'workflow',action,runId:args[1]!,input:JSON.parse(args[2]!)},json}}catch{return usage('workflow 입력은 JSON 객체로 적어 주세요')}}
+    if(action==='answer'&&args.length===4)return {kind:'request',req:{op:'workflow',action,runId:args[1]!,messageId:args[2]!,text:args[3]!},json}
+    return usage('workflow view | append/message <run> <JSON> | answer <run> <message> <text>')
+  }
+
   if(argv[0]==='browser'){const parsed=parseBrowserCommand(argv.slice(1));return 'error' in parsed?usage(parsed.error):{kind:'request',req:{op:'browser',...parsed.command},json:parsed.json}}
   const args = [...argv]
   let json = false
@@ -259,6 +268,7 @@ export function isCliRequest(v: unknown): v is CliRequest {
   if (v['self'] !== undefined && !isPaneId(v['self'])) return false
   const o = v as Record<string, unknown>
   switch (o['op']) {
+    case 'workflow':return ['view','append','message','answer'].includes(String(o['action']))&&(o['action']==='view'||typeof o['runId']==='string'&&/^[\w-]{1,100}$/.test(o['runId']))&&(o['action']!=='answer'||typeof o['messageId']==='string'&&/^[\w-]{1,100}$/.test(o['messageId'])&&typeof o['text']==='string'&&o['text'].length<=12000)
     case 'browser':return validBrowserCommand(o)
     case 'list':
       return true
@@ -470,6 +480,10 @@ export const HELP = `taskminal — Taskminal 의 일감 · 탭 · 터미널을 �
   taskminal browser click <일감 ID> --tab <탭 ID> --ref <snapshot 참조>
   taskminal browser fill <일감 ID> --tab <탭 ID> --ref <참조> --value <글>
   taskminal browser screenshot <일감 ID> --tab <탭 ID> --json
+  taskminal workflow view --json
+  taskminal workflow append <실행 ID> '<단계 JSON>' --json
+  taskminal workflow message <실행 ID> '<worker 메시지 JSON>' --json
+  taskminal workflow answer <실행 ID> <질문 ID> '답변' --json
 
   <일감> = id · 이름 · <pane> = pane id · 일감 이름 · 일감:탭(이름 또는 번호). 생략하면 이 터미널.
   에이전트에게: 일을 마치면 'taskminal task note "다음 할 일 …"', 사람 확인이 필요하면 'taskminal notify "…"'.
@@ -495,7 +509,7 @@ export type UiRequest =
   | {op:'issue.prepare'; taskId:string;root:string;issue:import('./issues').IssueRecord;self?:string}
   | {op:'browser.open';taskId:string;self?:string}
   | {op:'workflow.prepare'; taskId:string;paneId:string;tabId:string;agent:'claude'|'codex';runId:string;label:string;cwd?:string;self?:string}
-  | Exclude<CliRequest, { op: 'browser' | 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>
+  | Exclude<CliRequest, { op: 'workflow' | 'browser' | 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>
   | { op: 'pane.resolve'; pane?: string; self?: string }
   | { op: 'chat.panes'; panes: string[]; all: boolean; task?: string; self?: string }
 

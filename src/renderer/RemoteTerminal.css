@@ -1,0 +1,6 @@
+.remote-live-terminal { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.remote-xterm { height: 320px; min-height: 160px; min-width: 0; padding: var(--space-2); overflow: hidden; background: #15171c; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.remote-xterm .xterm { height: 100%; }
+.remote-xterm:focus-within { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.remote-panel .remote-xterm textarea { min-height: 0; padding: 0; resize: none; border: 0; }
+.remote-xterm .xterm-accessibility { font-family: ui-monospace, monospace; }

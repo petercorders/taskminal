@@ -16,6 +16,8 @@ export interface RemoteApi {
   git(id: string, workspace: string): Promise<RemoteGit>
   terminal(id: string, workspace: string, requestId: string): Promise<RemoteTerminal>
   tail(id: string, workspace: string, session: string): Promise<{data: string; exited?: number}>
+  stream(id:string,workspace:string,session:string,offset:number):Promise<{data:string;offset:number;start:number;epoch:string;exited?:number}>
+  resize(id:string,workspace:string,session:string,cols:number,rows:number):Promise<void>
   write(id: string, workspace: string, session: string, input: {requestId: string; data: string}): Promise<void>
   stop(id: string, workspace: string, session: string): Promise<void>
   chat(id: string, workspace: string, agent: ChatAgent, requestId: string): Promise<RemoteChat>
