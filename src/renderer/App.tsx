@@ -2062,7 +2062,7 @@ export function App() {
               {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd}/>}
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
-              {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)}/>}
+              {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)} onSendToChat={text=>{const id=activeTask.id;if(!stateRef.current.tasks.some(task=>task.id===id&&task.archivedAt===undefined))return showToast({text:'일감이 사라졌어요.'});askChat(id,text);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onOpen={(path,taskId,signal,expectedCwd)=>{
                 if(signal?.aborted||workToolRef.current!==workTool||stateRef.current.activeTaskId!==activeTask.id)return
                 const current=stateRef.current

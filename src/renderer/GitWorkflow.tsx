@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitWorkflowApi, GitWorkflowResult, GitWorkflowView, MergePullRequest } from '../shared/git-workflow'
+import { CiFeedback } from './CiFeedback'
 import { Modal } from './Modal'
 
 const ghText: Record<GitWorkflowView['gh'], string> = {
@@ -14,10 +15,12 @@ interface Props {
   dir: string
   api: GitWorkflowApi
   onOpenUrl?(url: string): void
+  /** 54단계: 체크 실패 · 리뷰 의견을 이 일감의 대화 입력칸 초안으로 */
+  onSendToChat?(text: string): void
 }
 
 /** 33단계 변경 검토의 원격 작업. 버튼을 누르기 전 본 SHA와 실행 직전 SHA가 같아야 한다. */
-export function GitWorkflow({ dir, api, onOpenUrl }: Props) {
+export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
   const [view, setView] = useState<GitWorkflowView | null>(null)
   const [remote, setRemote] = useState('')
   const [base, setBase] = useState('')
@@ -197,6 +200,7 @@ export function GitWorkflow({ dir, api, onOpenUrl }: Props) {
                         병합 검토…
                       </button>
                       {!pr.mergeable && <div className="dim small">최신 리뷰·체크·충돌을 해결한 뒤 다시 읽어 주세요.</div>}
+                      <CiFeedback key={`${target.repo}#${pr.number}`} api={api} dir={dir} target={target} pr={pr} {...(onSendToChat ? { onSend: onSendToChat } : {})} {...(onOpenUrl ? { onOpenUrl } : {})} />
                     </div>
                   ) : (
                     <div className="git-workflow-create">

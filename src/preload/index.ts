@@ -81,6 +81,7 @@ const api: TaskminalApi = {
     push: (dir, target) => ipcRenderer.invoke(IPC.gitWorkflowPush, dir, target),
     create: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowCreate, dir, input),
     merge: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowMerge, dir, input),
+    feedback: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowFeedback, dir, input),
   },
   appInfo: () => ipcRenderer.invoke(IPC.appInfo) as Promise<AppInfo>,
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | null>,

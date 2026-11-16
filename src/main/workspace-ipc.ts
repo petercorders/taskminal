@@ -28,7 +28,9 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   const editor = new WorkspaceEditor()
   const files = new WorkspaceFiles(secretOptions),
     browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined),join(app.getPath('userData'),'browser-captures')),
-    git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json')),
+    // 54단계: 시험(TASKMINAL_USER_DATA)만 피드백 읽기 한도를 줄인다
+    feedbackLimit = process.env['TASKMINAL_USER_DATA'] ? Number(process.env['TASKMINAL_GH_FEEDBACK_TIMEOUT_MS']) : 0,
+    git = new GitWorkflowService(undefined, join(app.getPath('userData'), 'git-workflow-pending.json'), feedbackLimit > 0 ? feedbackLimit : undefined),
     accounts = new Accounts(join(app.getPath('userData'), 'accounts'))
   const win = (event: IpcMainInvokeEvent) => {
     if (!trusted(event)) throw new Error('알 수 없는 프레임')
@@ -176,6 +178,10 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     )
       throw new Error('잘못된 PR')
     return git.merge(root(e, dir), input)
+  })
+  ipcMain.handle(IPC.gitWorkflowFeedback, (e, dir, input) => {
+    if (!input || !validGitTarget(input.target) || !Number.isSafeInteger(input.number) || input.number < 1 || typeof input.head !== 'string' || !/^[a-f0-9]{40,64}$/.test(input.head)) throw new Error('잘못된 PR')
+    return git.feedback(root(e, dir), { target: input.target, number: input.number, head: input.head }, (text) => redact(text, secretOptions()))
   })
   app.on('will-quit', () => {
     browser.dispose()

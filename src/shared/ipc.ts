@@ -36,6 +36,7 @@ export const IPC = {
   gitWorkflowPush: 'git-workflow:push',
   gitWorkflowCreate: 'git-workflow:create',
   gitWorkflowMerge: 'git-workflow:merge',
+  gitWorkflowFeedback: 'git-workflow:feedback',
   appInfo: 'app:info',
   ptySpawn: 'pty:spawn', // invoke
   ptyWrite: 'pty:write', // send
