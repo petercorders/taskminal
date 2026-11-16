@@ -1,8 +1,12 @@
 // Stable across Electron IPC, which preserves Error messages but not custom fields.
 export const ISSUE_TASK_DELETED = '[issue-task-deleted]'
-export type IssueProvider = 'github' | 'linear'
-export interface IssueRecord { provider: IssueProvider; id: string; key: string; title: string; body: string; url: string; state: string }
-export interface IssuePage { items: IssueRecord[]; cursor?: string }
+export type IssueProvider = 'github' | 'linear' | 'jira'
+/** due: Jira 마감(YYYY-MM-DD, 55단계) */
+export interface IssueRecord { provider: IssueProvider; id: string; key: string; title: string; body: string; url: string; state: string; due?: string }
+/** truncated: 상한(Jira 100개)에서 멈췄고 더 있음 */
+export interface IssuePage { items: IssueRecord[]; cursor?: string; truncated?: boolean }
+/** 기존 일감에 이슈 연결(55단계) — main 이 이슈를 다시 읽고 일감이 아직 있는지 확인한다 */
+export interface IssueAttach { requestId: string; provider: IssueProvider; id: string; source: string; taskId: string }
 export interface IssueLink { taskId: string; root: string; issue: IssueRecord; prUrl?: string }
 export interface IssuePrepare { requestId: string; provider: IssueProvider; id: string; source: string; root: string; worktree: boolean; base: string }
 export interface IssueApi {

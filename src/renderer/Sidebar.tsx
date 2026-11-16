@@ -55,13 +55,15 @@ interface Props {
   onArchiveMany?(ids: Id[]): void
   /** 원격 일감의 연결 상태 — 사이드바 '⇄ host' 칩의 점 */
   remoteStateOf?(task: Task): 'up' | 'retry' | 'down' | null
+  /** 55단계 연결한 Jira 키 · 마감 — 둘째 줄 칩 (지났으면 빨강 + '마감 지남' 글자) */
+  issueOf?(task: Task): { text: string; overdue: boolean; title?: string } | null
 }
 
 const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null }: Props) {
+export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, issueOf = () => null }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -196,6 +198,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
                       ⇄ {task.host}
                     </span>
                   )}
+                  {issueOf(task) && <span className={`task-issue${issueOf(task)!.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issueOf(task)!.title ?? issueOf(task)!.text}>{issueOf(task)!.text}</span>}
                   <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>

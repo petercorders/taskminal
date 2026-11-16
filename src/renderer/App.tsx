@@ -46,6 +46,8 @@ import { WorkflowPanel } from './WorkflowPanel'
 import { SchedulePanel } from './SchedulePanel'
 import { WorktreePanel } from './WorktreePanel'
 import { IssuesPanel } from './IssuesPanel'
+import { JiraTaskHead, jiraSidebarText } from './JiraTaskHead'
+import { loadIssueLinks, useIssueLinks } from './issue-links'
 import type { ChatImage } from '../shared/chat'
 import { ArchivePanel } from './ArchivePanel'
 import { WeeklyPanel } from './WeeklyPanel'
@@ -205,6 +207,9 @@ export function App() {
     observer.observe(toolbar); measure()
     return () => observer.disconnect()
   }, [])
+  // 55단계: 사이드바 · 일감 머리의 Jira 키 · 마감 — 앱을 열 때 한 번, 이슈 패널이 읽을 때마다 갱신
+  const issueLinks = useIssueLinks()
+  useEffect(() => { loadIssueLinks(window.taskminal.issues) }, [])
   const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';url?:string;runId?:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
@@ -1884,6 +1889,7 @@ export function App() {
       <div className="app-body">
         <CompactSidebar open={sidebarCompactOpen} onClose={() => setSidebarCompactOpen(false)}>
         <Sidebar
+          issueOf={(t) => jiraSidebarText(issueLinks.find((link) => link.taskId === t.id && link.issue.provider === 'jira'), new Date())}
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
           onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees',issues:'issues'} as const)[kind]))}
           state={viewState}
@@ -1955,7 +1961,7 @@ export function App() {
                 setWorkTool(null);refocus()
               }}/>}
               {workTool.kind==='schedule'&&<SchedulePanel key={activeTask.id} taskId={activeTask.id} onOpenRun={runId=>{void window.taskminal.workflows.view().then(view=>{const run=view.runs.find(r=>r.id===runId&&r.taskId===activeTask.id);const task=stateRef.current.tasks.find(t=>t.id===activeTask.id&&!t.host&&t.archivedAt===undefined);if(!run||!task)return showToast({text:'실행 기록이나 일감이 사라졌어요.'});if(stateRef.current.activeTaskId!==task.id)return;setWorkTool(old=>old===workTool&&old?.kind==='schedule'&&old.taskId===task.id?{taskId:task.id,kind:'workflow',runId}:old)}).catch(()=>showToast({text:'실행 기록을 읽지 못했어요.'}))}}/>}
-              {workTool.kind==='issues'&&<IssuesPanel key={activeTask.id} api={window.taskminal.issues} taskId={activeTask.id} root={activeTask.cwd} onOpenTask={id=>{const target=stateRef.current.tasks.find(task=>task.id===id&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id});setWorkTool(null);refocus()}} onAttach={(taskId,text)=>{const target=stateRef.current.tasks.find(task=>task.id===taskId&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id:taskId});askChat(taskId,text);setWorkTool(null);refocus()}}/>}
+              {workTool.kind==='issues'&&<IssuesPanel key={activeTask.id} api={window.taskminal.issues} tasks={state.tasks.filter(item=>!item.host&&item.archivedAt===undefined).map(item=>({id:item.id,name:item.name}))} taskId={activeTask.id} root={activeTask.cwd} onOpenTask={id=>{const target=stateRef.current.tasks.find(task=>task.id===id&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id});setWorkTool(null);refocus()}} onAttach={(taskId,text)=>{const target=stateRef.current.tasks.find(task=>task.id===taskId&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id:taskId});askChat(taskId,text);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='workflow'&&<WorkflowPanel key={activeTask.id} taskId={activeTask.id} initialRunId={workTool.runId} onOpenPane={paneId=>{const task=stateRef.current.tasks.find(t=>t.id===activeTask.id);if(!task?.panes[paneId])return showToast({text:'실행 대화가 사라졌어요.'});setWorkTool(null);gotoPane(paneId)}}/>}
             </>}
           </aside>}
@@ -1971,6 +1977,7 @@ export function App() {
                 data-task-name={task.name}
                 aria-hidden={!taskActive}
               >
+                {(() => { const link = issueLinks.find((item) => item.taskId === task.id && item.issue.provider === 'jira'); return link ? <JiraTaskHead link={link} /> : null })()}
                 {(() => {
                   const { shown, more } = quickButtons(task, state.settings.quickCommands)
                   // 27단계: 대화 탭에서 빈 '빠른 명령' 안내 띠는 셸 명령 안내라 자리만 차지한다 — 단추가 생기면 그때 보인다

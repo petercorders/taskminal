@@ -1,9 +1,10 @@
-import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, safeStorage, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
 import type { UiReply, UiRequest } from '../shared/cli'
 import { Issues } from './issues'
+import { Jira, type Cipher } from './jira'
 interface Dependencies {
   state(): AppState | null
   saved(): AppState | null
@@ -11,8 +12,21 @@ interface Dependencies {
 }
 export function installIssuesIpc(trusted: (event: IpcMainInvokeEvent) => boolean, d: Dependencies) {
   const exists = (id: string) => !!d.state()?.tasks.some(task => task.id === id && !task.host && task.archivedAt === undefined) && !!d.saved()?.tasks.some(task => task.id === id && !task.host && task.archivedAt === undefined)
+  // 55단계: 시험(TASKMINAL_USER_DATA)만 http://127.0.0.1 · 짧은 한도 · safeStorage 끄기(실제 키체인을 건드리지 않게)를 쓴다
+  const testing = !!process.env['TASKMINAL_USER_DATA']
+  const off: Cipher = { available: () => false, encrypt: () => { throw new Error('off') }, decrypt: () => { throw new Error('off') } }
+  const timeoutMs = Number(process.env['TASKMINAL_JIRA_TIMEOUT_MS'])
+  const jira = new Jira({
+    dir: app.getPath('userData'),
+    cipher: testing && process.env['TASKMINAL_JIRA_NO_SAFE_STORAGE'] ? off : { available: () => safeStorage.isEncryptionAvailable(), encrypt: text => safeStorage.encryptString(text), decrypt: data => safeStorage.decryptString(data) },
+    env: process.env,
+    allowLoopback: testing,
+    ...(testing && timeoutMs > 0 ? { timeoutMs } : {}),
+  })
   const service = new Issues(join(app.getPath('userData'), 'issues'), {
     exists,
+    cwd: taskId => d.state()?.tasks.find(task => task.id === taskId)?.cwd,
+    jira,
     prepare: async (taskId, root, issue) => {
       if (!d.state() || !d.saved()) throw new Error('일감 저장을 준비하지 못했어요')
       const reply = await d.ask({ op: 'issue.prepare', taskId, root, issue })
@@ -29,5 +43,13 @@ export function installIssuesIpc(trusted: (event: IpcMainInvokeEvent) => boolean
   ipcMain.handle(IPC.issuesPrepare, (event, input) => { check(event); return service.prepare(input) })
   ipcMain.handle(IPC.issuesLinkPr, (event, taskId, url) => { check(event); if (typeof url !== 'string' || url.length > 4096) throw new Error('PR 주소를 확인해 주세요'); return service.linkPr(id(taskId), url) })
   ipcMain.handle(IPC.issuesClose, (event, taskId) => { check(event); return service.close(id(taskId)) })
+  ipcMain.handle(IPC.jiraStatus, event => { check(event); return jira.status() })
+  ipcMain.handle(IPC.jiraSave, (event, input) => { check(event); return jira.save(input) })
+  ipcMain.handle(IPC.jiraClear, event => { check(event); return jira.clear() })
+  ipcMain.handle(IPC.jiraAttach, (event, input) => {
+    check(event)
+    if (!input || typeof input !== 'object') throw new Error('연결할 이슈와 일감을 확인해 주세요')
+    return service.attach({ requestId: input.requestId, provider: 'jira', id: input.id, source: '', taskId: id(input.taskId) })
+  })
   return service
 }
