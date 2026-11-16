@@ -43,7 +43,7 @@ export function installWorkflowIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
   send:async(run,step,text)=>{
    const t=task(run.taskId),pane=t?.panes[step.paneId],sink=d.sink(),spec=run.workflow.steps.find(s=>s.id===step.id)!
    if(!t||pane?.workflowRunId!==run.id||pane.chat?.agent!==spec.agent||!sink||sink.isDestroyed())return 'no-window'
-   return d.manager.send(sink,step.paneId,text,pane.cwd,pane.chat,[],true)
+   return d.manager.send(sink,step.paneId,text,pane.cwd,{...pane.chat,...(spec.model?{model:spec.model}:{}),...(spec.effort?{effort:spec.effort}:{})},[],true)
   },
   close:pane=>d.manager.close(pane),
  })
@@ -55,6 +55,9 @@ export function installWorkflowIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
  ipcMain.handle(IPC.workflowsRemove,(e,value)=>{check(e);runner.remove(id(value))})
  ipcMain.handle(IPC.workflowsStart,(e,input)=>{check(e);return runner.start(input)})
  ipcMain.handle(IPC.workflowsStop,(e,value)=>{check(e);runner.stop(id(value))})
+ ipcMain.handle(IPC.workflowsAppend,(e,run,step)=>{check(e);runner.append(id(run),step)})
+ ipcMain.handle(IPC.workflowsMessage,(e,run,message)=>{check(e);runner.message(id(run),message)})
+ ipcMain.handle(IPC.workflowsAnswer,(e,run,message,text)=>{check(e);runner.answerMessage(id(run),id(message),text)})
  ipcMain.handle(IPC.workflowsRetry,(e,value)=>{check(e);runner.retry(id(value))})
  app.on('will-quit',()=>{runner.dispose();off()})
  return runner

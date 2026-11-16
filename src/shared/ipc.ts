@@ -3,12 +3,13 @@ import type { AppState } from './types'
 
 // main · preload 가 함께 쓰는 IPC 채널 이름. renderer 는 채널을 모르고 preload API 만 부른다.
 export const IPC = {
+  developmentRequest:'development:request',
   remoteRequest: 'remote-workspace:request',
   issuesList: 'issues:list', issuesConfigure: 'issues:configure', issuesLinks: 'issues:links', issuesPrepare: 'issues:prepare', issuesLinkPr: 'issues:link-pr', issuesClose: 'issues:close',
   browserTabs:'browser:tabs',browserCreateTab:'browser:create-tab',browserSelectTab:'browser:select-tab',browserCloseTab:'browser:close-tab',browserRemember:'browser:remember',
   worktreesList:'worktrees:list',worktreesCreate:'worktrees:create',worktreesOpen:'worktrees:open',worktreesRemove:'worktrees:remove',
   schedulesView:'schedules:view',schedulesSave:'schedules:save',schedulesRemove:'schedules:remove',schedulesRunNow:'schedules:run-now',
-  workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
+  workflowsAppend:'workflows:append',workflowsMessage:'workflows:message',workflowsAnswer:'workflows:answer',workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
   conversationsSearch: 'conversations:search',
   conversationsVerify: 'conversations:verify',
   accountsList: 'accounts:list',

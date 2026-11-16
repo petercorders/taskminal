@@ -42,6 +42,8 @@ export interface ClaudeSessionOptions {
   bin: string
   env: Record<string, string>
   cwd: string
+  model?:string
+  effort?:'low'|'medium'|'high'
   permission: ChatPermission
   sessionId?: string
   /** 되감기 · 나누기 뒤 — 다음 띄울 때 이 assistant 줄에서 갈라진 새 세션으로 (init 을 받으면 지운다) */
@@ -81,7 +83,7 @@ export class ClaudeSession implements AgentSession {
     const gen = ++this.gen
     this.buf = ''
     this.stderr = ''
-    const child = this.o.spawn(this.o.bin, claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt), { cwd: this.o.cwd, env: this.o.env })
+    const child = this.o.spawn(this.o.bin, [...claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt),...(this.o.model?['--model',this.o.model]:[]),...(this.o.effort?['--effort',this.o.effort]:[])], { cwd: this.o.cwd, env: this.o.env })
     this.child = child
     child.stdin?.on?.('error', () => {}) // EPIPE — 끝남은 exit 가 알린다
     child.stdout?.on('data', (d: Buffer | string) => gen === this.gen && this.onData(String(d)))

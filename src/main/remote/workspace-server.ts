@@ -14,6 +14,7 @@ import { defaultShell, shellArgs } from '../../shared/platform'
 import { shellEnv } from '../../shared/pty'
 import { isChatDecision } from '../../shared/chat'
 import { redact } from '../../shared/redact'
+import type { RemoteTerminalHost } from './terminal-host'
 import type { RemoteWorkspace, RemoteTerminal, RemoteChat } from '../../shared/remote-workspace'
 
 interface Workspace extends RemoteWorkspace { chats: Array<RemoteChat & ChatRef> }
@@ -30,20 +31,25 @@ const valid = (v: unknown): v is Journal => {
 const inside = (root: string, target: string) => { const r = relative(root, target); return r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r) }
 /** Owns processes independently of HTTP clients. A client disconnect never kills them. */
 export class RemoteWorkspaceServer {
+  private readonly epoch = randomUUID()
   private readonly journal: AtomicJournal<Journal>
   private readonly data: Journal
   private readonly files = new WorkspaceFiles()
   private readonly editor = new WorkspaceEditor()
-  private readonly terminals = new Map<string, { process?: pty.IPty; data: string }>()
+  private readonly terminals = new Map<string, { process?: pty.IPty; data: string; total: number }>()
   private readonly manager: ChatManager
   private readonly sink: Sink = { send() {}, isDestroyed: () => false }
   private queue: Promise<unknown> = Promise.resolve()
   private closed = false
-  constructor(private readonly root: string, dir: string) {
+  private readonly ready: Promise<void>
+  constructor(private readonly root: string, dir: string, private readonly host?: RemoteTerminalHost) {
     this.journal = new AtomicJournal(join(dir, 'workspaces.json'), valid)
     this.data = this.journal.load({ root, workspaces: [], receipts: [] })
     if (this.data.root !== root) throw Error('서버 허용 폴더가 이전 기록과 다릅니다')
-    for (const w of this.data.workspaces) for (const s of w.sessions) if (s.exited === undefined) s.exited = -1
+    const append=(id:string,data:string)=>{const e=this.terminals.get(id)??{data:'',total:0};e.total+=data.length;e.data=(e.data+data).slice(-1_000_000);this.terminals.set(id,e)}
+    const exited=(id:string,code:number)=>{if(this.closed)return;for(const w of this.data.workspaces){const s=w.sessions.find(s=>s.id===id);if(s){s.exited=code;this.persist();break}}}
+    this.ready=host ? host.start(this.data.workspaces.flatMap(w=>w.sessions.filter(s=>s.exited===undefined).map(s=>s.id)),append,exited) : Promise.resolve()
+    if(!host)for (const w of this.data.workspaces) for (const s of w.sessions) if (s.exited === undefined) s.exited = -1
     this.persist()
     const finder = new AgentBinFinder()
     this.manager = new ChatManager({ store: new ChatStore(join(dir, 'chat')), redactOptions: () => ({}), spawn: (bin,args,options) => {
@@ -85,6 +91,7 @@ export class RemoteWorkspaceServer {
     return new Promise<string>((resolve, reject) => execFile('git', args, { cwd, env, encoding: 'utf8', timeout: 15000, maxBuffer: 2_000_000 }, (e, out) => e ? reject(Error('Git 상태를 읽지 못했어요')) : resolve(redact(out))))
   }
   async call(method: unknown, input: unknown): Promise<unknown> {
+    await this.ready
     if (this.closed) throw Error('서버가 종료됐어요')
     if (typeof method !== 'string' || !Array.isArray(input) || input.length > 5) throw Error('요청 형식')
     const a = input
@@ -128,19 +135,34 @@ export class RemoteWorkspaceServer {
       const s: RemoteTerminal = {id: randomUUID(), title: 'Shell ' + (w.sessions.length + 1)}
       // Register metadata before spawning; restart marks an unfinished session as exited.
       w.sessions.push(s); this.persist()
+      if(this.host){this.terminals.set(s.id,{data:'',total:0});await this.host.create(s.id,current);return structuredClone(s)}
       const proc = pty.spawn(defaultShell(process.platform, process.env), shellArgs(process.platform), {cwd: current, env: shellEnv(process.env), cols: 100, rows: 30, name: 'xterm-256color'})
-      const entry: {process?: pty.IPty; data: string} = {process: proc, data: ''}; this.terminals.set(s.id, entry)
-      proc.onData(data => { entry.data = (entry.data + data).slice(-1_000_000) })
+      const entry: {process?: pty.IPty; data: string; total:number} = {process: proc, data: '', total:0}; this.terminals.set(s.id, entry)
+      proc.onData(data => { entry.total+=data.length; entry.data = (entry.data + data).slice(-1_000_000) })
       proc.onExit(({exitCode}) => { s.exited = exitCode; entry.process = undefined; this.persist() })
       return structuredClone(s)
     })
     if (method === 'tail' && a.length === 2) { const s = this.session(w, a[1]); return {data: redact(this.terminals.get(s.id)?.data || ''), ...(s.exited === undefined ? {} : {exited: s.exited})} }
+    if(method==='stream'&&a.length===3){
+      const s=this.session(w,a[1]),offset=a[2];if(!Number.isSafeInteger(offset)||(offset as number)<0)throw Error('출력 위치 형식')
+      const e=this.terminals.get(s.id)??{data:'',total:0},start=e.total-e.data.length
+      const from=(offset as number)>e.total?start:Math.max(start,offset as number)
+      const data=e.data.slice(from-start,from-start+200_000)
+      return {data,offset:from+data.length,start,epoch:this.epoch,...(s.exited===undefined?{}:{exited:s.exited})}
+    }
+    if(method==='resize'&&a.length===4){
+      const s=this.session(w,a[1]),cols=a[2],rows=a[3]
+      if(!Number.isInteger(cols)||!Number.isInteger(rows)||(cols as number)<2||(cols as number)>500||(rows as number)<1||(rows as number)>300||s.exited!==undefined)throw Error('터미널 크기 또는 종료 상태를 확인해 주세요')
+      if(this.host)await this.host.resize(s.id,cols as number,rows as number)
+      else {const p=this.terminals.get(s.id)?.process;if(!p)throw Error('터미널이 종료됐어요');p.resize(cols as number,rows as number)}
+      return null
+    }
     if (method === 'write' && a.length === 3) {
       const s = this.session(w, a[1]), v = a[2] as {requestId: string; data: string}; if (!v) throw Error('입력 형식')
       const data = text(v.data, 100000)
-      return this.once(v.requestId, method, [w.id, s.id, data], async () => { const e = this.terminals.get(s.id); if (!e?.process || s.exited !== undefined) throw Error('터미널이 종료됐어요'); e.process.write(data); return null })
+      return this.once(v.requestId, method, [w.id, s.id, data], async () => { const e = this.terminals.get(s.id); if ((!this.host&&!e?.process) || s.exited !== undefined) throw Error('터미널이 종료됐어요'); if(this.host)await this.host.write(s.id,data);else e!.process!.write(data); return null })
     }
-    if (method === 'stop' && a.length === 2) { const s = this.session(w, a[1]); if(s.exited === undefined) this.terminals.get(s.id)?.process?.kill(); return null }
+    if (method === 'stop' && a.length === 2) { const s = this.session(w, a[1]); if(s.exited === undefined){if(this.host)await this.host.kill(s.id);else this.terminals.get(s.id)?.process?.kill()} return null }
     if (method === 'chat' && a.length === 3) {
       const agent = a[1]; if (agent !== 'claude' && agent !== 'codex') throw Error('에이전트 형식')
       return this.once(a[2], method, [w.id, agent], async () => { if(w.chats.length >= 200) throw Error('대화 한도'); const c = {id: randomUUID(), agent}; w.chats.push(c); return c })
@@ -155,5 +177,5 @@ export class RemoteWorkspaceServer {
     if (method === 'interrupt' && a.length === 2) { this.manager.interrupt(this.chatRef(w, a[1]).id); return null }
     throw Error('지원하지 않는 원격 요청입니다')
   }
-  dispose() { if(this.closed) return; this.closed=true; for (const t of this.terminals.values()) { try { t.process?.kill() } catch {} } for (const w of this.data.workspaces) for (const c of w.chats) this.manager.close(c.id) }
+  dispose() { if(this.closed) return; this.closed=true; this.host?.dispose(); for (const t of this.terminals.values()) { try { t.process?.kill() } catch {} } for (const w of this.data.workspaces) for (const c of w.chats) this.manager.close(c.id) }
 }

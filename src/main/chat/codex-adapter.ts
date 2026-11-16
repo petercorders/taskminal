@@ -19,6 +19,8 @@ export interface CodexSessionOptions {
   bin: string
   env: Record<string, string>
   cwd: string
+  model?:string
+  effort?:'low'|'medium'|'high'
   permission: ChatPermission
   /** 이어 할 스레드 id */
   sessionId?: string
@@ -255,7 +257,7 @@ export class CodexSession implements AgentSession {
           return
         }
         const pol = codexPolicy(this.o.permission)
-        const base = { cwd: this.o.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox }
+        const base = { ...(this.o.model?{model:this.o.model}:{}),cwd: this.o.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox }
         let r: Obj
         if (this.o.sessionId && this.o.forkAt) r = await this.call('thread/fork', { threadId: this.o.sessionId, lastTurnId: this.o.forkAt, ...base, excludeTurns: true })
         else if (this.o.sessionId) r = await this.call('thread/resume', { threadId: this.o.sessionId, ...base, excludeTurns: true })
@@ -271,7 +273,7 @@ export class CodexSession implements AgentSession {
       const input: Obj[] = [{ type: 'text', text, text_elements: [] }]
       for (const im of images) input.push({ type: 'localImage', path: await this.o.saveImage(im, ++this.images) })
       if (gen !== this.gen) return
-      const r = await this.call('turn/start', { threadId: this.threadId, input, approvalPolicy: codexPolicy(this.o.permission).approvalPolicy })
+      const r = await this.call('turn/start', { ...(this.o.model?{model:this.o.model}:{}),...(this.o.effort?{effort:this.o.effort}:{}),threadId: this.threadId, input, approvalPolicy: codexPolicy(this.o.permission).approvalPolicy })
       if (gen !== this.gen) return
       this.clearStartupTimer()
       const turn = isObj(r['turn']) ? r['turn'] : {}

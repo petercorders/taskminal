@@ -14,6 +14,7 @@ const MAX_LINE = 256 * 1024
 export const SESSION_WAIT_MS = 5000
 
 export interface CliServerDeps {
+  workflow?(command:Extract<CliRequest,{op:'workflow'}>):Promise<unknown>|unknown
   browser?(command: BrowserCommand):Promise<unknown>
   sockPath: string
   /** 창에 묻는다 — 창이 없거나 답이 없으면 { ok:false } */
@@ -137,6 +138,10 @@ export class CliServer {
   async handle(req: CliRequest, onAbort: (fn: () => void) => void = () => {}): Promise<CliReply> {
     const self = req.self !== undefined ? { self: req.self } : {}
     switch (req.op) {
+      case 'workflow': {
+        if(!this.d.workflow)return err('협업 도구를 사용할 수 없어요')
+        try{const data=await this.d.workflow(req);return {ok:true,data,text:JSON.stringify(data,null,2)}}catch(error){return err(error instanceof Error?error.message:'협업 요청 실패')}
+      }
       case 'browser': {
         if(!this.d.browser)return err('브라우저 도구를 사용할 수 없어요')
         try{const data=await this.d.browser(req);return {ok:true,data,text:JSON.stringify(data,null,2)}}catch(error){return err(error instanceof Error?error.message:'브라우저 작업에 실패했어요')}

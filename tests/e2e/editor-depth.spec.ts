@@ -1,0 +1,88 @@
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { captureWindow, firstWindow, seedState, waitLoaded } from './helpers'
+
+let dir: string, app: ElectronApplication, win: Page
+async function edit(name = 'code.ts') {
+  await win.getByRole('button', { name, exact: true }).click()
+  await win.getByRole('button', { name: '편집', exact: true }).click()
+  await expect(win.getByRole('textbox', { name: '파일 편집 내용', exact: true })).toBeEnabled()
+}
+test.beforeEach(async () => {
+  dir = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-editor-depth-')))
+  writeFileSync(join(dir, 'code.ts'), 'const apple = 1;\nconst banana = apple;\n// third line')
+  writeFileSync(join(dir, 'other.ts'), 'const other = 2;')
+  seedState(dir, [{ id: 't', name: '코드 편집', paneId: 'p', cwd: dir }])
+  app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: dir } })
+  win = await firstWindow(app)
+  await waitLoaded(win)
+  await win.getByRole('button', { name: '파일 탐색', exact: true }).click()
+  await edit()
+})
+test.afterEach(async () => {
+  await app?.close()
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
+})
+test('코드 구문 강조와 내장 찾기·바꾸기·줄 이동으로 실제 파일을 편집한다', async () => {
+  const input = win.getByRole('textbox', { name: '파일 편집 내용', exact: true })
+  await expect(win.locator('.cm-line').first().locator('span').first()).toHaveText('const')
+  await win.locator('.code-editor').scrollIntoViewIfNeeded()
+  await captureWindow(app, '/tmp/taskminal-50-code-editor.png')
+  await win.getByRole('button', { name: '찾기 / 바꾸기', exact: true }).click()
+  await win.getByPlaceholder('Find', { exact: true }).fill('apple')
+  await win.getByPlaceholder('Replace', { exact: true }).fill('pear')
+  await win.getByRole('button', { name: 'replace all', exact: true }).click()
+  await win.getByRole('button', { name: 'close', exact: true }).click()
+  await win.getByRole('button', { name: '줄 이동', exact: true }).click()
+  await win.getByRole('textbox', { name: 'Go to line:', exact: true }).fill('3')
+  await win.getByRole('textbox', { name: 'Go to line:', exact: true }).press('Enter')
+  await win.keyboard.type('// inserted ')
+  await input.press('ControlOrMeta+s')
+  await expect.poll(() => readFileSync(join(dir, 'code.ts'), 'utf8')).toBe('const pear = 1;\nconst banana = pear;\n// inserted // third line')
+})
+test('여러 커서 편집과 파일별 undo를 파일 이동·닫기 뒤에도 분리해서 유지한다', async () => {
+  const input = win.getByRole('textbox', { name: '파일 편집 내용', exact: true })
+  await input.fill('apple apple')
+  await input.press('ControlOrMeta+Home')
+  await input.press('ControlOrMeta+d')
+  await input.press('ControlOrMeta+d')
+  await win.keyboard.type('pear')
+  await expect(input).toHaveText('pear pear')
+  await edit('other.ts')
+  await input.fill('other changed')
+  await edit()
+  await expect(input).toHaveText('pear pear')
+  await input.press('ControlOrMeta+z')
+  await expect(input).toHaveText('apple apple')
+  await win.getByRole('button', { name: '미리보기로 돌아가기' }).click()
+  await win.getByRole('button', { name: '편집', exact: true }).click()
+  await input.press('ControlOrMeta+Shift+z')
+  await expect(input).toHaveText('pear pear')
+  await edit('other.ts')
+  await expect(input).toHaveText('other changed')
+})
+test('캐시 상한을 넘겨도 초안은 유지하고 오래된 실행 취소 모델은 버린다', async () => {
+  const input = win.getByRole('textbox', { name: '파일 편집 내용', exact: true })
+  await input.fill('kept draft')
+  // Files are created before refreshing the explorer so they use real main reads.
+  for (let index = 0; index < 9; index++) writeFileSync(join(dir, `extra-${index}.ts`), `const item = ${index};`)
+  await win.getByRole('button', { name: '작업 보조 화면 닫기' }).click()
+  await win.getByRole('button', { name: '파일 탐색', exact: true }).click()
+  for (let index = 0; index < 9; index++) await edit(`extra-${index}.ts`)
+  await edit()
+  await expect(input).toHaveText('kept draft')
+  await input.press('ControlOrMeta+z')
+  await expect(input).toHaveText('kept draft')
+  expect(readFileSync(join(dir, 'code.ts'), 'utf8')).toBe('const apple = 1;\nconst banana = apple;\n// third line')
+})
+test('CRLF 원문 줄바꿈을 키 입력과 저장 뒤에도 유지한다', async () => {
+  writeFileSync(join(dir, 'other.ts'), 'const a = 1;\r\nconst b = 2;\r\n')
+  await edit('other.ts')
+  const input = win.getByRole('textbox', { name: '파일 편집 내용', exact: true })
+  await input.press('ControlOrMeta+End')
+  await win.keyboard.type('// end')
+  await input.press('ControlOrMeta+s')
+  await expect.poll(() => readFileSync(join(dir, 'other.ts'), 'utf8')).toBe('const a = 1;\r\nconst b = 2;\r\n// end')
+})

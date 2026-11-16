@@ -146,6 +146,7 @@ export interface TaskminalApi {
   issues: import('../shared/issues').IssueApi
   worktrees: import('../shared/worktree-management').WorktreeApi
   schedules: import('../shared/schedules').ScheduleApi
+  development: import('../shared/development-tools').DevelopmentApi
   workflows: import('../shared/workflows').WorkflowApi
   conversations: import('../shared/conversation-search').ConversationApi
   accounts: import('../shared/accounts').AccountsApi

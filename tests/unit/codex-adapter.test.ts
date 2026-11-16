@@ -62,7 +62,7 @@ class FakeServer extends EventEmitter implements ChildLike {
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean; stall?: string } = {}) {
+function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean; stall?: string; model?:string;effort?:'low'|'medium'|'high' } = {}) {
   const servers: FakeServer[] = []
   const events: ChatEvent[] = []
   const saved: string[] = []
@@ -71,6 +71,7 @@ function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; fai
     env: {},
     cwd: '/tmp/work',
     permission: 'ask',
+    ...(o.model?{model:o.model}:{}),...(o.effort?{effort:o.effort}:{}),
     ...(o.sessionId ? { sessionId: o.sessionId } : {}),
     ...(o.forkAt ? { forkAt: o.forkAt } : {}),
     spawn: (_b, args) => {
@@ -386,4 +387,16 @@ describe('CodexSession', () => {
     expect(servers[0]!.got.at(-1)).toMatchObject({ method: 'turn/interrupt', params: { threadId: 'thr-1', turnId: 'turn-1' } })
     expect(servers[0]!.sentMethods().filter((m) => m === 'turn/interrupt')).toHaveLength(1)
   })
+})
+
+it('forwards worker model/effort to its own thread and turn without changing default launches',async()=>{
+ const first=setup({model:'worker-model',effort:'high'});first.s.send('hello')
+ await vi.waitFor(()=>expect(first.servers[0]?.got.some(m=>m.method==='turn/start')).toBe(true))
+ expect(first.servers[0]?.got.find(m=>m.method==='thread/start')?.params?.model).toBe('worker-model')
+ expect(first.servers[0]?.got.find(m=>m.method==='turn/start')?.params).toMatchObject({model:'worker-model',effort:'high'})
+ first.s.kill()
+ const second=setup();second.s.send('hello')
+ await vi.waitFor(()=>expect(second.servers[0]?.got.some(m=>m.method==='turn/start')).toBe(true))
+ expect(second.servers[0]?.got.find(m=>m.method==='turn/start')?.params).not.toHaveProperty('model')
+ second.s.kill()
 })

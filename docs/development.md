@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-14 (49단계 버그5건 수정·UI 확인·GC 완료. 단위1,209·e2e344 통과. 기능 브랜치 `stage-44-48-orca-workflow`; main 미병합·공개0.1.2 유지. 상세9절)
+마지막 갱신: 2026-11-16 (50단계 편집·환경·감독·원격·선언형 확장, 리뷰·UI·GC 완료. 최종 단위1,226·e2e359 확인: 전체 실행의 보안 API 기대 목록1건 정정 후 창 시험5개 재통과. 브랜치 `feat/orca-depth`, base `stage-44-48-orca-workflow`; main 미병합·공개0.1.2 유지. 상세 `docs/stages/50-orca-depth.md`)
 
 ## 1. 지금 어디까지
 
@@ -46,6 +46,7 @@
 | 47 이슈 연결 | GitHub/Linear 조회·일감/실제 worktree·맥락·PR·명시적 상태 변경. 단위1,201·관련 e2e5·변이2·GC 통과. 보안 기대 목록·임시 정리 시험 정정 후48 최종 전체에 포함해 통과. `docs/stages/47-issue-links.md` |
 | 48 원격 작업 공간 | 서버 소유 파일/CAS·Git·PTY 줄 입력·Claude/Codex 대화·앱 종료 후 재접속. 최종 타입·경계·단위1,206·e2e341 통과(종료0)·변이3·GC 완료. `docs/stages/48-remote-workspace.md`, 운영 방법 `docs/remote-workspaces.md` |
 | 49 전체 점검 버그 수정 | 손상 이슈 기록의 앱 시작 중단·CLI 탐색 실패 응답·삭제한 이슈 일감 재생성·원격 staged diff·리뷰 댓글 서명 복구. 단위1,209·e2e344·변이5·GC 완료, 전체 종료0. `docs/stages/49-five-bugfixes.md` |
+| 50 Orca 비교 다섯 영역 보강 | CodeMirror·worktree 환경 준비·실행 중 감독/모델·원격 xterm/HTTP 서버 재시작 생존·선언형 로컬 확장. 단위1,226·e2e359 최종 확인·변이13·GC. 전체 실행의 API 기대 목록1건은 정정 후 관련5개 재통과. `docs/stages/50-orca-depth.md`, `docs/stages/50-review-gc.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 

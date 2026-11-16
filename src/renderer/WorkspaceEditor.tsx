@@ -1,4 +1,5 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
+import { CodeEditor } from './CodeEditor'
 import './WorkspaceEditor.css'
 
 type EditableFile = { path: string; text: string; signature: string }
@@ -30,8 +31,6 @@ export function WorkspaceEditor({ root, path, onClose }: { root: string; path: s
   const key = JSON.stringify([root, path])
   if (!drafts.has(key)) drafts.set(key, { text: '', busy: false, error: '', status: '' })
   const draft = useSyncExternalStore(subscribe, () => drafts.get(key)!)
-  const input = useRef<HTMLTextAreaElement>(null)
-  const focusedKey = useRef<string | null>(null)
   const dirty = !!draft.base && draft.text !== draft.base.text
   async function read() {
     const snapshot = drafts.get(key)!
@@ -67,11 +66,6 @@ export function WorkspaceEditor({ root, path, onClose }: { root: string; path: s
     // Each key owns its pending operation, including while this view is closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
-  useEffect(() => {
-    if (!draft.base || focusedKey.current === key) return
-    focusedKey.current = key
-    input.current?.focus()
-  }, [key, draft.base])
   return (
     <section className="workspace-editor" aria-label={`${path} 편집`} data-testid="workspace-editor" onKeyDown={(event) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
@@ -87,13 +81,13 @@ export function WorkspaceEditor({ root, path, onClose }: { root: string; path: s
         <button className="button" disabled={draft.busy} onClick={() => void read()}>다시 읽기</button>
         <button className="button" onClick={onClose}>미리보기로 돌아가기</button>
       </div>
-      <p className="dim small">편집에는 가리지 않은 원문이 표시됩니다. ⌘S / Ctrl+S로 저장하세요. 초안은 파일 이동·패널 닫기 동안 유지되며 앱 종료·새로고침 때 사라집니다.</p>
+      <p className="dim small">편집에는 가리지 않은 원문이 표시됩니다. ⌘S / Ctrl+S로 저장하세요. 초안은 파일 이동·패널 닫기 동안 유지됩니다. 실행 취소는 최근 8개 파일에 유지되며 초안은 앱 종료·새로고침 때 사라집니다.</p>
       {draft.error && <p role="alert">{draft.error}</p>}
       {draft.status && <p role="status">{draft.status}</p>}
-      <label className="workspace-editor-label">
-        내 편집 초안
-        <textarea ref={input} aria-label="파일 편집 내용" spellCheck={false} value={draft.text} disabled={!draft.base} onChange={(event) => update(key, { text: event.target.value, status: '' })} />
-      </label>
+      <div className="workspace-editor-label">
+        <span>내 편집 초안</span>
+        {draft.base && <CodeEditor key={key} modelKey={key} path={path} value={draft.text} onChange={(text) => update(key, { text, status: '' })} />}
+      </div>
       {draft.conflict && <div className="workspace-editor-conflict">
         <p>최신 파일과 초안을 비교한 뒤 선택하세요. 준비 후에도 저장 버튼을 눌러야 파일이 바뀝니다.</p>
         <label className="workspace-editor-label">디스크 최신 내용<textarea aria-label="디스크 최신 내용" readOnly value={draft.conflict.text} /></label>

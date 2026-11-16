@@ -37,6 +37,7 @@ import type { ConversationHit } from '../shared/conversation-search'
 import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
 import { AccountsPanel } from './AccountsPanel'
+import { DevelopmentPanel } from './DevelopmentPanel'
 import { RemotePanel } from './RemotePanel'
 import { WorkspaceFiles } from './WorkspaceFiles'
 import { WorkspaceBrowser } from './WorkspaceBrowser'
@@ -204,7 +205,7 @@ export function App() {
     observer.observe(toolbar); measure()
     return () => observer.disconnect()
   }, [])
-  const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote';url?:string;runId?:string}|null>(null)
+  const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';url?:string;runId?:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
   // 설정을 열 때 보일 칸 (⌘P '셸 지킴이 보기' 등) — 닫으면 지운다
@@ -1807,7 +1808,7 @@ export function App() {
         if (!e.repeat) runCommandRef.current('shell-toggle')
         return
       }
-      if (t instanceof HTMLInputElement || (t instanceof HTMLTextAreaElement && !t.classList.contains('xterm-helper-textarea'))) return
+      if (t instanceof HTMLInputElement || (t instanceof HTMLTextAreaElement && !t.classList.contains('xterm-helper-textarea')) || (t instanceof HTMLElement && t.isContentEditable)) return
       // 아래 알림의 되돌리기 — 알림이 떠 있을 때만 ⌘Z 를 앱이 받는다(17단계)
       const undo = toastRef.current?.action
       if (undo && e.metaKey && e.code === 'KeyZ' && !e.shiftKey && !e.altKey && !e.ctrlKey) {
@@ -1926,8 +1927,9 @@ export function App() {
         </CompactSidebar>
         <main ref={workspaceElement} className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.kind==='remote'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
+            <button className="button" disabled={!activeTask||!!activeTask.host} onClick={()=>{if(activeTask){setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'development'})}}}>환경·확장</button>
             <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
-            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&kind!=='remote'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option><option value="remote">원격 작업 공간</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option></>}</>}</select>
+            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&kind!=='remote'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option><option value="remote">원격 작업 공간</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option><option value="development">환경·확장</option></>}</>}</select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
             <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button><button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:'',kind:'remote'})}}>원격 작업 공간</button>
@@ -1939,8 +1941,9 @@ export function App() {
           </nav>
           {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
           {workTool && (workTool.kind==='accounts'||workTool.kind==='remote'||activeTask?.id===workTool.taskId) && <aside className="work-tool-panel" aria-label="작업 보조 화면">
-            <header className="work-tools-row"><strong>{workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':workTool.kind==='issues'?'이슈 연결':workTool.kind==='remote'?'원격 작업 공간':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
+            <header className="work-tools-row"><strong>{workTool.kind==='development'?'환경·확장':workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':workTool.kind==='issues'?'이슈 연결':workTool.kind==='remote'?'원격 작업 공간':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
+              {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd}/>}
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)}/>}

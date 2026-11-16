@@ -132,3 +132,13 @@ export async function selectSettingsSection(settings: Locator, title: string): P
     else await settings.getByRole('navigation').getByRole('button', { name: title, exact: true }).click({ timeout: 750 })
   }).toPass({ timeout: 5000, intervals: [50,100,250] })
 }
+
+/** Only for a freshly-created test server data directory: stop its private PTY guardian. */
+export async function stopRemoteTerminalHost(serverData: string): Promise<void> {
+  const { createHash } = await import('node:crypto')
+  const { tmpdir } = await import('node:os')
+  const { socketPath, PTYHOST_PROTOCOL } = await import('../../src/shared/ptyhost')
+  const { oneShot } = await import('../../src/main/ptyhost/client')
+  const socket = socketPath(join(serverData, 'terminal-host'), PTYHOST_PROTOCOL, tmpdir(), s => createHash('sha1').update(s).digest('hex'), process.platform)
+  await oneShot(socket, [{ op: 'hello', version: PTYHOST_PROTOCOL }, { op: 'shutdown' }])
+}

@@ -1,0 +1,71 @@
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { captureWindow, firstWindow, runCli, seedState, waitLoaded } from './helpers'
+let data:string,app:ElectronApplication,win:Page
+async function openPanel(){await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0]!.webContents.send('app:command','workflows'));await expect(win.getByTestId('workflow-supervision')).toBeVisible()}
+test.beforeEach(async()=>{
+ data=mkdtempSync(join(tmpdir(),'tm-supervision-'));seedState(data,[{id:'task',name:'감독 검증',paneId:'shell',cwd:data}])
+ app=await electron.launch({args:['.'],env:{...process.env,TASKMINAL_USER_DATA:data,TASKMINAL_CLAUDE_BIN:resolve('tests/fixtures/fake-claude.mjs'),TASKMINAL_CODEX_BIN:resolve('tests/fixtures/fake-codex.mjs')}})
+ win=await firstWindow(app);await waitLoaded(win)
+ await win.evaluate(async()=>{await window.taskminal.workflows.save({id:'supervised',name:'감독 흐름',steps:[{id:'first',name:'첫 worker',agent:'claude',prompt:'perm',after:[]}]});await window.taskminal.workflows.start({requestId:'supervision-start',taskId:'task',workflowId:'supervised'})})
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.status)).toBe('waiting')
+ await openPanel()
+ const run=await win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]!),step=run.steps[0]!
+ const cli=await runCli(data,'workflow','message',run.id,JSON.stringify({id:'cli-status',stepId:step.id,paneId:step.paneId,attempt:step.attempt,kind:'status',text:'CLI 감독 연결 확인'}),'--json')
+ expect(cli.code).toBe(0)
+})
+test.afterEach(async()=>{await app?.close();rmSync(data,{recursive:true,force:true,maxRetries:5})})
+test('실행에 종속 worker를 추가하고 질문 답변까지 완료를 보류한 뒤 기존 결과를 보존한다',async()=>{
+ const ui=win.getByTestId('workflow-supervision')
+ await ui.getByRole('textbox',{name:'추가 단계 이름',exact:true}).fill('추가 검토')
+ await ui.getByRole('combobox',{name:'추가 단계 에이전트',exact:true}).selectOption('codex')
+ await ui.getByText('모델 설정 (선택)',{exact:true}).click();await ui.getByRole('textbox',{name:'추가 단계 모델',exact:true}).fill('gpt-6.1');await ui.getByRole('combobox',{name:'추가 단계 effort',exact:true}).selectOption('low')
+ await ui.getByRole('textbox',{name:'추가 단계 지시',exact:true}).fill('review')
+ await ui.getByRole('checkbox',{name:'첫 worker',exact:true}).check()
+ await ui.getByRole('button',{name:'추가 내용 확인',exact:true}).click()
+ await win.getByRole('alertdialog',{name:'실행에 단계 추가',exact:true}).getByRole('button',{name:'단계 추가 실행',exact:true}).click()
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.steps.length)).toBe(2)
+ await ui.getByRole('combobox',{name:'메시지 대상 worker',exact:true}).selectOption({index:1})
+ await ui.getByRole('combobox',{name:'기록 종류',exact:true}).selectOption('question')
+ await ui.getByRole('textbox',{name:'기록할 메시지',exact:true}).fill('검토를 계속 진행할까요?')
+ await ui.getByRole('button',{name:'메시지 기록',exact:true}).click()
+ await expect(ui.getByTestId('supervision-message').filter({hasText:'검토를 계속 진행할까요?'})).toContainText('검토를 계속 진행할까요?')
+ await win.getByRole('button',{name:'대화 열기',exact:true}).first().click()
+ await win.getByTestId('chat-pane').filter({visible:true}).getByRole('button',{name:'허락 ↩',exact:true}).click()
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.steps[0]?.completedBehindGate)).toBe(true)
+ await openPanel();await expect(ui.getByRole('status')).toContainText('질문 답변')
+ expect(await win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.steps[1]?.status)).toBe('pending')
+ await ui.getByTestId('supervision-message').filter({hasText:'검토를 계속 진행할까요?'}).scrollIntoViewIfNeeded();await captureWindow(app,'/tmp/taskminal-50-supervision-question.png')
+ await ui.getByRole('textbox',{name:'질문 답변',exact:true}).fill('계속 진행하세요')
+ await ui.getByRole('button',{name:'답변 기록',exact:true}).click()
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.status)).toBe('done')
+ const completed=await win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]!)
+ expect(completed.steps.map(step=>step.status)).toEqual(['done','done']);expect(completed.messages?.find(message=>message.kind==='question')?.answer).toBe('계속 진행하세요');expect(completed.workflow.steps[1]?.model).toBe('gpt-6.1');expect(completed.workflow.steps[1]?.effort).toBe('low');expect(completed.steps[0]?.attempt).toBe(1);expect(completed.steps[0]?.result).not.toBe('')
+ // A completed run remains appendable; existing results and attempts remain intact.
+ await ui.getByRole('textbox',{name:'추가 단계 이름',exact:true}).fill('후속 기록')
+ await ui.getByRole('textbox',{name:'추가 단계 지시',exact:true}).fill('followup')
+ await ui.getByRole('button',{name:'추가 내용 확인',exact:true}).click();await win.getByRole('alertdialog',{name:'실행에 단계 추가',exact:true}).getByRole('button',{name:'단계 추가 실행',exact:true}).click()
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.steps.length)).toBe(3)
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.status)).toBe('done')
+ const cli=await runCli(data,'workflow','view','--json');expect(cli.code).toBe(0);expect(cli.out).toContain('추가 검토')
+ const final=await win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]!)
+ expect(final.steps[0]?.result).toBe(completed.steps[0]?.result);expect(final.steps[0]?.attempt).toBe(1)
+})
+test('단계 추가 확인을 취소하면 실행을 바꾸지 않는다',async()=>{
+ const ui=win.getByTestId('workflow-supervision')
+ await ui.getByRole('textbox',{name:'추가 단계 이름',exact:true}).fill('취소할 단계');await ui.getByRole('textbox',{name:'추가 단계 지시',exact:true}).fill('cancel')
+ await ui.getByRole('button',{name:'추가 내용 확인',exact:true}).click();await win.getByRole('alertdialog',{name:'실행에 단계 추가',exact:true}).getByRole('button',{name:'취소',exact:true}).click()
+ expect((await win.evaluate(()=>window.taskminal.workflows.view())).runs[0]?.steps).toHaveLength(1)
+})
+test('worker 재시도 뒤 이전 대상 선택을 폐기하고 새 시도를 명시적으로 골라 기록한다',async()=>{
+ const ui=win.getByTestId('workflow-supervision'),select=ui.getByRole('combobox',{name:'메시지 대상 worker',exact:true})
+ await select.selectOption({index:1});await ui.getByRole('textbox',{name:'기록할 메시지',exact:true}).fill('새 시도 상태 기록')
+ await win.evaluate(async()=>{const run=(await window.taskminal.workflows.view()).runs[0]!;await window.taskminal.workflows.stop(run.id);await window.taskminal.workflows.retry(run.id)})
+ await expect.poll(()=>win.evaluate(async()=>(await window.taskminal.workflows.view()).runs[0]?.steps[0]?.attempt)).toBe(2)
+ await expect(select).toHaveValue('')
+ await ui.getByRole('button',{name:'메시지 기록',exact:true}).click()
+ expect((await win.evaluate(()=>window.taskminal.workflows.view())).runs[0]?.messages??[]).toHaveLength(1)
+ await select.selectOption({index:1});await ui.getByRole('button',{name:'메시지 기록',exact:true}).click();await expect(ui.getByTestId('supervision-message').filter({hasText:'시도 2'})).toContainText('시도 2')
+})

@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { chmod, mkdir, open, realpath } from 'node:fs/promises'
 import { join, relative, isAbsolute, sep } from 'node:path'
+import { RemoteTerminalHost } from './terminal-host'
 import { RemoteWorkspaceServer } from './workspace-server'
 import { openSync, closeSync, writeFileSync, unlinkSync } from 'node:fs'
 
@@ -31,7 +32,8 @@ async function main() {
   try { const f = await open(file, 'wx', 0o600); try { token = randomBytes(32).toString('hex'); await f.writeFile(token); await f.sync() } finally { await f.close() } }
   catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; const {constants} = await import('node:fs'); const f = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW); try { const s = await f.stat(); if (!s.isFile() || s.size !== 64) throw Error('서버 토큰 파일 형식'); token = await f.readFile('utf8'); await f.chmod(0o600) } finally { await f.close() } }
   if (!/^[a-f0-9]{64}$/.test(token!)) throw Error('서버 토큰 파일 형식')
-  const service = new RemoteWorkspaceServer(root, dir)
+  const service = new RemoteWorkspaceServer(root, dir, new RemoteTerminalHost(dir, join(__dirname,'host.js')))
+  await service.call('workspaces',[])
   const server = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control','no-store')
     const supplied = req.headers.authorization?.replace(/^Bearer /,'') || ''
