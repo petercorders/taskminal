@@ -54,7 +54,7 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     issues: ['list','configure','links','prepare','linkPr','close'],
     jira: ['status','save','clear','attach'],
     require: 'undefined', process: 'undefined',
-    apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],
+    apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'agentSessions', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'usage', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],
   })
 
   // 설정값이 아니라 실제로 돌고 있는 renderer 프로세스가 OS 샌드박스 안인지 본다.
