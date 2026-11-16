@@ -7,7 +7,7 @@ const ghText: Record<GitWorkflowView['gh'], string> = {
   ready: 'GitHub 연결됨',
   missing: 'GitHub CLI(gh)를 설치해 주세요.',
   login: '터미널에서 gh auth login으로 로그인해 주세요.',
-  'not-github': 'GitHub 원격을 선택하면 PR을 볼 수 있어요.',
+  'not-github': 'GitHub remote 를 고르면 PR을 볼 수 있어요.',
   error: 'PR 상태를 읽지 못했어요. 다시 읽어 주세요.',
 }
 const checksText = { passed: '체크 통과', pending: '체크 진행 중', failed: '체크 실패', none: '등록된 체크 없음' }
@@ -17,10 +17,12 @@ interface Props {
   onOpenUrl?(url: string): void
   /** 54단계: 체크 실패 · 리뷰 의견을 이 일감의 대화 입력칸 초안으로 */
   onSendToChat?(text: string): void
+  /** 56단계: 커밋 · 바뀐 파일은 변경 칸(⇧⌘G) 으로 — 이 패널은 push · PR */
+  onOpenReview?(): void
 }
 
 /** 33단계 변경 검토의 원격 작업. 버튼을 누르기 전 본 SHA와 실행 직전 SHA가 같아야 한다. */
-export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
+export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }: Props) {
   const [view, setView] = useState<GitWorkflowView | null>(null)
   const [remote, setRemote] = useState('')
   const [base, setBase] = useState('')
@@ -111,6 +113,11 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
       <header className="git-workflow-head">
         {/* 56단계: '원격' 은 원격 작업 공간(SSH) 에만 — 여기는 Git remote */}
         <h2 id="git-workflow-title">GitHub PR·push</h2>
+        {onOpenReview && (
+          <button type="button" className="button small" title="바뀐 파일을 보고 커밋해요 (⇧⌘G)" disabled={view?.state !== 'ok'} onClick={onOpenReview}>
+            변경 보기
+          </button>
+        )}
         <button type="button" className="button small" disabled={disabled} onClick={() => void load()}>
           다시 읽기
         </button>
@@ -131,6 +138,34 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
           <div className="dim small">
             {view.upstream ? `${view.upstream} · 앞섬 ${view.ahead} · 뒤처짐 ${view.behind}` : '연결된 upstream 없음'} · 마지막 로컬 조회 기준
           </div>
+          {/* 56단계: PR 이 있으면 상태 · 체크 · 리뷰 · CI 피드백을 먼저 — 보내기 설정(remote · push · base)은 아래 */}
+          {target && view.gh === 'ready' && pr && (
+            <div className="git-workflow-pr">
+              <strong>
+                #{pr.number} {pr.title}
+              </strong>
+              <div>
+                {pr.draft ? '초안 · ' : ''}
+                {pr.state} · {checksText[pr.checks]}
+                {pr.review ? ` · ${pr.review}` : ''}
+              </div>
+              <div className="small">PR head {pr.head.slice(0, 8)}</div>
+              <button type="button" className="button small" onClick={() => onOpenUrl?.(pr.url)} disabled={!onOpenUrl}>
+                PR 열기
+              </button>
+              <button
+                type="button"
+                className="button"
+                disabled={disabled || !pr.mergeable || pr.head !== target.head}
+                onClick={() => setConfirm({ target, number: pr.number, head: pr.head })}
+              >
+                병합 검토…
+              </button>
+              {!pr.mergeable && <div className="dim small">최신 리뷰·체크·충돌을 해결한 뒤 다시 읽어 주세요.</div>}
+              <CiFeedback key={`${target.repo}#${pr.number}`} api={api} dir={dir} target={target} pr={pr} {...(onSendToChat ? { onSend: onSendToChat } : {})} {...(onOpenUrl ? { onOpenUrl } : {})} />
+            </div>
+          )}
+          <h3 className="git-workflow-sub">보내기 설정</h3>
           {view.remotes.length === 0 ? (
             <p>Git remote 가 없어요. 터미널에서 git remote add 로 연결해 주세요.</p>
           ) : (
@@ -178,51 +213,26 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
                   <div className="small">
                     {target.repo} · {target.base ?? 'base를 선택해 주세요'} ← {target.branch}
                   </div>
-                  {pr ? (
-                    <div className="git-workflow-pr">
-                      <strong>
-                        #{pr.number} {pr.title}
-                      </strong>
-                      <div>
-                        {pr.draft ? '초안 · ' : ''}
-                        {pr.state} · {checksText[pr.checks]}
-                        {pr.review ? ` · ${pr.review}` : ''}
-                      </div>
-                      <div className="small">PR head {pr.head.slice(0, 8)}</div>
-                      <button type="button" className="button small" onClick={() => onOpenUrl?.(pr.url)} disabled={!onOpenUrl}>
-                        PR 열기
-                      </button>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={disabled || !pr.mergeable || pr.head !== target.head}
-                        onClick={() => setConfirm({ target, number: pr.number, head: pr.head })}
-                      >
-                        병합 검토…
-                      </button>
-                      {!pr.mergeable && <div className="dim small">최신 리뷰·체크·충돌을 해결한 뒤 다시 읽어 주세요.</div>}
-                      <CiFeedback key={`${target.repo}#${pr.number}`} api={api} dir={dir} target={target} pr={pr} {...(onSendToChat ? { onSend: onSendToChat } : {})} {...(onOpenUrl ? { onOpenUrl } : {})} />
-                    </div>
-                  ) : (
-                    <div className="git-workflow-create">
-                      <label className="git-workflow-field">
-                        PR 제목
-                        <input aria-label="PR 제목" maxLength={256} value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
-                      </label>
-                      <label className="git-workflow-field">
-                        PR 본문
-                        <textarea aria-label="PR 본문" maxLength={60000} value={body} disabled={busy} onChange={(e) => setBody(e.target.value)} />
-                      </label>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={disabled || !title.trim() || !target.base || target.base === target.branch}
-                        onClick={() => void run(() => api.create(dir, { target, title, body }))}
-                      >
-                        PR 만들기
-                      </button>
-                      <div className="dim small">현재 커밋을 원격에 올린 뒤 PR을 만들 수 있어요.</div>
-                    </div>
+                  {!pr && (
+                <div className="git-workflow-create">
+                  <label className="git-workflow-field">
+                    PR 제목
+                    <input aria-label="PR 제목" maxLength={256} value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} />
+                  </label>
+                  <label className="git-workflow-field">
+                    PR 본문
+                    <textarea aria-label="PR 본문" maxLength={60000} value={body} disabled={busy} onChange={(e) => setBody(e.target.value)} />
+                  </label>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={disabled || !title.trim() || !target.base || target.base === target.branch}
+                    onClick={() => void run(() => api.create(dir, { target, title, body }))}
+                  >
+                    PR 만들기
+                  </button>
+                  <div className="dim small">현재 커밋을 remote 에 올린(push) 뒤 PR을 만들 수 있어요.</div>
+                </div>
                   )}
                 </>
               )}

@@ -1,10 +1,12 @@
 import { app, ipcMain, safeStorage, type IpcMainInvokeEvent } from 'electron'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
 import type { UiReply, UiRequest } from '../shared/cli'
 import { Issues } from './issues'
 import { Jira, type Cipher } from './jira'
+import { localGithubRepo, makeWorkflowRunner } from './git-workflow'
 interface Dependencies {
   state(): AppState | null
   saved(): AppState | null
@@ -43,6 +45,15 @@ export function installIssuesIpc(trusted: (event: IpcMainInvokeEvent) => boolean
   ipcMain.handle(IPC.issuesPrepare, (event, input) => { check(event); return service.prepare(input) })
   ipcMain.handle(IPC.issuesLinkPr, (event, taskId, url) => { check(event); if (typeof url !== 'string' || url.length > 4096) throw new Error('PR 주소를 확인해 주세요'); return service.linkPr(id(taskId), url) })
   ipcMain.handle(IPC.issuesClose, (event, taskId) => { check(event); return service.close(id(taskId)) })
+  // 56단계: 저장소 칸 채우기 — 이 앱의 로컬 일감 폴더만(원격 · 보관 일감 · 모르는 경로는 null), 로컬 git remote 만 읽는다
+  const gitRun = makeWorkflowRunner()
+  ipcMain.handle(IPC.issuesRepo, async (event, root) => {
+    check(event)
+    if (typeof root !== 'string' || root.length > 4096 || root.includes('\0')) return null
+    if (!d.state()?.tasks.some(task => !task.host && task.archivedAt === undefined && task.cwd === root)) return null
+    const dir = root === '~' ? homedir() : root.startsWith('~/') ? join(homedir(), root.slice(2)) : root
+    return isAbsolute(dir) ? localGithubRepo(gitRun, dir) : null
+  })
   ipcMain.handle(IPC.jiraStatus, event => { check(event); return jira.status() })
   ipcMain.handle(IPC.jiraSave, (event, input) => { check(event); return jira.save(input) })
   ipcMain.handle(IPC.jiraClear, event => { check(event); return jira.clear() })

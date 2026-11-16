@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ISSUE_TASK_DELETED, type IssueApi, type IssueLink, type IssueRecord } from '../shared/issues'
 import { ConfirmDialog } from './ConfirmDialog'
 import { JiraList } from '../shared/jira-list'
@@ -53,6 +53,8 @@ const linkVersions = new Map<string, number>()
 const consumers = new Map<string, number>()
 // 55단계: Jira 목록은 요청 번호 · 한 번에 하나 · 안 보이면 미룸을 JiraList 가 맡는다
 const jiraLists = new Map<string, JiraList>()
+// 56단계: 저장소 칸을 일감 폴더의 remote 로 채우려고 물은 키 — 키마다 한 번(다시 열 때 · 복귀 때 다시 묻지 않는다)
+const repoAsked = new Set<string>()
 const JIRA_STORAGE: Record<JiraStatus['storage'], string> = { encrypted: '암호화해 저장함', memory: '이번 실행 동안만 기억', env: '환경 변수', none: '' }
 const visibleConsumer = (key: string) => (consumers.get(key) ?? 0) > 0 && !document.hidden
 const subscribe = (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify) } }
@@ -89,7 +91,8 @@ export function IssuesPanel(p: Props) {
   const [confirmation, setConfirmation] = useState<{ kind: 'prepare'; input: Prepare; issue: IssueRecord } | { kind: 'close'; link: IssueLink } | { kind: 'attach'; requestId: string; taskId: string; taskName: string; issue: IssueRecord } | null>(null)
   const active = useRef<string | null>(key)
   active.current = key
-  useEffect(() => {
+  // 56단계: 첫 읽기는 그리기 전에 시작한다 — 아니면 '연결 목록 다시 읽기' 가 읽기 전 한 화면 동안 켜져 보인다
+  useLayoutEffect(() => {
     active.current = key
     setToken('')
     setConfiguring(false)
@@ -101,6 +104,14 @@ export function IssuesPanel(p: Props) {
     }
     document.addEventListener('visibilitychange', visible)
     void loadLinks()
+    // 56단계: GitHub 저장소 칸이 비었으면 일감 폴더의 remote 로 한 번 채운다 — 답이 오기 전에 직접 썼거나 서비스를 바꿨으면 두지 않는다
+    if (!repoAsked.has(key) && drafts.get(key)!.provider === 'github' && !drafts.get(key)!.source.trim()) {
+      repoAsked.add(key)
+      void p.api.repo(p.root).then((repo) => {
+        const now = drafts.get(key)
+        if (repo && now && now.provider === 'github' && !now.source.trim()) update(key, { source: repo })
+      }).catch(() => {})
+    }
     // 다시 연 패널은 전에 읽은 Jira 목록을 한 번 새로 읽는다(읽는 중이면 끝난 뒤)
     if (drafts.get(key)!.provider === 'jira' && jiraList.view.at !== null) jiraList.refresh(drafts.get(key)!.source.trim() || JIRA_DEFAULT_JQL)
     return () => {

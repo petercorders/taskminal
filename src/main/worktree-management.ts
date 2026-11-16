@@ -275,7 +275,7 @@ export class WorktreeManagement {
     validateTarget(target)
     const entry = this.find(await this.registry(root), target)
     await this.inspect(entry, [])
-    if (!entry.canOpen || entry.bare || entry.prunable || entry.unknownAttributes.length) throw new Error('이 checkout을 열 수 없어요. 경로와 등록을 확인해 주세요.')
+    if (!entry.canOpen || entry.bare || entry.prunable || entry.unknownAttributes.length) throw new Error('이 워크트리를 열 수 없어요. 경로와 등록을 확인해 주세요.')
     return { path: entry.path }
   }
 
@@ -325,7 +325,7 @@ export class WorktreeManagement {
     catch { state = 'unknown' }
     return {
       state, path: receipt.path, existing,
-      message: state === 'created' ? '등록된 checkout과 기준 커밋을 확인했어요.' : '생성 결과를 확인해야 해요. 폴더·브랜치를 확인하기 전에는 같은 요청을 다시 실행하지 않아요.',
+      message: state === 'created' ? '등록된 워크트리와 기준 커밋을 확인했어요.' : '생성 결과를 확인해야 해요. 폴더·브랜치를 확인하기 전에는 같은 요청을 다시 실행하지 않아요.',
     }
   }
 

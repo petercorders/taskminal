@@ -198,3 +198,32 @@ test('두 뜻 낱말: 원격은 원격 작업 공간에만 · 사이드바 보�
   await expect(git.getByRole('combobox', { name: 'push 할 remote' }).locator('option[value="origin"]')).toHaveCount(1)
   await expect(git).not.toContainText('원격')
 })
+
+async function openIssues() {
+  await bar().getByRole('button', { name: '일감 도구 ▾' }).click()
+  await win.getByRole('menuitem', { name: '이슈 연결' }).click()
+  return win.getByTestId('issues-panel').getByRole('textbox', { name: 'GitHub 저장소 (owner/repo)' })
+}
+
+test('이슈 연결: GitHub 저장소 칸을 일감 폴더의 remote 로 채운다', async () => {
+  await expect(await openIssues()).toHaveValue('acme/widgets')
+})
+
+test('이슈 연결: 저장소 답이 오기 전에 직접 쓴 값은 덮지 않는다', async () => {
+  // 답을 붙잡아 두고 먼저 쓴 뒤 놓는다
+  await app.evaluate(({ ipcMain }) => {
+    const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>> })._invokeHandlers
+    const original = handlers.get('issues:repo')!
+    ipcMain.removeHandler('issues:repo')
+    ipcMain.handle('issues:repo', async (...args) => {
+      await new Promise((r) => ((globalThis as unknown as { releaseRepo: () => void }).releaseRepo = r as () => void))
+      return original(...args)
+    })
+  })
+  const field = await openIssues()
+  await field.fill('mine/typed')
+  await expect.poll(() => app.evaluate(() => typeof (globalThis as unknown as { releaseRepo?: unknown }).releaseRepo)).toBe('function')
+  await app.evaluate(() => (globalThis as unknown as { releaseRepo: () => void }).releaseRepo())
+  await win.waitForTimeout(300)
+  await expect(field).toHaveValue('mine/typed')
+})

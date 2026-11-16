@@ -16,4 +16,6 @@ export interface IssueApi {
   prepare(input: IssuePrepare): Promise<IssueLink>
   linkPr(taskId: string, url: string): Promise<void>
   close(taskId: string): Promise<void>
+  /** 56단계: 일감 폴더의 GitHub 저장소(owner/repo) — 저장소 칸을 채운다. 로컬 git remote 만 읽는다, 모르면 null */
+  repo(root: string): Promise<string | null>
 }

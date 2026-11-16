@@ -4714,6 +4714,8 @@ input[type='checkbox'] {
 .git-workflow { overflow: auto; }
 .git-workflow-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 .git-workflow-path { overflow-wrap: anywhere; }
+/* 56단계: PR 카드 아래 '보내기 설정' 절 제목 */
+.git-workflow-sub { margin: var(--space-4) 0 0; padding-top: var(--space-3); border-top: 1px solid var(--line); font-size: 14px; }
 .git-workflow-field { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; }
 .git-workflow input, .git-workflow textarea, .git-workflow select { max-width: 100%; box-sizing: border-box; }
 .git-workflow-pr, .git-workflow-create { padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--r-lg); margin: var(--space-4) 0; }

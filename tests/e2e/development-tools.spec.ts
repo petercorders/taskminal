@@ -18,7 +18,8 @@ test.beforeEach(async()=>{
  await openDevelopment();await expect(win.getByTestId('development-panel')).toBeVisible()
 })
 test.afterEach(async()=>{await app?.close();rmSync(temp,{recursive:true,force:true,maxRetries:5})})
-async function preview(){await win.getByRole('textbox',{name:'준비할 worktree 경로',exact:true}).fill(target);await win.getByRole('button',{name:'환경 준비 미리보기',exact:true}).click();await expect(win.getByText('로컬 명령은 이 컴퓨터의 권한으로 실행됩니다.',{exact:false})).toBeVisible()}
+// 56단계: 경로를 치지 않고 이 저장소의 워크트리 중에서 고른다
+async function preview(){await win.getByRole('combobox',{name:'준비할 워크트리',exact:true}).selectOption(target);await win.getByRole('button',{name:'환경 준비 미리보기',exact:true}).click();await expect(win.getByText('로컬 명령은 이 컴퓨터의 권한으로 실행됩니다.',{exact:false})).toBeVisible()}
 test('환경 미리보기 확인 뒤 ignored 설정을 독립 복사하고 기존 대상은 보존한다',async()=>{
  config([{file:process.execPath,args:['-e',"require('fs').writeFileSync('ready.txt','prepared')"]}])
  await preview();await expect(win.getByTestId('environment-preview')).not.toContainText('ORIGINAL_PRIVATE_CONFIG');await win.getByTestId('environment-preview').scrollIntoViewIfNeeded();await captureWindow(app,'/tmp/taskminal-50-environment-preview.png');await win.getByRole('button',{name:'확인하고 환경 준비',exact:true}).click()

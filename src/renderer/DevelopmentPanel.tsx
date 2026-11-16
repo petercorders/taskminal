@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import type { EnvironmentPlan, ExtensionPreview, InstalledExtension, Preparation } from '../shared/development-tools'
+import { commandLine, type EnvironmentPlan, type ExtensionPreview, type InstalledExtension, type Preparation } from '../shared/development-tools'
 import './DevelopmentPanel.css'
 
 const states:Record<Preparation['state'],string>={running:'실행 중',done:'완료',failed:'실패',unknown:'결과 확인 필요',stopped:'중단'}
-export function DevelopmentPanel({root}:{root:string}) {
+// 56단계: 형식 설명은 접어 두고 예시로 — 펼친 raw 스키마 문단이 첫 화면을 차지했다
+const FORMAT_EXAMPLE=JSON.stringify({copies:['.env'],commands:[{file:'npm',args:['ci']}]},null,2)
+// 고르기 칸의 '직접 입력…' 값 — 경로는 늘 / 로 시작해 겹치지 않는다
+const TYPE='#type'
+/** initialTarget: 워크트리 관리의 '환경 준비…' 에서 고른 경로 · onOpenWorktrees: 고를 워크트리가 없을 때 만들러 가기 */
+export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:string;initialTarget?:string;onOpenWorktrees?():void}) {
  const [target,setTarget]=useState(''),[manifestPath,setManifestPath]=useState('')
  const [plan,setPlan]=useState<EnvironmentPlan|null>(null),[extension,setExtension]=useState<ExtensionPreview|null>(null)
  const [records,setRecords]=useState<Preparation[]>([]),[extensions,setExtensions]=useState<InstalledExtension[]>([])
  const [pending,setPending]=useState<{plan:EnvironmentPlan;id:string}|null>(null)
  const [busy,setBusy]=useState(false),[error,setError]=useState('')
+ // 56단계: 고를 워크트리(기본 · bare · 폴더 없는 것 제외) — 열 때 한 번 + '준비 기록 다시 확인' 때. null 은 읽는 중
+ const [checkouts,setCheckouts]=useState<string[]|null>(null),[typing,setTyping]=useState(false)
  const current=useRef({root,generation:0}),mounted=useRef(false),lock=useRef(false)
  const reading=useRef<{generation:number;promise:Promise<void>}|null>(null)
  if(current.current.root!==root)current.current={root,generation:current.current.generation+1}
@@ -16,7 +23,7 @@ export function DevelopmentPanel({root}:{root:string}) {
  const alive=(snapshot:string)=>mounted.current&&current.current.root===snapshot&&current.current.generation===generation
  const api=window.taskminal.development
  useEffect(()=>{
-  mounted.current=true;lock.current=false;setBusy(false);setTarget('');setManifestPath('');setPlan(null);setExtension(null);setPending(null);setRecords([]);setExtensions([]);setError('')
+  mounted.current=true;lock.current=false;setBusy(false);setTarget(initialTarget??'');setCheckouts(null);setTyping(false);void readCheckouts(root);setManifestPath('');setPlan(null);setExtension(null);setPending(null);setRecords([]);setExtensions([]);setError('')
   let stopped=false,timer:ReturnType<typeof setTimeout>|undefined
   const load=async()=>{
    if(stopped)return
@@ -31,6 +38,13 @@ export function DevelopmentPanel({root}:{root:string}) {
   const snapshot=root;lock.current=true;setBusy(true);setError('')
   try{await run(snapshot)}catch{if(alive(snapshot))setError('요청을 완료하지 못했어요. 경로·권한과 최신 파일을 확인해 주세요. 실행 중인 준비는 기록에서 결과를 확인하세요.')}
   finally{if(alive(snapshot)){lock.current=false;setBusy(false)}}
+ }
+ async function readCheckouts(snapshot:string){
+  try{
+   const view=await window.taskminal.worktrees.list(snapshot);if(!alive(snapshot))return
+   const paths=view.entries.filter(e=>!e.primary&&!e.bare&&!e.prunable).map(e=>e.path)
+   setCheckouts(paths);setTarget(t=>t||paths[0]||'')
+  }catch{if(alive(snapshot))setCheckouts([])}
  }
  async function refresh(snapshot:string){
   if(reading.current?.generation===generation)return reading.current.promise
@@ -50,19 +64,31 @@ export function DevelopmentPanel({root}:{root:string}) {
  }
  return <section className="development-panel" aria-label="환경 준비·확장" data-testid="development-panel">
   <h3>환경 준비</h3>
-  <p className="dim small">저장소의 <code>.taskminal/environment.json</code>을 직접 작성하세요. <code>copies: string[]</code>, <code>commands: {'{file, args[]}[]'}</code> 형식이며 같은 저장소의 별도 worktree에 준비합니다. 복사 원본은 Git에서 무시되고 추적되지 않는 파일이어야 합니다. 파일 내용은 미리보기에 표시하지 않습니다.</p>
-  <label>준비할 worktree 경로<input aria-label="준비할 worktree 경로" value={target} onChange={e=>{setTarget(e.target.value);setPlan(null)}} placeholder="/절대/경로/worktree" disabled={busy}/></label>
+  <p className="dim small">저장소의 <code>.taskminal/environment.json</code> 에 복사할 파일과 실행할 명령을 적어 두면, 고른 워크트리에 파일을 복사하고 명령을 실행해요. 파일 내용은 미리보기에 보이지 않아요.</p>
+  <details className="development-format"><summary>파일 형식 보기</summary>
+   <pre>{FORMAT_EXAMPLE}</pre>
+   <p className="dim small"><code>copies</code>: Git 이 무시하고 추적하지 않는 파일만 · <code>commands</code>: 셸 없이 실행할 프로그램(<code>file</code>)과 인자(<code>args</code>). 의존성은 워크트리마다 따로 설치해요.</p>
+  </details>
+  {checkouts===null?<p className="dim small" role="status">워크트리 목록을 읽는 중…</p>:<>
+   {checkouts.length>0&&<label>준비할 워크트리<select aria-label="준비할 워크트리" value={typing?TYPE:target} disabled={busy} onChange={e=>{const v=e.target.value;setPlan(null);if(v===TYPE)setTyping(true);else{setTyping(false);setTarget(v)}}}>
+    {target&&!typing&&!checkouts.includes(target)&&<option value={target}>{target}</option>}
+    {checkouts.map(path=><option key={path} value={path}>{path}</option>)}
+    <option value={TYPE}>직접 입력…</option>
+   </select></label>}
+   {checkouts.length===0&&<p className="dim small">이 저장소에 다른 워크트리가 없어요.{onOpenWorktrees&&<> <button type="button" className="link" onClick={onOpenWorktrees}>워크트리 관리에서 만들기</button></>}</p>}
+   {(typing||checkouts.length===0)&&<label>준비할 워크트리 경로<input aria-label="준비할 워크트리 경로" value={target} onChange={e=>{setTarget(e.target.value);setPlan(null)}} placeholder="/절대/경로/워크트리" disabled={busy}/></label>}
+  </>}
   <button className="button" disabled={busy||!target.trim()} onClick={()=>void action(async(snapshot)=>{const next=await api.preview(snapshot,target);if(alive(snapshot))setPlan(next)})}>환경 준비 미리보기</button>
   {plan&&<div className="development-preview" data-testid="environment-preview">
    <strong>{plan.target}</strong>
    <ul>{plan.copies.map(copy=><li key={copy.path}>{copy.path} · {copy.size} bytes · {copy.exists?'기존 파일 보존':'독립 복사'}</li>)}</ul>
    <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. 의존성은 대상 worktree에서 따로 설치하며 node_modules를 공유하지 않습니다.</p>
-   {plan.commands.length?plan.commands.map((command,index)=><pre key={index}>{JSON.stringify({file:command.file,args:command.args},null,2)}</pre>):<p>실행할 초기화 명령 없음</p>}
+   {plan.commands.length?plan.commands.map((command,index)=><pre key={index}>{commandLine(command)}</pre>):<p>실행할 초기화 명령 없음</p>}
    <div className="work-tools-row"><button className="button primary" disabled={busy} onClick={()=>prepare({plan,id:crypto.randomUUID()})}>확인하고 환경 준비</button><button className="button" disabled={busy} onClick={()=>setPlan(null)}>미리보기 취소</button></div>
   </div>}
   {pending&&<div className="development-preview"><p>환경 준비 요청 번호: <code>{pending.id}</code>. 결과를 확인하는 동안 새 요청을 보내지 마세요.</p><button className="button" disabled={busy} onClick={()=>prepare(pending)}>같은 요청 번호로 결과 확인</button></div>}
   <p className="dim small">패널을 닫아도 준비는 계속됩니다. 실패·중단 후 새로 실행하려면 설정을 확인하고 다시 미리 보세요.</p>
-  <button className="button" disabled={busy} onClick={()=>void action(refresh)}>준비 기록 다시 확인</button>
+  <button className="button" disabled={busy} onClick={()=>void action(async snapshot=>{await refresh(snapshot);await readCheckouts(snapshot)})}>준비 기록 다시 확인</button>
   <div className="development-records">{[...records].reverse().map(record=><article className="development-preview" data-testid="preparation-record" key={record.id}>
    <strong>{states[record.state]}</strong><p>{record.target}</p><p className="dim small">요청 번호: {record.id}</p><pre aria-label="환경 준비 출력">{record.log||'아직 출력 없음'}</pre>
    {record.state==='unknown'&&<p>앱이 재시작되어 실행 결과를 확정할 수 없어요. 대상 파일·출력을 확인하고 새 미리보기로 다시 준비하세요.</p>}

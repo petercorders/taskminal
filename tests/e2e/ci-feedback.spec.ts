@@ -132,3 +132,16 @@ test('커밋이 바뀌는 사이 늦게 온 옛 커밋의 응답은 새 값을 �
   await expect(fb().getByTestId('ci-feedback-age')).toContainText(`PR 커밋 ${second.slice(0, 8)}`)
   await expect(fb().getByTestId('ci-feedback-age')).not.toContainText('이전 커밋')
 })
+
+// 56단계: PR 이 있으면 PR 상태 · 체크 · 리뷰 · CI 피드백이 먼저, remote · push · base 설정은 아래 — 커밋은 '변경 보기' 로 넘어간다
+test('PR 이 있으면 PR 카드가 보내기 설정보다 위에 있고, 변경 보기로 변경 칸을 연다', async () => {
+  await launch()
+  await openGitHub()
+  const panel = win.getByTestId('git-workflow')
+  const top = (l: ReturnType<Page['locator']>) => l.evaluate((e) => e.getBoundingClientRect().top)
+  expect(await top(panel.locator('.git-workflow-pr'))).toBeLessThan(await top(panel.getByRole('combobox', { name: 'push 할 remote' })))
+  await expect(panel.getByRole('heading', { name: '보내기 설정' })).toBeVisible()
+  await panel.getByRole('button', { name: '변경 보기', exact: true }).click()
+  await expect(win.locator('.work-tool-panel')).toHaveCount(0)
+  await expect(win.getByTestId('review-pane')).toBeVisible()
+})
