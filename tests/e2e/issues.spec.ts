@@ -155,17 +155,26 @@ test('Linear 토큰은 적용 클릭 즉시 입력칸에서 지우고 일감 상
 for (const mode of ['closed', 'hidden'] as const) test(`느린 연결 조회 중 재열기 후 ${mode} 상태에서는 예약한 재조회를 시작하지 않는다`, async () => {
   await expect(panel().getByRole('button', { name: '연결 목록 다시 읽기', exact: true })).toBeEnabled()
   await app.evaluate(({ ipcMain }) => {
-    const ipc = ipcMain as unknown as { issueLinkCalls: number; issueLinkRelease(): void; issueLinkFinished: boolean }
+    const ipc = ipcMain as unknown as { issueLinkCalls: number; issueLinkRelease(): void; issueLinkFinished: boolean; issueLinkArmed: boolean; issueLinkWarmup: number }
     ipc.issueLinkCalls = 0
     ipc.issueLinkFinished = false
+    ipc.issueLinkArmed = false
+    ipc.issueLinkWarmup = 0
     const gate = new Promise<void>((resolve) => { ipc.issueLinkRelease = resolve })
     ipcMain.removeHandler('issues:links')
     ipcMain.handle('issues:links', async () => {
+      if (!ipc.issueLinkArmed) { ipc.issueLinkWarmup++; return [] }
       ipc.issueLinkCalls++
       if (ipc.issueLinkCalls === 1) { await gate; ipc.issueLinkFinished = true }
       return []
     })
   })
+  // 켜진 단추는 패널의 첫 읽기가 끝났다는 뜻이 아니다(첫 화면은 읽기 전에 그려진다) — 첫 읽기가 바꾼 처리기로 들어와
+  // 붙잡히지 않게, 한 번 다시 읽어 바꾼 처리기를 거친 읽기가 끝난 뒤에 붙잡기를 켠다
+  await panel().getByRole('button', { name: '연결 목록 다시 읽기', exact: true }).click()
+  await expect.poll(() => app.evaluate(({ ipcMain }) => (ipcMain as unknown as { issueLinkWarmup: number }).issueLinkWarmup)).toBeGreaterThan(0)
+  await expect(panel().getByRole('button', { name: '연결 목록 다시 읽기', exact: true })).toBeEnabled()
+  await app.evaluate(({ ipcMain }) => { (ipcMain as unknown as { issueLinkArmed: boolean }).issueLinkArmed = true })
   await panel().getByRole('button', { name: '연결 목록 다시 읽기', exact: true }).click()
   const count = () => app.evaluate(({ ipcMain }) => (ipcMain as unknown as { issueLinkCalls: number }).issueLinkCalls)
   await expect.poll(count).toBe(1)

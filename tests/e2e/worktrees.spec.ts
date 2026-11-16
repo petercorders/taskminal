@@ -70,6 +70,10 @@ for(const suffix of ['line\npart','slash\\part'])test(`실제 셸 cwd가 모호�
 // 56단계: 만든 워크트리에서 바로 환경 준비로 — 절대 경로를 다시 치지 않고, 형식 설명 · 명령은 읽을 꼴로
 test('워크트리 카드의 환경 준비… 는 그 워크트리를 고른 채 환경 준비 패널을 열고, 명령은 한 줄로 보인다',async()=>{
  mkdirSync(join(repo,'.taskminal'));writeFileSync(join(repo,'.taskminal/environment.json'),JSON.stringify({copies:[],commands:[{file:'echo',args:['hello world',"it's"]}]}))
+ // 워크트리 둘이 있는 채로 각 카드에서 연다 — 둘 중 하나는 목록 첫째가 아니라서, 고른 값 대신 첫째를 쓰면 드러난다
+ const extra=join(base,'z-extra');git(repo,'worktree','add','-b','extra',extra,'HEAD')
+ await panel().getByRole('button',{name:'목록 새로 읽기'}).click()
+ await expect(panel().getByRole('article').filter({hasText:extra})).toHaveCount(1)
  await expect(row().getByRole('button',{name:'환경 준비…'})).toBeEnabled()
  // 기본 워크트리(저장소 자신)에는 없다
  await expect(panel().getByRole('article').filter({hasText:'기본'}).getByRole('button',{name:'환경 준비…'})).toHaveCount(0)
@@ -83,6 +87,10 @@ test('워크트리 카드의 환경 준비… 는 그 워크트리를 고른 채
  const preview=dev.getByTestId('environment-preview')
  await expect(preview.locator('pre')).toHaveText(`echo 'hello world' 'it'\\''s'`)
  await expect(preview).not.toContainText('"file"')
+ // 다른 워크트리 카드에서 열면 그 워크트리를 고른다
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0]!.webContents.send('app:command','worktrees'))
+ await panel().getByRole('article').filter({hasText:extra}).getByRole('button',{name:'환경 준비…'}).click()
+ await expect(dev.getByRole('combobox',{name:'준비할 워크트리'})).toHaveValue(extra)
 })
 // 만드는 중 · 읽는 중(busy)에는 환경 준비로 넘어가지 않는다 — 목록 읽기를 붙잡아 둔 사이 꺼져 있다
 test('목록을 읽는 동안 환경 준비… 는 꺼져 있다',async()=>{

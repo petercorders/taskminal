@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ISSUE_TASK_DELETED, type IssueApi, type IssueLink, type IssueRecord } from '../shared/issues'
 import { ConfirmDialog } from './ConfirmDialog'
 import { JiraList } from '../shared/jira-list'
@@ -91,8 +91,7 @@ export function IssuesPanel(p: Props) {
   const [confirmation, setConfirmation] = useState<{ kind: 'prepare'; input: Prepare; issue: IssueRecord } | { kind: 'close'; link: IssueLink } | { kind: 'attach'; requestId: string; taskId: string; taskName: string; issue: IssueRecord } | null>(null)
   const active = useRef<string | null>(key)
   active.current = key
-  // 56단계: 첫 읽기는 그리기 전에 시작한다 — 아니면 '연결 목록 다시 읽기' 가 읽기 전 한 화면 동안 켜져 보인다
-  useLayoutEffect(() => {
+  useEffect(() => {
     active.current = key
     setToken('')
     setConfiguring(false)
