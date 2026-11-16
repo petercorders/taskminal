@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PaneActivity } from '../shared/activity'
 import type { Branches } from '../shared/git'
 import type { AppState, Id } from '../shared/types'
-import { ACTIVITY_LABEL, ActivityIcon } from './activity-ui'
+import { ActivityIcon, activityText } from './activity-ui'
 import { overviewSections, overviewTarget } from './overview-model'
 import { shortPath, timeAgo, type PaneTarget } from './sidebar-model'
 
@@ -68,7 +68,7 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose }:
             {card.lastAt !== null && <div className="dim small">최근 활동 {timeAgo(card.lastAt, Date.now())} 전</div>}
             <ul className="overview-panes" aria-label={`${card.task.name} 화면`}>
               {card.panes.map((pane) => <li key={`${pane.tabId}:${pane.paneId}`}><button type="button" className="button overview-pane" onClick={() => open(pane)}>
-                <ActivityIcon state={pane.activity?.state ?? 'idle'} /><span>{pane.label}</span><span className="dim small">{ACTIVITY_LABEL[pane.activity?.state ?? 'idle']}</span>
+                <ActivityIcon state={pane.activity?.state ?? 'idle'} /><span>{pane.label}</span><span className="dim small">{activityText(pane.activity)}</span>
               </button></li>)}
             </ul>
           </article>)}

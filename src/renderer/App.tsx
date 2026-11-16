@@ -4,6 +4,7 @@ import { paneIds } from '../shared/layout'
 import { isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand } from '../shared/keymap'
 import { commandForKey } from './keyboard'
 import { notifyKind } from '../shared/notify'
+import { agentLabel } from '../shared/agent-hooks'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
@@ -410,8 +411,11 @@ export function App() {
     const next = applyActivity(prev, ev, { viewed, now: Date.now() })
     if (next !== prev) putActivity({ ...activityRef.current, [paneId]: next })
     // 보고 있는 pane 의 벨 · 알림은 확인 필요가 되지 않지만(applyActivity), '보고 있어도 알리기'(muteViewed 끔)면 알린다 — deliver 가 설정을 본다
-    const kind = notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000) ?? (viewed && (ev.type === 'bell' || ev.type === 'notify') ? 'wait' : null)
-    if (kind) deliver(kind, paneId, ev.type === 'notify' ? { ...next, message: ev.text } : next)
+    const kind =
+      notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000) ??
+      (viewed && (ev.type === 'bell' || ev.type === 'notify' || (ev.type === 'agent' && !ev.restore && (ev.phase === 'permission' || ev.phase === 'input') && next !== prev)) ? 'wait' : null)
+    // 에이전트 알림의 본문은 'Claude · 허락 기다림'
+    if (kind) deliver(kind, paneId, ev.type === 'notify' ? { ...next, message: ev.text } : next.agent ? { ...next, message: agentLabel(next.agent) } : next)
   }
   const updateActivityRef = useRef(updateActivity)
   updateActivityRef.current = updateActivity
@@ -438,6 +442,15 @@ export function App() {
         }
         for (const f of summary.failed) away(f.paneId, { type: 'end', code: f.code })
         for (const w of summary.waiting) away(w.paneId, { type: 'notify', text: w.message ?? '' })
+        // 51단계: 셸 지킴이에 살아 있는 셸의 claude · codex 상태를 기록 파일의 마지막 사건으로 맞춘다(주의 · 알림 없이)
+        const livePanes = new Set(sessions.filter((s) => !s.exited && inState.has(s.paneId)).map((s) => s.paneId))
+        void window.taskminal.pty.agents().then(
+          (last) => {
+            if (!alive) return
+            for (const [paneId, sig] of Object.entries(last)) if (livePanes.has(paneId)) away(paneId, { type: 'agent', agent: sig.agent, phase: sig.phase, restore: true })
+          },
+          () => {},
+        )
         const label = (paneId: string) => st.tasks.find((t) => t.id === findPaneTask(st, paneId))?.name ?? paneId
         setStartup({ resumed: summary.resumed, awayMs: summary.awayMs, waiting: summary.waiting.map((w) => ({ label: label(w.paneId), ...(w.message ? { message: w.message } : {}) })), fresh: false })
         // 꺼져 있던 동안의 확인 필요가 막 들어왔다 — 처음 읽힐 때의 요약 카드가 그것을 못 봤으면 다시 본다(24단계)
@@ -456,6 +469,9 @@ export function App() {
       clearTimeout(t)
     }
   }, [loadedOnce])
+
+  // 51단계: 터미널에서 띄운 claude · codex 의 훅 사건
+  useEffect(() => window.taskminal.pty.onAgent((paneId, sig) => updateActivityRef.current(paneId, { type: 'agent', agent: sig.agent, phase: sig.phase })), [])
 
   // 셸이 깨끗하게 끝나면(exit 0) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 아니면 TerminalPane 이 이유를 보여 주고 키를 누를 때 닫는다.
   // 우리가 끝낸 셸(탭 닫기 · 새로 고침 …)은 main 이 알리지 않는다 → 여기 오는 것은 모두 셸이 스스로 닫힌 것(알림 '셸 닫힘')

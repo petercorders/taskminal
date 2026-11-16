@@ -8,6 +8,7 @@ import type { ChatEvent } from '../shared/chat'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
+import type { AgentSignal } from '../shared/agent-hooks'
 import type { WorktreeResult } from '../shared/worktree'
 import type { ChatApi as ChatApiT, ReviewApi as ReviewApiT, TaskminalApi } from './api'
 
@@ -98,6 +99,8 @@ const api: TaskminalApi = {
     onData: (listener) => subscribe<[string, string]>(IPC.ptyData, listener),
     onExit: (listener) => subscribe<[string, PtyExit]>(IPC.ptyExit, listener),
     cwds: (paneIds) => ipcRenderer.invoke(IPC.ptyCwds, paneIds) as Promise<Record<string, string>>,
+    onAgent: (listener) => subscribe<[string, AgentSignal]>(IPC.ptyAgent, listener),
+    agents: () => ipcRenderer.invoke(IPC.ptyAgents) as Promise<Record<string, AgentSignal>>,
   },
   sshHosts: () => ipcRenderer.invoke(IPC.sshHosts) as Promise<string[]>,
   scrollback: {

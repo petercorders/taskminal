@@ -386,6 +386,12 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
           keywords="활동 표시 OSC 133 zshrc"
           control={<Switch label="셸 통합" checked={s.shellIntegration} onChange={(v) => patch({ shellIntegration: v })} />}
         />
+        <Row
+          title="에이전트 상태 알아내기"
+          desc="터미널에서 띄운 Claude · Codex 의 작업 중 · 허락 기다림 · 끝남을 pane 머리 · 사이드바에 (그 실행에만 훅을 붙이고 전역 설정은 바꾸지 않아요 · zsh 셸 통합 · 새 터미널부터)"
+          keywords="claude codex hook 훅 허락 permission agent"
+          control={<Switch label="에이전트 상태 알아내기" checked={s.agentHooks} onChange={(v) => patch({ agentHooks: v })} />}
+        />
         </Group>
         <Group title="스크롤">
         <Row

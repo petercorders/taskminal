@@ -57,6 +57,8 @@ export const IPC = {
   gitWorktreeAdd: 'git:worktree-add', // invoke(폴더, 브랜치) → { ok, path } | { ok: false, error } — 새 일감을 worktree 에서 (15f)
   ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
   ptyAttach: 'pty:attach', // invoke(paneId) → PtyAttachResult — 셸 지킴이에 남은 셸에 다시 붙기 (16단계)
+  ptyAgent: 'pty:agent', // main → renderer (paneId, AgentSignal) — 터미널에서 띄운 claude · codex 의 훅 사건 (51단계)
+  ptyAgents: 'pty:agents', // invoke → { paneId: AgentSignal } — 창 새로 고침 · 앱 재시작 뒤 기록 파일의 마지막 사건
   sshHosts: 'ssh:hosts', // invoke → ~/.ssh/config 의 Host 이름들 (25단계, 읽기만)
   hostView: 'host:view', // invoke → HostView / main → renderer: 바뀔 때마다
   hostSessions: 'host:sessions', // invoke(clearUnseen) → SessionInfo[]

@@ -1,6 +1,7 @@
 // renderer 가 보는 preload API 타입 (window.taskminal). 구현은 preload/index.ts.
 import type { BackupInfo } from '../shared/backup'
 import type { AppInfo, BackupMark, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, RedactStatus, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
+import type { AgentSignal } from '../shared/agent-hooks'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { AppState } from '../shared/types'
 
@@ -20,6 +21,10 @@ export interface PtyApi {
   onExit(listener: (paneId: string, exit: PtyExit) => void): () => void
   /** 셸 통합이 없는 셸의 작업 폴더(lsof) — 이 창의 pane 만, 모르면 빠진다 */
   cwds(paneIds: string[]): Promise<Record<string, string>>
+  /** 51단계: 터미널에서 띄운 claude · codex 의 상태(훅 사건) */
+  onAgent(listener: (paneId: string, signal: AgentSignal) => void): () => void
+  /** pane 별 마지막 에이전트 사건 — 다시 열 때 지금 상태를 맞춘다 */
+  agents(): Promise<Record<string, AgentSignal>>
 }
 
 export interface ScrollbackApi {

@@ -134,12 +134,19 @@ export class Accounts {
       .join(' ')
     // Login-shell startup files can add credentials not present in the GUI process.
     // Start from an explicit environment rather than trying to enumerate secret names.
+    // 51단계: env -i 는 셸 통합의 claude · codex 함수를 거치지 않는다 — 앱이 켠 셸이면(변수 있음) 훅 인자를 직접 붙인다.
+    // ${X:+a} ${X:+"$X"} 두 낱말로 나눠 변수가 비면 빈 인자 없이 사라진다(zsh · bash 같다)
+    const hooks =
+      agent === 'codex'
+        ? ' ${TASKMINAL_CODEX_NOTIFY:+-c} ${TASKMINAL_CODEX_NOTIFY:+"$TASKMINAL_CODEX_NOTIFY"}'
+        : ' ${TASKMINAL_CLAUDE_SETTINGS:+--settings} ${TASKMINAL_CLAUDE_SETTINGS:+"$TASKMINAL_CLAUDE_SETTINGS"}'
     return (
-      'env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" LANG="${LANG:-en_US.UTF-8}" TMPDIR="$TMPDIR" SHELL="$SHELL" SSH_AUTH_SOCK="$SSH_AUTH_SOCK" TASKMINAL_PANE_ID="$TASKMINAL_PANE_ID" TASKMINAL_TASK_ID="$TASKMINAL_TASK_ID" TASKMINAL_SOCKET="$TASKMINAL_SOCKET" TASKMINAL_CLI_NODE="$TASKMINAL_CLI_NODE" TASKMINAL_CLI_JS="$TASKMINAL_CLI_JS" ' +
+      'env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" LANG="${LANG:-en_US.UTF-8}" TMPDIR="$TMPDIR" SHELL="$SHELL" SSH_AUTH_SOCK="$SSH_AUTH_SOCK" TASKMINAL_PANE_ID="$TASKMINAL_PANE_ID" TASKMINAL_TASK_ID="$TASKMINAL_TASK_ID" TASKMINAL_SOCKET="$TASKMINAL_SOCKET" TASKMINAL_CLI_NODE="$TASKMINAL_CLI_NODE" TASKMINAL_CLI_JS="$TASKMINAL_CLI_JS" TASKMINAL_AGENT_EVENTS="$TASKMINAL_AGENT_EVENTS" ' +
       vars +
       ' ' +
       bin +
-      (agent === 'codex' ? ' -c \'cli_auth_credentials_store="file"\'' : '')
+      (agent === 'codex' ? ' -c \'cli_auth_credentials_store="file"\'' : '') +
+      hooks
     )
   }
   async status(id: string): Promise<AccountStatus> {
