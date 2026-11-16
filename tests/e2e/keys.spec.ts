@@ -39,6 +39,33 @@ const slots = () => visibleTab().getByTestId('pane-slot')
 const focusedSlotId = () => visibleTab().locator('[data-testid="pane-slot"][data-focused="true"]').getAttribute('data-pane-id')
 const activeTabIndex = () => tabs().evaluateAll((els) => els.findIndex((e) => e.classList.contains('active')))
 
+test('Ctrl 앱 단축키는 팔레트·분할·닫기를 실행하고 셸에는 제어 문자를 보내지 않는다', async () => {
+  // Mac에서도 Windows/Linux의 renderer 키 처리를 재현한다. 실제 OS 패키지에서도 같은 IPC 경계를 확인한다.
+  await win.addInitScript(() => Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'Win32' }))
+  await win.reload()
+  await term('pane-a').click()
+  await app.evaluate(({ ipcMain }) => {
+    const recorded: string[] = []
+    ;(globalThis as unknown as { shortcutWrites: string[] }).shortcutWrites = recorded
+    ipcMain.on('pty:write', (_event, _pane: string, data: string) => recorded.push(data))
+  })
+  const writes = () => app.evaluate(() => (globalThis as unknown as { shortcutWrites: string[] }).shortcutWrites.join(''))
+  await win.keyboard.press('Control+p')
+  await expect(win.getByTestId('palette')).toBeVisible()
+  await win.keyboard.press('Escape')
+  expect(await writes()).not.toContain('\x10')
+  await win.keyboard.press('Control+d')
+  await expect(slots()).toHaveCount(2)
+  expect(await writes()).not.toContain('\x04')
+  await win.keyboard.press('Control+w')
+  await expect(slots()).toHaveCount(1)
+  expect(await writes()).not.toContain('\x17')
+  await expect(term('pane-a')).toBeVisible()
+  await term('pane-a').click()
+  await win.keyboard.press('Control+c')
+  await expect.poll(writes).toContain('\x03') // 앱 단축키가 아닌 터미널 인터럽트는 보존한다.
+})
+
 async function waitText(id: string, re: RegExp): Promise<RegExpMatchArray> {
   let m: RegExpMatchArray | null = null
   await expect.poll(async () => (m = (await screenOf(id)).match(re)) !== null, { timeout: 15_000 }).toBe(true)

@@ -1,3 +1,4 @@
+import type { BrowserCommand } from '../shared/browser-automation'
 // `taskminal` 명령줄 도구의 앱 쪽 (24단계) — <userData>/cli.sock 을 0600 으로 열고, 한 연결 = 한 요청(줄 JSON).
 // 화면 상태를 바꾸는 일은 창(renderer)에 묻고, 셸 입출력 · 기다리기 · 대화 보내기는 여기서 지킴이 · ChatManager 로 한다.
 import { chmodSync, existsSync, lstatSync, unlinkSync } from 'node:fs'
@@ -13,6 +14,8 @@ const MAX_LINE = 256 * 1024
 export const SESSION_WAIT_MS = 5000
 
 export interface CliServerDeps {
+  workflow?(command:Extract<CliRequest,{op:'workflow'}>):Promise<unknown>|unknown
+  browser?(command: BrowserCommand):Promise<unknown>
   sockPath: string
   /** 창에 묻는다 — 창이 없거나 답이 없으면 { ok:false } */
   askUi(req: UiRequest): Promise<UiReply>
@@ -61,14 +64,14 @@ export class CliServer {
         resolve()
       })
     })
-    const old = process.umask(0o077)
+    const old = process.platform === 'win32' ? null : process.umask(0o077)
     try {
       server.listen(path)
     } finally {
-      process.umask(old)
+      if (old !== null) process.umask(old)
     }
     await listening
-    chmodSync(path, 0o600)
+    if (process.platform !== 'win32') chmodSync(path, 0o600)
     this.server = server
   }
 
@@ -135,6 +138,14 @@ export class CliServer {
   async handle(req: CliRequest, onAbort: (fn: () => void) => void = () => {}): Promise<CliReply> {
     const self = req.self !== undefined ? { self: req.self } : {}
     switch (req.op) {
+      case 'workflow': {
+        if(!this.d.workflow)return err('협업 도구를 사용할 수 없어요')
+        try{const data=await this.d.workflow(req);return {ok:true,data,text:JSON.stringify(data,null,2)}}catch(error){return err(error instanceof Error?error.message:'협업 요청 실패')}
+      }
+      case 'browser': {
+        if(!this.d.browser)return err('브라우저 도구를 사용할 수 없어요')
+        try{const data=await this.d.browser(req);return {ok:true,data,text:JSON.stringify(data,null,2)}}catch(error){return err(error instanceof Error?error.message:'브라우저 작업에 실패했어요')}
+      }
       case 'pane.send':
       case 'pane.read':
       case 'pane.wait': {

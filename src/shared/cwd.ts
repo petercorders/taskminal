@@ -34,6 +34,31 @@ export function parseLsofCwd(out: string): Record<number, string> {
   return found
 }
 
+/** Strict macOS `lsof -F0pn` framing, exclusively for mutation guards.
+ * lsof escapes non-printable names even with NUL framing. Reject ambiguous
+ * names instead of treating an escaped display value as a verified path.
+ */
+export function parseStrictLsofCwds(out: string, pids: readonly number[]): Record<number, string> {
+  const fail = () => new Error('실행 중인 셸의 실제 폴더를 안전하게 확인하지 못했어요')
+  if (pids.length > 4096 || pids.some(pid => !Number.isInteger(pid) || pid <= 0 || pid >= 2 ** 31) || new Set(pids).size !== pids.length) throw fail()
+  const requested = new Set(pids)
+  const found: Record<number, string> = {}
+  const records = /p([1-9]\d*)\0\nfcwd\0n([^\0]*)\0\n/gy
+  let offset = 0
+  while (offset < out.length) {
+    records.lastIndex = offset
+    const match = records.exec(out)
+    if (!match) throw fail()
+    const pid = Number(match[1]), path = match[2]
+    if (!requested.has(pid) || Object.hasOwn(found, pid) || !path.startsWith('/') ||
+      /[\\^\p{C}\u2028\u2029\uFFFD]/u.test(path) || path.endsWith(' (deleted)')) throw fail()
+    found[pid] = path
+    offset = records.lastIndex
+  }
+  if (Object.keys(found).length !== requested.size) throw fail()
+  return found
+}
+
 /**
  * 셸이 알려 준 절대 경로(OSC 7 · lsof)를 일감 폴더와 같은 모양으로 — 일감 폴더가 `~` 로 쓰였으면 홈 아래 경로를 `~/…` 로.
  * 모양이 다르면 cd 하지 않은 pane 도 폴더가 바뀐 것으로 보이고(저장), 템플릿으로 저장할 때 일감 기준 상대 경로를 못 만든다(13단계 리뷰).

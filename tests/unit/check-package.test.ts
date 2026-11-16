@@ -1,5 +1,5 @@
 import { createPackage } from '@electron/asar'
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -30,7 +30,7 @@ beforeEach(async () => {
   writeFileSync(join(res, 'app-update.yml'), 'owner: petercorders\nrepo: taskminal\nprovider: github\nupdaterCacheDirName: taskminal-updater\n')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
@@ -47,6 +47,8 @@ beforeEach(async () => {
   mkdirSync(join(res, 'bin'), { recursive: true })
   cpSync(join(__dirname, '../../resources/bin/taskminal'), join(res, 'bin', 'taskminal'))
   chmodSync(join(res, 'bin', 'taskminal'), 0o755)
+  cpSync(join(__dirname, '../../resources/bin/taskminal-server'), join(res, 'bin', 'taskminal-server'))
+  chmodSync(join(res, 'bin', 'taskminal-server'), 0o755)
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
@@ -61,6 +63,15 @@ const ptyRoot = () => join(appPath, 'Contents/Resources/app.asar.unpacked/node_m
 describe('check-package (14단계)', () => {
   it('모두 갖춘 .app 은 문제 없음', async () => {
     expect(await check()).toEqual([])
+  })
+  it('Intel Mac은 x64 실행 파일과 같은 칩의 node-pty를 검사한다', async () => {
+    renameSync(join(ptyRoot(), 'prebuilds/darwin-arm64'), join(ptyRoot(), 'prebuilds/darwin-x64'))
+    expect(await checkPackage(appPath, { arch: () => 'x86_64', verify: signed, expectedArch: 'x64' })).toEqual([])
+    expect((await checkPackage(appPath, { arch: (p: string) => p.endsWith('pty.node') ? 'arm64' : 'x86_64', verify: signed, expectedArch: 'x64' })).join('\n')).toContain('pty.node 가 x64 가 아님')
+  })
+  it('다른 OS의 node-pty를 함께 넣으면 거절한다', async () => {
+    mkdirSync(join(ptyRoot(), 'prebuilds/win32-x64'), { recursive: true })
+    expect((await check()).join('\n')).toContain('다른 OS/칩의 node-pty 포함: win32-x64')
   })
 
   it('taskminal 명령이 없거나 실행 권한이 없으면 (24단계)', async () => {
@@ -217,4 +228,9 @@ describe('check-package (18단계)', () => {
       expect(all).toContain('latest-mac.yml')
     })
   })
+})
+
+it('원격 서버 launcher 누락을 막는다', async () => {
+  rmSync(join(appPath, 'Contents/Resources/bin/taskminal-server'))
+  expect(await check()).toContain('원격 서버 도구 없음: Resources/bin/taskminal-server')
 })

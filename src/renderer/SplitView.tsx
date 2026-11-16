@@ -59,7 +59,9 @@ interface Props {
     /** 도구 줄의 'diff 열기' — 그 일감의 변경 pane 에서 그 파일 (23단계) */
     onOpenDiff(paneId: Id, path: string): void
     /** '대화에 묻기' 로 넣을 글 — pane 마다 한 번(n) */
-    draft: { paneId: Id; text: string; n: number } | null
+    jump?: {paneId:Id;fingerprint:string;at:number;n:number}|null
+    onJumpTaken(n:number):void
+    draft: { paneId: Id; text: string; n: number; images?: import('../shared/chat').ChatImage[] } | null
     onDraftTaken(n: number): void
   }
   /** 변경 pane (23단계) */
@@ -173,10 +175,11 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 paneId={pane.id}
                 cwd={pane.cwd}
                 chat={pane.chat ?? { agent: 'claude' }}
+                workflowRunId={pane.workflowRunId}
                 active={visible && focused}
                 visible={visible}
                 focusSignal={focusSignal}
-                permission={chat.permission}
+                permission={pane.workflowRunId ? 'ask' : chat.permission}
                 onPermission={chat.onPermission}
                 onSession={(id) => chat.onSession(pane.id, id)}
                 onToTerminal={() => chat.onToTerminal(pane.id)}
@@ -187,6 +190,8 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onToast={chat.onToast}
                 onActivity={(ev) => onActivity(pane.id, ev)}
                 onOpenDiff={(path) => chat.onOpenDiff(pane.id, path)}
+                onJumpTaken={chat.onJumpTaken}
+                jump={chat.jump?.paneId===pane.id?chat.jump:null}
                 draft={chat.draft?.paneId === pane.id ? chat.draft : null}
                 onDraftTaken={chat.onDraftTaken}
               />

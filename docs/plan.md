@@ -72,15 +72,37 @@ https://claude.ai/artifact/RrUwTt7trhmpxBrXuXEp7d — 메인 창 · 새 일감 �
 | 26 | 대화 중심 · 가독성 | (2026-11-12 사용자 "chat 모드 왜 개발 안했고 · 셀은 왜 있어야 하며 · 가독성은 왜 이렇게 안좋아" · "Orca 좀 제대로 봐봐") 대화 여는 길을 메뉴 · 탭 ▾ 에 · 새 일감 기본 = 대화(설정으로 Codex · 터미널) · 셸은 ⌘J 로 대화 아래에 꺼냄 · 글자 · 대비 · 줄 간격을 재는 e2e | 21 · 22 | Orca 1.4.255 앱 · 홈페이지 모형 · 문서로 패턴 보기 | e2e chat-first · readability(화면 7개 문제 글자 242 → 0) (완료: 2026-11-12 브랜치 `stage-26-chat-first`, `docs/stages/26-chat-first.md`) |
 | 27 | UX 감사 · 다듬기 | (2026-11-12 사용자 "전부 확인해보고 우리 UI/UX 확인해서 미숙한 부분 제대로 진행해줘") 화면 30장 · 8기준 채점 · 심각도 순 수정(최대 두 번) | 26 | 배율 1 화면에서 WebGL 글자 | 단위 + e2e ux-polish · webgl 배율 (완료: 2026-11-12 브랜치 `stage-27-ux-polish`, 72.5 → 84.4, `docs/stages/27-ux-polish.md`) |
 | 28 | Orca 에서 배워 다듬기 | (2026-11-12 사용자 "앱이 안깔끔해 … Orca 보고 배워서" · "chat ui 정렬" · "간격 정렬") 설정 구조 · 선 아이콘 · 간격 척도 · 대화 정렬 | 27 | Orca 에만 있는 설정 · 기능은 만들지 않음 | 단위 spacing + e2e layout-align (완료: 2026-11-12 브랜치 `stage-28-orca-polish`, 84.4 → 88.8 자체 채점, `docs/stages/28-orca-polish.md`) |
-
 | 29 | UI/UX · 반응형 | 사이드바 폭 · 작은 창/분할 pane의 대화·검토·설정 배치 · 모달 크기 제한 · 보관함/검토/출력 찾기 키보드 · 복구 조회 오류·재시도 | 28 | 실제 계정·레티나·스크린리더는 별도 확인 | e2e archive-ux · uiux-polish · responsive · review, 회귀 변이 9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/29-uiux-responsive.md`) |
-
 | 30 | 전체 UI/UX 85점 개선 루프 | 고정 40항목 평가·감점 수정·재평가. 라이트 대비 · 보조 패널 · 복사 실패 안내·수명 · 입력 이름 | 29 | 실제 사용자 테스트·접근성 인증으로 표현하지 않음 | 고정표 95점, 관련 e2e·변이9개 (`uiux-sidebar-polish`, main 병합, `docs/stages/30-uiux-score-loop.md`) |
+| 31 | 전체 작업 보기 | 활동·상태별 카드·검색·정확한 탭/pane 이동 | 30 | 세션 프로세스는 유지 | overview 단위6·e2e3·변이3, `docs/stages/31-overview.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 32 | 사용량·계정 | Codex 한도 조회·계정 추가/로그인/선택·바인딩·인증 환경 격리 | 31 | Claude 한도 수치는 미지원 | 공급자 계약·격리·중복·손상 시험, `docs/stages/32-accounts-usage.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 33 | GitHub 흐름 | push·PR 생성·체크/리뷰·확인 후 병합·불명 결과 복구 | 32 | 실제 GitHub 쓰기로 검증하지 않음 | 실제 bare Git·가짜 gh10·변이4, `docs/stages/33-git-workflow.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 34 | 내장 브라우저 | 일감 보조 pane·탐색·요소/화면 전달·격리 | 33 | 팝업/권한/다운로드 차단 | 로컬 HTTP·실 WebContents·배율·수명, `docs/stages/34-workspace-browser.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
+| 35 | 파일 탐색·대화 맥락 | 경계 검사·텍스트/Markdown/그림/PDF 미리보기·첨부 | 34 | 원격 파일·편집은 별도 | 실제 파일/경합·PDF worker·범위/변경 검증, `docs/stages/35-workspace-files.md` (구현·검증 완료: `stage-31-35-workspace`, main 미병합; 통합 기록 `docs/stages/31-35-verification.md`) |
 
-함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 나머지 디자인 맞추기(design-gaps 1 · 2 · 3 · 5 — 전체 보기 · AI 사용량 등)는 사용자와 따로 단계로 나눈다.
+| 36 | 대화 기록 통합 검색 | 가린 사용자/assistant 본문·필터·안전한 턴 이동 | 35 | 실제 참여자/계정은 미검증 | 단위1,021·e2e285·변이8·GC, 종료0 (완료: `docs/stages/36-conversation-search.md`, main 미병합) |
+| 37 | 에이전트 작업 흐름 | 전용 대화·순차 DAG·ASK·불명 결과 수동 재시도 | 36 | 실제 공급자 미검증 | 단위1,042·e2e291·핵심 변이6·GC, 종료0 (완료: `docs/stages/37-agent-workflows.md`, main 미병합) |
+| 38 | 앱 실행 중 예약과 결과함 | 기본 꺼짐·놓침 건너뜀·영속 claim·DST·실행 이력 | 37 | 실제 기기 절전/계정 미검증 | 단위1,060·e2e293·변이7·GC, 종료0 (완료: `docs/stages/38-schedules.md`, main 미병합) |
+| 39 | worktree 수명 관리 | 실제 목록·명시 base 생성·사용/ignored/불명 보호·force 없는 정리 | 38 | 외부 writer 원자적 봉쇄는 제외 | 단위1,121·e2e299·변이8·GC, 종료0 (완료: `docs/stages/39-worktree-management.md`, main 미병합) |
+| 40 | 브라우저 탭 | 일감별6개·기본 기억 꺼짐·선택 탭 지연 복원·수집 세대 검증 | 36 | 실제 사이트/기기 별도 확인 | 단위1,141·e2e304·변이7·GC, 종료0 (완료: `docs/stages/40-browser-tabs.md`, main 미병합) |
+| 41 | 전체 UI/UX 후속 | 초안/삭제 편집·서랍 키보드·도구 줄/고정 헤더·320 CSS px 설정과 제어 개선 | 40 | 실제 계정·VoiceOver·IME·Retina 미검증 | 단위1,141·e2e316·변이13·GC, 최종 전체 종료0 (완료: `docs/stages/41-whole-app-uiux.md`, main 미병합) |
+
+| 42 | Mac 출시 준비 | 0.1.1 서명·공증 승인, 공개 버전은 43단계 0.1.2로 대체 | 41 | 실제 설치 별도 | `docs/stages/42-release-0.1.1.md` |
+| 43 | 다중 OS 출시·Docs·README | Mac arm64/x64·Windows x64·Linux x64, OS 다운로드와 KO/EN 안내 | 42 | Windows 미서명·Linux 의존성·실제 계정 별도 | 단위1,182·e2e317·서명 앱12·네 OS CI·공개 다운로드5 해시·Pages·GC 완료. 앱 태그9936e2e, main은 site/README만. `docs/stages/43-multi-platform.md` |
+
+| 44 | 내장 편집·리뷰 의견 | 원문 UTF-8 CAS 저장·초안 보존·diff 서명 줄 코멘트 | 43 | 원문 초안은 메모리만 | `docs/stages/44-editor-review.md` |
+| 45 | 병렬 worker·독립 checkout | 슬롯·DAG·실제 worktree·attempt 재시도 | 44 | 자동 merge 없음 | `docs/stages/45-parallel-workers.md` |
+| 46 | 브라우저 CLI | 명시 task/tab·snapshot refs·click/fill/navigate·개인정보 가림 PNG | 45 | 일반 본문 민감 내용은 직접 확인 | `docs/stages/46-browser-automation.md` |
+| 47 | GitHub·Linear 이슈 | 조회·일감/worktree·맥락·PR·명시적 닫기 | 46 | 실제 계정 별도 | `docs/stages/47-issue-links.md` |
+| 48 | 서버 원격 작업 공간 | 파일/CAS·Git·PTY 줄 입력·구조화 대화·클라이언트 재접속 | 47 | 서버 재시작 생존·전체 TUI·모바일 앱 제외 | `docs/stages/48-remote-workspace.md` |
+
+| 49 | 전체 점검 버그 수정 | 손상 이슈 기록 격리·CLI 탐색 오류·이슈 일감 재생성·staged diff·리뷰 서명 복구 | 48 | 실제 데이터·공개 출시 변경 없음 | 완료: 단위1,209·e2e344·변이5·GC, 전체 종료0. `docs/stages/49-five-bugfixes.md` |
+| 50 | Orca 비교 다섯 영역 보강 | 코드 편집·worktree 환경 준비·실행 중 감독/모델·원격 xterm/영속 PTY·선언형 확장 | 49 | 실제 계정·다른 OS GUI·LSP·임의 JS SDK는 별도 | 단위1,226·e2e359 확인·변이13·GC. API 기대 목록 정정 후 관련5개 재통과. `docs/stages/50-orca-depth.md` |
+
+함께 볼 것: 사이드바 개편(design-gaps 4)은 21단계에 넣었다(추천안). 전체 보기·AI 사용량은 31~32단계에 반영했다. 남은 디자인 차이는 해당 문서와 실제 화면을 함께 검토한다.
 크기: 16 · 21 · 22 가 크다(각각 두 커밋 묶음 이상 예상) · 20 · 25 는 둘을 묶었으므로 하나가 길어지면 나눈다.
 
 ## 단계 사이 규칙
 - 단계 하나 = 커밋 하나 이상, 단계 끝에 `npm run typecheck && npx vitest run && npm run e2e` 를 한 번에.
 - 화면이 바뀐 단계는 e2e 스크린샷을 직접 열어 본다.
-- GitHub 원격 저장소는 아직 없다(만들지 · push 할지는 사용자 결정).
+- GitHub 원격: `petercorders/taskminal`. 현재 기능 브랜치는 승인된 push 대상이며, 앱 전체 main 병합은 별도 사용자 지시 대상이다. 홈페이지·Docs·README와 v0.1.2 릴리스는 게시됐다.

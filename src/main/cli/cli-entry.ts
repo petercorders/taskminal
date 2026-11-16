@@ -7,11 +7,12 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { CLI_PROTOCOL, cliSocketPath, EXIT, HELP, parseArgs, type CliReply } from '../../shared/cli'
 import { isPaneId } from '../../shared/pty'
+import { isAbsolutePath, platformUserData } from '../../shared/platform'
 
 function socketPath(env: NodeJS.ProcessEnv): string {
   if (env['TASKMINAL_SOCKET']) return env['TASKMINAL_SOCKET']
-  const userData = env['TASKMINAL_USER_DATA'] || join(homedir(), 'Library', 'Application Support', 'Taskminal')
-  return cliSocketPath(userData, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
+  const userData = env['TASKMINAL_USER_DATA'] || platformUserData(process.platform, homedir(), env)
+  return cliSocketPath(userData, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'), process.platform)
 }
 
 function version(): string {
@@ -38,7 +39,7 @@ function main(): void {
     return process.exit(EXIT.usage)
   }
   // 상대 경로 폴더는 이 명령을 친 폴더 기준 — 앱은 그 폴더를 모른다
-  if (parsed.req.op === 'task.new' && parsed.req.cwd && !parsed.req.cwd.startsWith('/') && parsed.req.cwd !== '~' && !parsed.req.cwd.startsWith('~/')) parsed.req.cwd = resolve(parsed.req.cwd)
+  if (parsed.req.op === 'task.new' && parsed.req.cwd && !isAbsolutePath(parsed.req.cwd) && parsed.req.cwd !== '~' && !parsed.req.cwd.startsWith('~/')) parsed.req.cwd = resolve(parsed.req.cwd)
   const self = process.env['TASKMINAL_PANE_ID']
   const body = { v: CLI_PROTOCOL, ...parsed.req, ...(isPaneId(self) ? { self } : {}) }
   const sock = connect(socketPath(process.env))

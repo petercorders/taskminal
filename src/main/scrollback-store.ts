@@ -82,7 +82,7 @@ export class ScrollbackStore {
     try {
       const path = this.file(paneId)
       const [text, info] = await Promise.all([readFile(path, 'utf8'), stat(path)])
-      return { text, savedAt: info.mtimeMs }
+      return { text: redact(text, this.redactOptions()), savedAt: info.mtimeMs }
     } catch {
       return null // 없음 · 읽기 실패 — 되살리지 않고 셸만 띄운다
     }

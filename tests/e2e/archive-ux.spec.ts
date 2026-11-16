@@ -17,7 +17,8 @@ test.afterEach(async () => {
 async function launch(count = 1) {
   seedState(userData, [{ id: 'live', name: 'Live', paneId: 'plive' }])
   const state = JSON.parse(readFileSync(join(userData, 'state.json'), 'utf8'))
-  for (let i = 0; i < count; i++) state.tasks.push({ ...taskJson({ id: `a${i}`, name: `Archive ${i}`, paneId: `pa${i}` }), archivedAt: Date.now() - i })
+  const archivedAt=Date.now()
+  for (let i = 0; i < count; i++) state.tasks.push({ ...taskJson({ id: `a${i}`, name: `Archive ${i}`, paneId: `pa${i}` }), archivedAt: archivedAt - i })
   writeFileSync(join(userData, 'state.json'), JSON.stringify(state))
   app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: userData } })
   win = await firstWindow(app)
@@ -47,6 +48,7 @@ test('보관함 긴 목록의 방향키 선택은 화면 안에 있고 검색을
   await launch(40)
   const panel = win.getByTestId('archive-panel')
   const search = panel.getByLabel('보관함에서 찾기')
+  await expect(search).toBeFocused()
   for (let i = 0; i < 35; i++) await win.keyboard.press('ArrowDown')
   const selected = panel.locator('[role="option"][aria-selected="true"]')
   await expect(selected).toHaveAttribute('data-task-name', 'Archive 35')

@@ -1,0 +1,11 @@
+.workflow-supervision { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.workflow-supervision h4, .workflow-supervision p { margin: 0; overflow-wrap: anywhere; }
+.workflow-supervision form, .workflow-supervision fieldset { min-width: 0; }
+.workflow-supervision fieldset { display: flex; flex-direction: column; gap: var(--space-2); }
+.workflow-supervision input:not([type="checkbox"]), .workflow-supervision textarea, .workflow-supervision select { min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; }
+.workflow-supervision .field { min-width: 0; }
+.workflow-supervision-dependency { display: flex; gap: var(--space-2); align-items: baseline; overflow-wrap: anywhere; }
+.workflow-supervision-message { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--r-sm); min-width: 0; }
+.workflow-supervision-message pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; margin: 0; font: 12px/1.6 ui-monospace, monospace; }
+.workflow-supervision fieldset { border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--space-3); }
+.workflow-supervision legend { color: var(--muted); padding: 0 var(--space-1); }

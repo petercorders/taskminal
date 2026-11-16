@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { chatStatus, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
-import type { AgentBin } from './find-bin'
+import { agentLaunch, type AgentBin } from './find-bin'
 import { ClaudeSession, type Decision, type SpawnFn } from './claude-adapter'
 import { CodexSession } from './codex-adapter'
 import type { AgentSession } from './session'
@@ -20,15 +20,20 @@ export interface ChatManagerDeps {
   spawn: SpawnFn
   findBin(agent: ChatAgent): Promise<AgentBin | null>
   permission(): ChatPermission
+  permissionFor?(paneId:string):ChatPermission|undefined
+  reserved?(paneId:string):boolean
   channel: string
   now?: () => number
   appVersion?: string
   /** 에이전트 프로세스에 더할 환경 변수 (24단계 — TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal) */
-  extraEnv?: (paneId: string, path: string) => Record<string, string>
+  extraEnv?: (paneId: string, path: string, chat: ChatRef) => Record<string, string>
+  sessionEnv?: (env: Record<string,string>, paneId:string, chat:ChatRef) => Record<string,string>
 }
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
 export interface ChatRef {
+  model?:string
+  effort?:'low'|'medium'|'high'
   agent: ChatAgent
   sessionId?: string
   /** 되감기 · 나누기 뒤 아직 보내지 않았다 — 다음 띄울 때 여기서 가른다 */
@@ -76,6 +81,12 @@ export class ChatManager {
   private counts = new Map<string, number>()
   /** 모든 pane 의 새 이벤트를 듣는 이 (24단계 chat wait) — 가린 것 */
   private listeners = new Set<(paneId: string, ev: ChatEvent) => void>()
+  private managed=new Set<string>()
+  private forcedAsk=new Set<string>()
+  claim(paneId:string){
+    if(!this.managed.has(paneId)&&(this.panes.has(paneId)||this.starting.has(paneId)))throw new Error('이미 사용 중인 대화예요')
+    this.managed.add(paneId);this.forcedAsk.add(paneId)
+  }
   constructor(private readonly d: ChatManagerDeps) {}
 
   /** 새 이벤트를 듣는다 → 그만 듣기 */
@@ -101,7 +112,8 @@ export class ChatManager {
     if (!sink.isDestroyed()) sink.send(this.d.channel, paneId, redactEvent(ev, this.d.redactOptions()), n)
   }
 
-  async send(sink: Sink, paneId: string, text: string, cwd: string, chat: ChatRef, images: readonly ChatImage[] = []): Promise<SendResult> {
+  async send(sink: Sink, paneId: string, text: string, cwd: string, chat: ChatRef, images: readonly ChatImage[] = [], workflow=false): Promise<SendResult> {
+    if(!workflow&&(this.managed.has(paneId)||this.d.reserved?.(paneId)))return 'busy'
     const have = this.panes.get(paneId)
     if (this.starting.has(paneId) || have?.s.busy) return 'busy'
     const now = this.d.now ?? Date.now
@@ -125,14 +137,20 @@ export class ChatManager {
         return 'missing'
       }
       const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
+      const initialEnv = { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path, chat) ?? {}) }
       const common = {
+        ...(chat.model?{model:chat.model}:{}),...(chat.effort?{effort:chat.effort}:{}),
         bin: found.bin,
-        env: { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path) ?? {}) },
+        env: this.d.sessionEnv?.(initialEnv,paneId,chat) ?? initialEnv,
         cwd: expandHome(cwd),
-        permission: this.d.permission(),
+        permission: this.d.permissionFor?.(paneId)??(this.forcedAsk.has(paneId)?'ask':this.d.permission()),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),
         ...(chat.sessionId && chat.forkAt ? { forkAt: chat.forkAt } : {}),
-        spawn: this.d.spawn,
+        spawn: (bin: string, args: string[], opts: { cwd: string; env: Record<string, string> }) => {
+          if (!found.runAsNode) return this.d.spawn(bin, args, opts)
+          const launch = agentLaunch(found, args, opts.env)
+          return this.d.spawn(launch.bin, launch.args, { cwd: opts.cwd, env: launch.env as Record<string, string> })
+        },
         onEvent: (ev: ChatEvent) => {
           if (!entry.closed) this.emit(paneId, entry.sink, ev)
         },
@@ -192,7 +210,7 @@ export class ChatManager {
   }
 
   setPermission(p: ChatPermission) {
-    for (const e of this.panes.values()) e.s.setPermission(p)
+    for (const [id,e] of this.panes) e.s.setPermission(this.d.permissionFor?.(id)??(this.forcedAsk.has(id)?'ask':p))
   }
 
   /**
@@ -215,6 +233,7 @@ export class ChatManager {
 
   /** pane 을 닫았다 — 프로세스를 끝낸다. forget 이면 화면 기록도 지운다(되돌리기 기회가 지난 뒤) */
   close(paneId: string, forget = false) {
+    this.managed.delete(paneId)
     const e = this.panes.get(paneId)
     if (e) {
       e.closed = true

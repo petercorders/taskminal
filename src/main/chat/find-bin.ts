@@ -1,10 +1,20 @@
 import { execFile } from 'node:child_process'
 import type { ChatAgent } from '../../shared/chat'
+import { existsSync } from 'node:fs'
+import { win32 } from 'node:path'
+import { defaultShell } from '../../shared/platform'
 
 export interface AgentBin {
   bin: string
   /** 로그인 셸의 PATH — Finder 로 띄운 앱은 PATH 가 비어 claude 가 쓰는 node · git 을 못 찾는다 */
   path: string
+  /** Windows npm shim은 cmd.exe 대신 명시적인 패키지 JS를 Node 모드로 실행한다. */
+  args?: string[]
+  runAsNode?: true
+}
+
+export function agentLaunch(found: AgentBin, args: string[], env: NodeJS.ProcessEnv) {
+  return { bin: found.bin, args: [...(found.args ?? []), ...args], env: found.runAsNode ? { ...env, ELECTRON_RUN_AS_NODE: '1' } : env }
 }
 
 type Exec = (file: string, args: string[], opts: { timeout: number; env: NodeJS.ProcessEnv }) => Promise<string>
@@ -24,6 +34,8 @@ export class AgentBinFinder {
   constructor(
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly exec: Exec = realExec,
+    private readonly platform: string = process.platform,
+    private readonly exists: (path: string) => boolean = existsSync,
   ) {}
 
   claude(): Promise<AgentBin | null> {
@@ -36,10 +48,15 @@ export class AgentBinFinder {
 
   async find(agent: ChatAgent): Promise<AgentBin | null> {
     const fake = this.env[agent === 'claude' ? 'TASKMINAL_CLAUDE_BIN' : 'TASKMINAL_CODEX_BIN']
-    if (fake) return { bin: fake, path: this.env['PATH'] ?? '' }
+    if (fake) return { bin: fake, path: this.env['PATH'] ?? this.env['Path'] ?? '' }
     const have = this.found.get(agent)
     if (have) return have
-    const shell = this.env['SHELL'] || '/bin/zsh'
+    if (this.platform === 'win32') {
+      const got = await this.windows(agent)
+      if (got) this.found.set(agent, got)
+      return got
+    }
+    const shell = defaultShell(this.platform, this.env)
     for (const flags of ['-lc', '-ilc']) {
       const got = await this.ask(shell, flags, agent)
       if (got) {
@@ -47,6 +64,21 @@ export class AgentBinFinder {
         return got
       }
     }
+    return null
+  }
+
+  private async windows(agent: ChatAgent): Promise<AgentBin | null> {
+    try {
+      const out = await this.exec(win32.join(this.env['SystemRoot'] || 'C:\\Windows', 'System32', 'where.exe'), [agent], { timeout: 5000, env: this.env })
+      const paths = out.split(/\r?\n/).map((line) => line.trim()).filter((line) => win32.isAbsolute(line))
+      const path = this.env['PATH'] ?? this.env['Path'] ?? ''
+      const exe = paths.find((line) => /\.exe$/i.test(line))
+      if (exe) return { bin: exe, path }
+      for (const shim of paths.filter((line) => /\.cmd$/i.test(line))) {
+        const entry = win32.join(win32.dirname(shim), 'node_modules', ...(agent === 'claude' ? ['@anthropic-ai', 'claude-code', 'cli.js'] : ['@openai', 'codex', 'bin', 'codex.js']))
+        if (this.exists(entry)) return { bin: process.execPath, path, args: [entry], runAsNode: true }
+      }
+    } catch { /* CLI 미설치: 다음 조회에서 다시 찾는다 */ }
     return null
   }
 

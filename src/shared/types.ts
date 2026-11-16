@@ -62,6 +62,8 @@ export interface Pane {
   pendingInsert?: true
   /** pane 종류 — 없으면 터미널. '대화' 는 셸 대신 에이전트와 채팅 (21단계) · '변경' 은 일감 폴더 저장소의 diff · 커밋 (23단계) */
   kind?: 'chat' | 'review'
+  /** 작업 흐름 전용 대화: 일반 전송/되감기는 금지, 허락·질문 답은 유지 */
+  workflowRunId?: string
   /** 대화 pane 의 에이전트 · 이어 할 세션 (Claude session_id · Codex thread id) · forkAt: 되감기 · 나누기 뒤 아직 안 보냄 — 다음 띄울 때 여기서 가른다 (22단계) */
   chat?: { agent: ChatAgent; sessionId?: string; forkAt?: string }
 }

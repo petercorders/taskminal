@@ -16,6 +16,12 @@ describe('release-config', () => {
   it('electron-builder 인자: dmg + zip · arm64 · 게시 안 함 · 그 인증서', () => {
     expect(builderArgs('KiBong Kim (ABCDE12345)')).toEqual(['--mac', 'dmg', 'zip', '--arm64', '--publish', 'never', '-c.mac.identity=KiBong Kim (ABCDE12345)'])
   })
+  it('Intel Mac과 두 칩 빌드 인자를 지원하고 알 수 없는 칩은 거절한다', () => {
+    expect(builderArgs('team', 'x64')).toContain('--x64')
+    expect(builderArgs('team', 'x64')).not.toContain('--arm64')
+    expect(builderArgs('team', 'all')).toEqual(['--mac', 'dmg', 'zip', '--arm64', '--x64', '--publish', 'never', '-c.mac.identity=team'])
+    expect(() => builderArgs('team', 'ia32')).toThrow(/지원/)
+  })
   it('빠진 준비물마다 무엇을 할지 — 앱 암호는 묻지 않고 사용자가 터미널에서', () => {
     expect(missingSteps({ identity: 'x', profileOk: true })).toEqual([])
     const steps = missingSteps({ identity: null, profileOk: false }) as string[]

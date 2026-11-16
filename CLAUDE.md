@@ -1,6 +1,6 @@
 # Taskminal
 
-일감별로 터미널 세션을 묶는 macOS 터미널 (Electron + xterm.js + node-pty). 단계 계획 · 결정: `docs/plan.md`
+일감별로 터미널 세션을 묶는 데스크톱 터미널 (macOS·Windows·Linux, Electron + xterm.js + node-pty). 단계 계획 · 결정: `docs/plan.md`
 
 **이어서 개발할 때는 먼저 `docs/development.md` 를 읽는다** — 지금 어디까지 · 단계 하나의 순서 · 명령 · 지킬 것 · 단계별 메모 · 겪은 함정. 단계별 상세 계획은 `docs/stages/`.
 

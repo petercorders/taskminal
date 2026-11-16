@@ -1,0 +1,14 @@
+.settings .settings-compact-section, .settings .settings-compact-control { display: none; }
+@media (max-width: 700px) {
+  .settings { flex-direction: column; min-width: 0; }
+  .settings > .settings-nav { display: grid; grid-template-columns: var(--space-8) minmax(0, 1fr) var(--space-8) var(--space-8); gap: var(--space-1); align-items: center; box-sizing: border-box; width: 100%; padding: var(--space-2); border-right: 0; border-bottom: 1px solid var(--line); }
+  .settings-nav > .settings-back { width: var(--space-8); height: var(--space-8); min-height: var(--space-8); margin: 0; padding: var(--space-2); gap: 0; font-size: 0; }
+  .settings-nav > .settings-compact-section { display: block; box-sizing: border-box; min-width: 0; width: 100%; min-height: var(--space-8); padding: var(--space-1) var(--space-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; }
+  .settings-nav > .settings-compact-control { display: flex; align-items: center; justify-content: center; width: var(--space-8); height: var(--space-8); min-width: var(--space-8); padding: var(--space-2); }
+  .settings-nav > .settings-search-wrap { display: none; grid-column: 1 / -1; margin: 0; padding: 0; border: 0; }
+  .settings-nav.compact-search-open > .settings-search-wrap { display: block; }
+  .settings-nav > .settings-nav-groups, .settings-main > .settings-head { display: none; }
+  .settings > .settings-main { width: 100%; min-height: 0; }
+  .settings-main > .settings-body { min-height: 0; padding: var(--space-3) var(--space-4) var(--space-8); }
+  .settings-page-head { margin-bottom: var(--space-4); padding-bottom: var(--space-3); }
+}

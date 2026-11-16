@@ -210,3 +210,13 @@ describe('ScrollbackStore.redactExisting — 이미 남은 파일 한 번 정리
     await expect(s.fixRedact('delete', '../state.json', join(root, 'm'))).rejects.toThrow()
   })
 })
+
+it('첫 정리가 끝나기 전에 읽어도 옛 파일의 비밀값은 화면에 보내지 않는다',async()=>{
+ mkdirSync(dir,{recursive:true})
+ const token='ghp_'+ 'a1B2c3D4e5'.repeat(4)
+ writeFileSync(join(dir,'old.txt'),'old '+token)
+ const loaded=await new ScrollbackStore(dir).load('old')
+ expect(loaded?.text).not.toContain(token)
+ expect(loaded?.text).toContain('가림:GitHub 토큰')
+ expect(loaded?.savedAt).toBeGreaterThan(0)
+})

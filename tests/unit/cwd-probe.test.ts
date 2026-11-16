@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lsofCwds } from '../../src/main/cwd-probe'
+import { lsofCwds, strictLsofCwds } from '../../src/main/cwd-probe'
 
 // 실제 lsof 로 시험한다 — 이 시험 프로세스의 작업 폴더를 읽는다.
 describe('lsofCwds (13단계 — 셸 통합이 없는 셸의 폴더)', () => {
@@ -12,6 +12,41 @@ describe('lsofCwds (13단계 — 셸 통합이 없는 셸의 폴더)', () => {
     expect(await lsofCwds([])).toEqual({})
     const got = await lsofCwds([process.pid, 999_999])
     expect(Object.keys(got)).toEqual([String(process.pid)])
+  })
+})
+
+describe('strictLsofCwds — only verified live cwd results may authorize cleanup', () => {
+  it('requires every requested live PID and accepts an empty request', async () => {
+    expect(await strictLsofCwds([])).toEqual({})
+    expect((await strictLsofCwds([process.pid]))[process.pid]).toBe(process.cwd())
+    await expect(strictLsofCwds([process.pid, 999_999])).rejects.toThrow()
+    await expect(strictLsofCwds([process.pid, process.pid])).rejects.toThrow()
+  })
+
+  it.each(['한글 a%b', 'line\nbreak', 'back\\slash', 'caret^name'])('verifies or blocks a real owned child cwd: %j', async name => {
+    const { mkdtempSync, mkdirSync, realpathSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { spawn } = await import('node:child_process')
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'taskminal-strict-lsof-')))
+    const folder = join(root, name)
+    mkdirSync(folder)
+    const child = spawn('/bin/sleep', ['15'], { cwd: folder })
+    const exited = new Promise<void>(resolve => { child.once('exit', () => resolve()) })
+    try {
+      await new Promise<void>((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject) })
+      if (name === '한글 a%b') expect((await strictLsofCwds([child.pid!]))[child.pid!]).toBe(folder)
+      else await expect(strictLsofCwds([child.pid!])).rejects.toThrow()
+      if (name.includes('\n')) {
+        const legacy = await lsofCwds([child.pid!])
+        expect(legacy[child.pid!]).toBeTruthy()
+        expect(legacy[child.pid!]).not.toBe(folder)
+      }
+    } finally {
+      child.kill()
+      await exited
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

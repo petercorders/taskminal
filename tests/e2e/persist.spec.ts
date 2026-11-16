@@ -17,7 +17,7 @@ test.beforeEach(() => {
 })
 test.afterEach(async () => {
   await launched?.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
 })
 
 async function launch(env: Record<string, string> = {}): Promise<void> {

@@ -1,6 +1,7 @@
 // 대화 pane (21단계) — 에이전트 출력을 공통 이벤트로 바꾸고, 화면 블록 · 상태를 만든다. 순수 함수라 단위 시험한다.
 // Claude 모양은 2026-11-11 스파이크(claude 2.1.322, stream-json + --permission-prompt-tool stdio)로 확인했다 — tests/fixtures/claude/*.jsonl
 import { isDangerous } from './danger'
+import { isAbsolutePath, pathInside } from './platform'
 import { isObj, type Obj } from './guards'
 import { hasMask } from './history'
 import { redact, type SecretOptions } from './redact'
@@ -55,7 +56,7 @@ export type ChatEvent =
   /** anchor: 이 턴 끝에서 갈라질 자리 — Claude 는 마지막 assistant 줄의 uuid, Codex 는 turn id (22단계 되감기 · 나누기) */
   | { t: 'turn_end'; ok: boolean; ms: number; reason: string; ctxPct?: number; anchor?: string }
   | { t: 'stopped' }
-  | { t: 'error'; kind: ErrorKind; message: string; code?: number; resetsAt?: number }
+  | { t: 'error'; kind: ErrorKind; message: string; code?: number; resetsAt?: number; uncertain?: boolean }
 
 const EVENT_TYPES = new Set(['user', 'session', 'text', 'tool', 'tool_end', 'permission', 'question', 'answered', 'turn_end', 'stopped', 'error'])
 /** 디스크 · IPC 에서 읽은 값 — 종류와 그 종류의 글 칸만 본다(화면은 모르는 칸을 쓰지 않는다) */
@@ -89,8 +90,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
 function inside(cwd: string, path: string): boolean {
-  const root = cwd.replace(/\/+$/, '')
-  return path === root || path.startsWith(root + '/')
+  return pathInside(cwd, path)
 }
 function rel(cwd: string, path: string): string {
   return inside(cwd, path) && path !== cwd.replace(/\/+$/, '') ? path.slice(cwd.replace(/\/+$/, '').length + 1) : path
@@ -112,7 +112,7 @@ export function isDangerousTool(tool: string, input: unknown, cwd: string, block
   if (typeof i['command'] === 'string' && isDangerous(i['command'])) return true
   for (const k of ['file_path', 'notebook_path']) {
     const p = i[k]
-    if (typeof p === 'string' && p.startsWith('/') && !inside(cwd, p)) return true
+    if (typeof p === 'string' && isAbsolutePath(p) && !inside(cwd, p)) return true
   }
   void tool
   return false
@@ -545,13 +545,13 @@ export function codexRequestToEvents(method: string, rpcId: number | string, par
   if (method === 'item/commandExecution/requestApproval') {
     const command = str(p['command'])
     const where = str(p['cwd'])
-    const danger = isDangerousTool('Bash', { command }, cwd) || (where.startsWith('/') && !inside(cwd, where))
+    const danger = isDangerousTool('Bash', { command }, cwd) || (isAbsolutePath(where) && !inside(cwd, where))
     return [{ t: 'permission', id, tool: 'Bash', summary: clip(command || '명령 실행', 300), why: clip(str(p['reason']), 200), danger }]
   }
   if (method === 'item/fileChange/requestApproval') {
     const root = str(p['grantRoot'])
     const summary = root ? `${rel(cwd, root)} 에 쓰기` : str(p['reason']) || '파일 바꾸기'
-    return [{ t: 'permission', id, tool: 'Edit', summary: clip(summary, 300), why: root ? clip(str(p['reason']), 200) : '', danger: root.startsWith('/') && !inside(cwd, root) }]
+    return [{ t: 'permission', id, tool: 'Edit', summary: clip(summary, 300), why: root ? clip(str(p['reason']), 200) : '', danger: isAbsolutePath(root) && !inside(cwd, root) }]
   }
   if (method === 'item/tool/requestUserInput') {
     const qs = Array.isArray(p['questions']) ? p['questions'].filter(isObj) : []

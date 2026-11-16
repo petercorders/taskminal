@@ -1,7 +1,9 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-13 (30단계 UI/UX 개선 루프, 고정표 95점 — 라이트 대비 · 보조 패널 · 복사 실패 · 입력 이름. 29·30단계 main 병합(구현 `51a8669` · `6b97efa`). 출시 준비는 8절)
+마지막 갱신: 2026-11-16 (50단계까지 누적 기능의 main 통합. 편집·환경·감독·원격·선언형 확장, 리뷰·UI·GC 완료. 최종 단위1,226·e2e359 확인: 전체 실행의 보안 API 기대 목록1건 정정 후 창 시험5개 재통과. 공개0.1.2 유지. 상세 `docs/stages/50-orca-depth.md`)
+
+2026-11-16 사용자 지시 "main 반영해주고 공개 릴리스는 아직"에 따라 PR #2를 포함한 최신 기능을 main에 통합한다. 기존 표의 'main 미병합'은 각 단계 완료 당시 기록이다. 다음 독립 작업은 최신 `origin/main`에서 작업별 브랜치로 시작한다. 새 공개 릴리스·태그·공증·배포는 계속 보류한다.
 
 ## 1. 지금 어디까지
 
@@ -27,8 +29,30 @@
 | 28 Orca 에서 배워 다듬기 | main 에 병합(브랜치 `stage-28-orca-polish`). 설정 구조(묶음 · 아이콘 · 경로 머리 · 묶음 카드) · 선 아이콘 · 간격 척도 `--space-*`(척도 밖 226 → 0) · 머리 40 · 줄 36/48 · 대화 머리 · 글 · 입력 같은 왼쪽 끝 · 팔레트 종류 제목. `docs/stages/28-orca-polish.md` |
 | 29 UI/UX · 반응형 | main 에 병합(브랜치 `uiux-sidebar-polish`, 구현 `51a8669`). 사이드바 일반 창 288px · 작은 창 200px, pane 폭에 따른 대화·검토 배치, 모달 크기 제한, 보관함·검토·출력 찾기 키보드, 백업 조회 오류·재시도. 계획·검증 `docs/stages/29-uiux-responsive.md` |
 | 30 UI/UX 85점 개선 루프 | main 에 병합(같은 브랜치, 구현 `6b97efa`). 고정 40항목 82.5 → 95점(200% 검증 근거 보강 포함). 라이트 카드·상태 글자 대비, 좁은 보조 패널 옆 본문, 첫 실행·주간 복사 오류·재시도, 입력 이름. 근거·감점·미검증 `docs/stages/30-uiux-score-loop.md` |
-| 1차 출시 | **남은 것은 사용자 손 · 실제 환경** — 8절 |
+| 31 전체 보기 | 구현·검증 완료(main 미병합). 상태별 카드·검색·정확한 화면 이동·기존 셸 유지. `docs/stages/31-overview.md` |
+| 32 사용량·계정 | 구현·검증 완료(main 미병합). Codex 실제 한도 조회·추가 계정 격리·진행 세션 고정. Claude 한도는 공식 지원 경로 미확인으로 미지원 표시. `docs/stages/32-accounts-usage.md` |
+| 33 GitHub 흐름 | 구현·검증 완료(main 미병합). 안전한 push·PR 생성·체크/리뷰·SHA 고정 병합 확인·응답 유실 복구. `docs/stages/33-git-workflow.md` |
+| 34 내장 브라우저 | 구현·검증 완료(main 미병합). 일감 보조 pane·웹 격리·요소/화면 확인 후 대화 첨부. `docs/stages/34-workspace-browser.md` |
+| 35 파일 탐색·맥락 | 구현·검증 완료(main 미병합). 폴더·텍스트/Markdown/그림/PDF 미리보기·범위/참조 첨부·경계 검사. `docs/stages/35-workspace-files.md` |
+| 36 대화 기록 검색 | 구현·검증·GC 완료. 단위 1,021 · e2e 285 · 변이8, 전체 종료0. `docs/stages/36-conversation-search.md` |
+| 37 에이전트 작업 흐름 | 구현·검증·GC 완료. 단위1,042·e2e291·핵심 변이6, 전체 종료0. `docs/stages/37-agent-workflows.md` |
+| 38 예약과 결과함 | 구현·검증·GC 완료. 단위1,060·e2e293·변이7, 전체 종료0. `docs/stages/38-schedules.md` |
+| 39 worktree 관리 | 구현·검증·GC 완료. 단위1,121·e2e299·변이8, 전체 종료0. `docs/stages/39-worktree-management.md` |
+| 40 브라우저 탭 후속 | 구현·검증·GC 완료. 단위1,141·e2e304·변이7, 전체 종료0. `docs/stages/40-browser-tabs.md` |
+| 41 전체 UI/UX | 좁은 설정·사이드바 서랍·도구 줄/헤더·초안 보존·늦은 응답/포커스 개선. 단위1,141·e2e316·UI 변이13·GC, 최종 전체 종료0. `docs/stages/41-whole-app-uiux.md`. 승인된 기능 브랜치 push, main 병합 별도 |
+| 42 Mac 출시 준비 | 0.1.1 공증 승인, 공개 버전은 43단계의 0.1.2로 대체. `docs/stages/42-release-0.1.1.md` |
+| 43 다중 OS 출시 | **0.1.2 공개 완료** — Mac arm64/x64 서명·공증, Windows x64, Linux x64 AppImage/deb. 네 OS CI·단위1,182·e2e317·서명 앱12 통과, Docs/README/Pages 게시·GC. `docs/stages/43-multi-platform.md` |
+| 44 내장 편집·리뷰 의견 | 원문 UTF-8 편집·서명 충돌·메모리 초안·줄/범위 코멘트. 단위1,186·e2e328·변이3·GC, 전체 종료0. `docs/stages/44-editor-review.md` |
+| 45 병렬 worker | 1~4개 슬롯·DAG 의존성·실제 독립 worktree·중단/재시도 attempt 경계. 단위1,191·e2e330·변이3·GC, 전체 종료0. `docs/stages/45-parallel-workers.md` |
+| 46 브라우저 CLI 자동화 | 탭/탐색 범위 snapshot·click·fill·navigate·가림 screenshot. 단위1,192·e2e334·보안 변이2·GC, 전체 종료0. `docs/stages/46-browser-automation.md` |
+| 47 이슈 연결 | GitHub/Linear 조회·일감/실제 worktree·맥락·PR·명시적 상태 변경. 단위1,201·관련 e2e5·변이2·GC 통과. 보안 기대 목록·임시 정리 시험 정정 후48 최종 전체에 포함해 통과. `docs/stages/47-issue-links.md` |
+| 48 원격 작업 공간 | 서버 소유 파일/CAS·Git·PTY 줄 입력·Claude/Codex 대화·앱 종료 후 재접속. 최종 타입·경계·단위1,206·e2e341 통과(종료0)·변이3·GC 완료. `docs/stages/48-remote-workspace.md`, 운영 방법 `docs/remote-workspaces.md` |
+| 49 전체 점검 버그 수정 | 손상 이슈 기록의 앱 시작 중단·CLI 탐색 실패 응답·삭제한 이슈 일감 재생성·원격 staged diff·리뷰 댓글 서명 복구. 단위1,209·e2e344·변이5·GC 완료, 전체 종료0. `docs/stages/49-five-bugfixes.md` |
+| 50 Orca 비교 다섯 영역 보강 | CodeMirror·worktree 환경 준비·실행 중 감독/모델·원격 xterm/HTTP 서버 재시작 생존·선언형 로컬 확장. 단위1,226·e2e359 최종 확인·변이13·GC. 전체 실행의 API 기대 목록1건은 정정 후 관련5개 재통과. `docs/stages/50-orca-depth.md`, `docs/stages/50-review-gc.md` |
+| 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
+
+31~35 통합 결과: 단위 1,018개·변이 20개 검출. 최종 전체 e2e는 280개 첫 통과·1개 임시 폴더 정리 오류 후 재시도 통과(종료 3, 불안정)였다. 직전 전체 실행은 단위 1,017·e2e 280·종료 0. 정리 재시도 보강 후 기록 시험 별도 결과와 범위·실환경 미검증은 `docs/stages/31-35-verification.md`. 후속 패키징 정적 검사와 실제 .app e2e 11개도 통과했다(PDF worker 포함). 통합 구현 커밋 후 이 브랜치의 push/병합은 별도 진행한다.
 
 단계를 끝낼 때마다 이 표와 '마지막 갱신' 줄을 고친다.
 
@@ -240,15 +264,24 @@
 - python 등으로 파일을 고치면 편집 훅(tsc)이 돌지 않는다 → 고친 뒤 `npm run typecheck`.
 - 열린 대화상자 · `then` 이 가리키는 대상이 그 사이 사라질 수 있다 — 저장할 내용은 연 순간에 떠 두고, 지울 대상은 id 로 다시 찾는다(12단계 리뷰).
 
-## 8. 1차 출시까지 남은 것 (25단계 끝에 모음)
+## 8. 공개 버전과 실제 환경 확인
 
-0~25단계 기능은 모두 `main` 에 있다. 아래는 **사용자 손이 필요한 것 · 실제 환경에서만 확인되는 것** 이다. 하나씩 끝나면 이 절에서 지운다.
+**공개 버전은 0.1.2**, 태그 `v0.1.2`와 앱 산출물 소스는 `9936e2e0796938ab41ad0bfaaaf3a5de9defbc09`다. [릴리스](https://github.com/petercorders/taskminal/releases/tag/v0.1.2) · [홈페이지](https://taskminal.petercoders.com) · [한국어 Docs](https://taskminal.petercoders.com/docs/) · [English Docs](https://taskminal.petercoders.com/en/docs/).
 
-### 사용자 준비물 → 출시
-1. **Developer ID 서명 · 공증** — 준비물은 끝남(2026-11-11): 인증서 'Developer ID Application: KiBong Kim (96CFW3T8G4)' 이 로그인 키체인에, 공증 프로필 `taskminal-notary`(Account Holder Apple ID)가 확인됨. 첫 공증 제출(2026-11-11 22:36, id `5fe32385-…`)은 26단계 이전 빌드라 내보내지 않는다 — Apple 이 이 팀의 첫 공증을 오래 붙잡고 있어 `xcrun notarytool history --keychain-profile taskminal-notary` 로 통과를 본 뒤, **이 폴더에서 최신 main 으로 `npm run release`** 를 다시 돌린다(서명 · 공증 · `spctl -a` · 배포본 검사 `scripts/check-package.mjs` 까지 한 번에, 공증 대기가 길어 백그라운드로).
-2. **GitHub Releases 올리기** — 업데이트 주소는 `petercorders/taskminal`(18단계). release 가 통과하면 `spctl` · `xcrun stapler validate` 확인 → dmg · zip 을 Release 로 올리고 → 홈페이지 `site/assets/site.js` 의 `RELEASE = 'ready'` 로 바꿔 push(내려받기 단추가 OS 를 보고 dmg 로 잇는다).
-3. **/Applications 설치 · Finder 더블클릭 실행** — 개발 앱이 아니라 서명된 .app 으로(14 · 18단계 미확인). 확인할 것: 셸 · 한글 · 최소 환경 PATH(`which node`) · 셸 지킴이 · 0.1.0 → 0.1.1 자동 업데이트 뒤 셸 유지(18단계 verify 중 실제 설치 성공).
-4. **명령줄 도구 설치** — 앱 메뉴 '명령줄 도구 설치…' 가 `/usr/local/bin/taskminal` 링크를 만든다. 쓸 수 없는 폴더면 직접 칠 `sudo mkdir … && sudo ln -sf …` 명령을 돌려준다(`src/main/cli-install.ts`) — 서명된 .app 에서 실제 설치는 미확인(24단계).
+- Mac Apple Silicon·Intel: macOS 13 이상, Developer ID 서명·Apple 공증 Accepted·staple·Gatekeeper 검사 통과. 계약 관련 403은 해소됐다. 최종 제출 `fc226ddf-aa31-4cb9-821c-d307e1e657a7`(Intel), `7a83797b-dbf4-4a41-a631-f05b6fccb15c`(arm64).
+- Windows x64: 미서명 베타. 포트 자동 감지·추가 계정 TUI 전환 미지원, 실행 폴더 확인이 불가능한 worktree 정리는 거절한다.
+- Linux x64: AppImage·DEB 베타. 배포판 의존 라이브러리와 한글용 CJK 폰트가 필요하다. 최소 CI 이미지의 한글 글꼴은 미설치 상태여서 화면은 네모로 표시됐으며, UTF-8 입출력 시험 통과와 글꼴 표시 검증을 구분한다. 설치 안내는 Docs에 있다.
+- 네 OS의 실제 패키지 실행·셸·CLI·reload·정상 종료와 guardian 재연결 CI `43527362077` 모두 통과. Mac 최종 전체는 타입·경계·단위1,182·e2e317 통과(패키지 전용2 skip), 서명 앱 시험12개 통과.
+- GitHub 파일22개 SHA-256·크기와 updater SHA-512 검증, 공개 설치 파일5종 인증 없는 실제 다운로드·SHA-256 일치. 통합 `SHA256SUMS`를 릴리스에 첨부했다.
+- **main `f478672`에는 site/ 및 README만 반영했다. 앱 31~43단계 전체 병합은 하지 않았다.** 공개 앱을 재현할 때 최신 main으로 빌드하지 말고 태그 `v0.1.2`를 별도 작업 위치에서 사용한다. 실행 중인 사용자 앱의 dist나 실제 데이터는 덮지 않는다.
+- README·한국어/영어 Docs·OS 다운로드가 Pages 실행 `43528558080`에서 배포됐다. 소스 변경은 기능 브랜치에 push한다. 기존 `git push origin HEAD:main` 안내를 이 기능 브랜치 전체에 적용하지 않는다.
+
+### 아직 실제 사용자 환경에서 확인할 것
+
+1. `/Applications` 설치·Finder 실행, 실제 Retina·IME·VoiceOver, 실제 Claude·Codex 계정 대화는 이번 검증에 포함하지 않았다.
+2. 실제 Mac 자동 업데이트 설치 후 셸 유지와 명령줄 도구 PATH 링크 설치는 별도 확인이다. updater 메타데이터·다운로드 해시는 검증했다.
+3. Windows NSIS·Linux AppImage/DEB를 사용자 기기에 실제 설치하는 UX, Linux CJK 폰트 설치 후 화면은 별도 확인이다. CI는 각 OS의 unpacked 패키지를 임시 데이터로 실행했다.
+4. Cloudflare 토큰 재발급/삭제와 실제 계정·NAS 접속 등 기존 사용자 확인 항목은 자동 실행하지 않았다.
 
 ### 미확인 (실제 환경 · 계정이 있어야 함)
 | 무엇 | 왜 못 봤나 | 확인 방법 |
@@ -265,3 +298,14 @@
 
 ### 알려진 불안정
 7절. 24단계 고침(붙기 전 친 키를 모아 보냄) 뒤 25단계까지의 전체 검사 결과는 25단계 결과 절(`docs/stages/25-archive-remote.md`)에 적는다.
+
+
+## 9. 44~48 후속 개발 이어받기
+
+작업 위치 `/Users/gimgibong/orca/workspaces/taskminal/taskminal`, 브랜치 `stage-44-48-orca-workflow`. 공개 0.1.2와 main의 사이트는 이 변경으로 교체하지 않는다. 이번 feature push는 Pages·네이티브 릴리스를 트리거하지 않는다. 원래 main에는 기존 31~41 앱 기능도 미병합이므로 이 브랜치 전체를 main에 올리는 것은 별도 사용자 요청이다. 새 공개 버전·재공증·기능 병합은 실행하지 않았다.
+
+원격 서버는 loopback + SSH 터널/외부 HTTPS 구성으로 사용한다. 실제 사용자 원격 호스트·공급자 계정·OS 인증정보는 변경하지 않았다. 서버 재시작 때 실행 중 프로세스 생존, 전체 TUI/ANSI 터미널, 네이티브 모바일 앱은 이번 범위에 없다. Retina·VoiceOver·IME·Windows/Linux 실제 GUI와 실제 계정은 별도 확인한다.
+
+최종 검증·UI/UX·GC: `docs/stages/44-48-uiux-gc.md`. 전체 고정 tree `fe62045e30d5cb4d5a7504473239b8a964d156eb`, 로그 `/tmp/taskminal-48-full.log`. 패키지 전용2개는 새 설치 파일을 만들지 않아 skip했다. 각 단계 핵심 변이 총13개 검출. 커밋·push 대상은 이 기능 브랜치다.
+
+49단계 후속 버그 수정: `docs/stages/49-five-bugfixes.md`. 전체 로그 `/tmp/taskminal-49-full.log`, 타입·경계·단위1,209·e2e344 통과(패키지 전용2 skip, 종료0), 변이5 검출·GC 완료. 손상된 이슈 기록은 원본을 보존하고 이슈 기능만 차단한다. 공개0.1.2 교체나 main 병합은 하지 않았다.

@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { firstWindow, seedState, waitLoaded } from './helpers'
+import { firstWindow, seedState, waitLoaded, selectSettingsSection } from './helpers'
 
 let data: string
 let app: ElectronApplication | undefined
@@ -100,7 +100,7 @@ test('200% 확대에서 설정·새 일감·출력 찾기의 주요 액션은 �
   await command('settings')
   const settings = win.getByTestId('settings')
   await expect(settings).toBeVisible()
-  await settings.getByRole('navigation').getByRole('button', { name: '일감 관리', exact: true }).click()
+  await selectSettingsSection(settings, '일감 관리')
   await expect.poll(() => settings.getByTestId('settings-body').evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true)
   await nativeScreenshot('settings-200')
   await win.keyboard.press('Escape')

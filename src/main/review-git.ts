@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, join, normalize } from 'node:path'
+import { isAbsolute, join, normalize, sep } from 'node:path'
 import { buildPatch, FOLD_BYTES, fileSig, liveReverted, parseDiff, parseStatus, untrackedDiff, watchIgnored, wholePatch, type CommitResult, type DiffFile, type ReviewLoad, type RevertResult, type UndoResult } from '../shared/review'
 export type { CommitResult, ReviewLoad, ReviewOk, RevertResult } from '../shared/review'
 import { isObj } from '../shared/guards'
@@ -146,8 +146,9 @@ async function freshFile(run: RunGit, dir: string, path: string): Promise<{ root
 /** 저장소 안 상대 경로만 — 절대 경로 · .. · 빈 글 거절 */
 export function safeRel(path: string): boolean {
   if (typeof path !== 'string' || path.length === 0 || path.length > 4096 || isAbsolute(path) || path.includes('\0')) return false
-  const n = normalize(path)
-  return n !== '..' && !n.startsWith('../') && n === path.replace(/\/+$/, '')
+  const canonical = (value: string) => sep === '\\' ? value.replace(/\\/g, '/') : value
+  const n = canonical(normalize(path))
+  return n !== '..' && !n.startsWith('../') && n === canonical(path).replace(/\/+$/, '')
 }
 
 // ─── 되돌리기 · 되살리기 ────────────────────────────────────────────

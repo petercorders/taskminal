@@ -1,0 +1,39 @@
+#!/bin/sh
+# Taskminal 명령줄 도구 (24단계) — 앱의 Electron 을 node 로 써서 server.js 를 돌린다.
+# 앱 안 터미널은 TASKMINAL_CLI_NODE · TASKMINAL_SERVER_JS(정확한 경로)를 받는다. 그 밖(설치한 링크)은 자기 위치에서 찾는다.
+# 셸은 앱을 다시 켜도 살아 있다 — 앱을 옮겼으면 받은 경로가 없으니 자기 위치에서 찾는다(24 리뷰)
+if [ -n "$TASKMINAL_CLI_NODE" ] && [ -n "$TASKMINAL_SERVER_JS" ] && [ -x "$TASKMINAL_CLI_NODE" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$TASKMINAL_CLI_NODE" "$TASKMINAL_SERVER_JS" "$@"
+fi
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+bin=$(cd "$(dirname "$self")" && pwd -P)
+up=$(dirname "$(dirname "$bin")")
+if [ -x "$up/MacOS/Taskminal" ]; then
+  # .app/Contents/Resources/bin
+  exe=$up/MacOS/Taskminal
+  js=$up/Resources/app.asar/out/main/server.js
+elif [ -x "$up/taskminal" ]; then
+  # Linux 배포본의 resources/bin
+  exe=$up/taskminal
+  js=$up/resources/app.asar/out/main/server.js
+elif [ -x "$up/node_modules/electron/dist/electron" ]; then
+  # Linux 개발 폴더
+  exe=$up/node_modules/electron/dist/electron
+  js=$up/out/main/server.js
+else
+  # 저장소의 resources/bin (개발)
+  exe=$up/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+  js=$up/out/main/server.js
+fi
+if [ ! -x "$exe" ]; then
+  echo "taskminal-server: Taskminal 앱을 찾지 못했어요 ($exe)" >&2
+  exit 1
+fi
+ELECTRON_RUN_AS_NODE=1 exec "$exe" "$js" "$@"

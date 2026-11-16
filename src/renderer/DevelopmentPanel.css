@@ -1,0 +1,12 @@
+.development-panel { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-3); min-width: 0; padding: var(--space-3); }
+.development-panel h3, .development-panel h4, .development-panel p { margin: 0; overflow-wrap: anywhere; }
+.development-panel label { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.development-panel input { min-width: 0; width: 100%; box-sizing: border-box; }
+.development-preview { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.development-preview strong, .development-preview code { overflow-wrap: anywhere; }
+.development-preview pre { margin: 0; padding: var(--space-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; color: var(--fg); background: var(--bg); font: 12px/1.6 ui-monospace, monospace; }
+.development-preview ul { margin: 0; padding-left: var(--space-4); overflow-wrap: anywhere; }
+.development-trust { padding: var(--space-2); border-left: 3px solid var(--accent); font-weight: 600; }
+.development-records { display: flex; flex-direction: column; gap: var(--space-2); }
+.development-panel .work-tools-row { flex-wrap: wrap; }
+.development-panel .button { white-space: normal; overflow-wrap: anywhere; }

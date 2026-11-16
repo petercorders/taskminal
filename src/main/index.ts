@@ -1,10 +1,11 @@
+import { installDevelopmentIpc } from './development-ipc'
 import { app, BrowserWindow, clipboard, crashReporter, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { autoUpdater, type ProgressInfo } from 'electron-updater'
 import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { homedir, hostname, tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, delimiter, isAbsolute } from 'node:path'
 import { AUTO_BACKUP_MS, backupReasonFor, exportText, SETTINGS_BACKUP_GAP_MS, type BackupInfo, type BackupReason } from '../shared/backup'
 import { IPC, isBackupMark, isHostAction, isRedactFix, isUpdateAction, type AppInfo, type RedactStatus } from '../shared/ipc'
 import type { LogLevel } from '../shared/errlog'
@@ -23,11 +24,20 @@ import { CliServer } from './cli-server'
 import { installCli } from './cli-install'
 import { cliSocketPath, parseUiReply, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
 import { PaneWatch } from '../shared/pane-watch'
-import { lsofCwds } from './cwd-probe'
+import { lsofCwds, strictLsofCwds } from './cwd-probe'
 import { killPort, probePorts } from './port-probe'
 import type { ProbeResult } from '../shared/ports'
 import { branchesOf } from './git-branch'
 import { addWorktree } from './worktree'
+import { installWorkflowIpc } from './workflow-ipc'
+import { installIssuesIpc } from './issues-ipc'
+import { installRemoteIpc } from './remote/ipc'
+import { installScheduleIpc } from './schedule-ipc'
+import { installWorktreeIpc } from './worktree-ipc'
+import type { WorkspaceBrowser } from './workspace-browser'
+import type { WorkflowRunner } from './workflow-runner'
+import { installWorkspaceIpc } from './workspace-ipc'
+import type { Accounts } from './accounts'
 import type { WorktreeResult } from '../shared/worktree'
 import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
@@ -35,7 +45,7 @@ import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
 import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
 import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
-import { execFile as execFileChild, spawn as spawnChild } from 'node:child_process'
+import { spawn as spawnChild } from 'node:child_process'
 import { ChatManager } from './chat/chat-manager'
 import { ChatStore } from './chat/chat-store'
 import { AgentBinFinder } from './chat/find-bin'
@@ -46,6 +56,9 @@ import { isObj } from '../shared/guards'
 import { StateFile } from './state-file'
 import { ErrorLog } from './errlog'
 import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
+import { defaultShell } from '../shared/platform'
+import { openTextEditor } from './text-editor'
+import { isAppPage } from './page-origin'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -67,6 +80,7 @@ const zshIntegrationDir = ((): string | null => {
 })()
 // 설정에서 고를 수 있는 셸 — 시스템이 로그인 셸로 인정한 것만
 const allowedShells = ((): string[] => {
+  if (process.platform === 'win32') return [defaultShell('win32', process.env)].filter(existsSync)
   try {
     return readFileSync('/etc/shells', 'utf8')
       .split('\n')
@@ -87,6 +101,9 @@ let cliSockPath = '' // ready 뒤 정한다(userData)
 let cliServer: CliServer | null = null
 // main 이 받은 마지막 상태 — 새 셸의 TASKMINAL_TASK_ID 를 찾는다. 상태를 받을 때마다 바꾼다(처음 한 번만 읽지 않는다)
 let lastState: AppState | null = null
+let agentAccounts: Accounts | null = null
+let workspaceBrowser:WorkspaceBrowser|null=null
+let workflowRunner: WorkflowRunner | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
 /** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
 function cliEnv(paneId: string): Record<string, string> {
@@ -125,6 +142,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 function startCliServer(): void {
   cliServer = new CliServer({
     sockPath: cliSockPath,
+    workflow(command){
+      const runner=workflowRunner;if(!runner)throw Error('작업 흐름을 준비하지 못했어요')
+      if(command.action==='view')return runner.view()
+      if(typeof command.runId!=='string')throw Error('실행 번호를 확인해 주세요')
+      if(command.action==='append')runner.append(command.runId,command.input as import('../shared/workflows').WorkflowStep)
+      else if(command.action==='message')runner.message(command.runId,command.input as import('../shared/workflows').WorkflowMessage)
+      else runner.answerMessage(command.runId,command.messageId!,command.text!)
+      return runner.view()
+    },
+    async browser(command){
+      const win=mainWindow,browser=workspaceBrowser
+      if(!win||win.isDestroyed()||!browser||!lastState?.tasks.some(t=>t.id===command.task&&!t.host&&t.archivedAt===undefined))throw new Error('로컬 일감과 열린 창을 확인해 주세요')
+      if(command.action!=='tabs'){
+        const reply=await askUi({op:'browser.open',taskId:command.task})
+        if(!reply.ok)throw new Error(reply.error)
+      }
+      return browser.automate(win,command)
+    },
     askUi,
     pane: {
       async ready(paneId, ms) {
@@ -160,7 +195,12 @@ function startCliServer(): void {
 }
 /** 앱 메뉴 '명령줄 도구 설치…' — 사용자가 누를 때만. 시험은 TASKMINAL_CLI_INSTALL_DIR */
 async function installCliMenu(): Promise<void> {
-  const dir = process.env['TASKMINAL_CLI_INSTALL_DIR'] || '/usr/local/bin'
+  if (process.platform === 'win32') {
+    await dialog.showMessageBox({ type: 'info', message: '앱 안 터미널에서는 taskminal 명령을 바로 쓸 수 있어요', detail: `외부 터미널에서도 쓰려면 Windows 환경 변수 PATH에 다음 폴더를 추가하세요.\n${cliBinDir}\n기존 PATH는 바꾸지 않았어요.` })
+    return
+  }
+  const dir = process.env['TASKMINAL_CLI_INSTALL_DIR'] || (process.platform === 'darwin' ? '/usr/local/bin' : join(homedir(), '.local', 'bin'))
+  if (process.platform === 'linux') mkdirSync(dir, { recursive: true })
   const r = installCli(join(cliBinDir, 'taskminal'), dir)
   const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
   const box = (o: Electron.MessageBoxOptions) => (win ? dialog.showMessageBox(win, o) : dialog.showMessageBox(o))
@@ -229,11 +269,14 @@ const agentBins = new AgentBinFinder()
 const chats = () =>
   (chatManager ??= new ChatManager({
     // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
-    extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || ''}:${cliBinDir}` }),
+    extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || process.env['Path'] || ''}${delimiter}${cliBinDir}` }),
+    sessionEnv: (env,paneId,chat) => agentAccounts?.sessionEnvironment(paneId,chat.agent,!!chat.sessionId,env) ?? env,
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
     findBin: (agent) => agentBins.find(agent),
+    reserved:paneId=>!!lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId),
+    permissionFor:paneId=>lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId)?'ask':undefined,
     permission: () => chatPermission,
     channel: IPC.chatEvent,
     appVersion: app.getVersion(),
@@ -252,6 +295,8 @@ const reviewWatch = new ReviewWatch()
 // 상태 백업(17단계) — userData 가 정해진 뒤 만든다
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
+let worktreeRevision=0
+const pendingWorktreeCwds=new Map<symbol,string>()
 let lastWritten: AppState | null = null // 디스크에 있는 상태 — 다음 상태와 비교해 백업 이유를 정한다
 let lastSettingsBackup = 0
 let changedSinceAuto = false
@@ -288,7 +333,7 @@ const sshRetryMs = ((): number => {
 // ssh 실행 파일 — 시험은 TASKMINAL_SSH 로 가짜(절대 경로만)
 const sshFile = (): string => {
   const v = process.env['TASKMINAL_SSH']
-  return v && v.startsWith('/') ? v : '/usr/bin/ssh'
+  return v && isAbsolute(v) ? v : process.platform === 'win32' ? join(process.env['SystemRoot'] || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe') : '/usr/bin/ssh'
 }
 // ControlMaster 소켓 폴더 — 나만 읽고 쓰는(0700 · 내 것 · 링크 아님) 폴더. macOS 소켓 경로 한도(104바이트)에 들어가야 한다:
 // 보통 '~/Library/Application Support/Taskminal/ssh' 는 넘치므로(25단계 리뷰) /tmp/taskminal-<uid> 로. 둘 다 안 되면 연결을 나누지 않는다
@@ -302,6 +347,7 @@ const ownPrivateDir = (dir: string): boolean => {
   }
 }
 const sshControlDir = (): string | null => {
+  if (process.platform === 'win32') return null // Windows OpenSSH는 ControlMaster 소켓을 지원하지 않는다
   for (const dir of [join(app.getPath('userData'), 'ssh'), `/tmp/taskminal-${process.getuid?.() ?? 'u'}`]) {
     if (controlPathFits(dir) && ownPrivateDir(dir)) return dir
   }
@@ -340,15 +386,7 @@ const stateWriter = new Debouncer<AppState>(
   300,
 )
 
-const isOurPage = (url: string): boolean => {
-  try {
-    const u = new URL(url)
-    if (devServerUrl) return u.origin === new URL(devServerUrl).origin
-    return u.protocol === 'file:' && decodeURIComponent(u.pathname) === rendererFile
-  } catch {
-    return false
-  }
-}
+const isOurPage = (url: string): boolean => isAppPage(url, rendererFile, devServerUrl)
 
 const openExternalIfWeb = (url: unknown): void => {
   const web = webUrl(url) // http(s) 가 아니면 무시
@@ -394,7 +432,7 @@ function createWindow(): BrowserWindow {
   })
   // 대화의 claude 는 지킴이에 남기지 않는다 — 창이 닫히면 끝내고, 다음 보내기가 --resume 으로 잇는다(새로 고침 · 충돌은 같은 webContents 라 그대로)
   const chatSink = win.webContents
-  win.on('closed', () => chatManager?.closeSink(chatSink))
+  win.on('closed', () => {workflowRunner?.dispose();chatManager?.closeSink(chatSink)})
   // 종료 경로 4개 중 창에 딸린 3개 — 셸은 지킴이에 남기고 떼기만 한다(16단계). 다시 열리면 attach 로 다시 붙는다.
   const wc = win.webContents
   // renderer 가 사라지면(창 닫기 · 새로 고침 · 충돌) 그 renderer 가 알려 준 수도 버린다 — 새 페이지가 다시 보낸다
@@ -403,6 +441,7 @@ function createWindow(): BrowserWindow {
     setBadge(0)
   }
   const detach = () => {
+    workflowRunner?.dispose()
     hostControl?.ptys.detachOwner(wc)
     reviewWatch.stopPrefix(`${wc.id}:`)
     forget()
@@ -561,6 +600,34 @@ if (!app.requestSingleInstanceLock()) {
     return { name: app.getName(), version: app.getVersion(), shells: allowedShells, host: hostname(), home: homedir(), cwdPollMs, portPollMs, renderer, crashedLast, sshRetryMs, claudeTui: process.env['TASKMINAL_CLAUDE_TUI'] || 'claude', codexTui: process.env['TASKMINAL_CODEX_TUI'] || 'codex' }
   })
 
+  const workspaceTools = installWorkspaceIpc(fromOurWindow, () => lastState)
+  agentAccounts=workspaceTools.accounts
+  workspaceBrowser=workspaceTools.browser
+  installRemoteIpc(fromOurWindow)
+  installDevelopmentIpc(fromOurWindow,()=>lastState)
+  installIssuesIpc(fromOurWindow, { state: () => lastState, saved: () => { stateWriter.flush(); return stateFile?.canWrite ? lastWritten : null }, ask: askUi })
+  workflowRunner = installWorkflowIpc(fromOurWindow,{
+    state:()=>lastState,accounts:agentAccounts,manager:chats(),ask:askUi,
+    saved:()=>{stateWriter.flush();return stateFile?.canWrite?lastWritten:null},
+    sink:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.webContents:null,
+    redact:text=>redact(text,secretOpts),
+  })
+  installScheduleIpc(fromOurWindow,{state:()=>lastState,workflow:workflowRunner,
+    available:()=>!!stateFile?.canWrite&&!!lastState&&!!mainWindow&&!mainWindow.isDestroyed()&&!mainWindow.webContents.isCrashed()&&!mainWindow.webContents.isLoading(),
+    redact:text=>redact(text,secretOpts),report:error=>report('error','schedules','예약 실행을 멈췄어요',error),
+  })
+  installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],
+    liveCwds:async()=>{
+      await control().ready
+      if(control().view().state!=='connected')throw new Error('셸 지킴이 상태를 확인하지 못했어요')
+      const sessions=(await control().sessions(false)).filter(s=>!s.exited)
+      const paths=await strictLsofCwds(sessions.map(s=>s.pid))
+      if(sessions.some(s=>!paths[s.pid]))throw new Error('실행 중인 셸의 폴더를 확인하지 못했어요')
+      return Object.values(paths)
+    },
+  })
+
+
   ipcMain.handle(IPC.ptySpawn, async (event, paneId: unknown, opts: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     const o = (opts ?? {}) as Record<string, unknown>
@@ -572,8 +639,11 @@ if (!app.requestSingleInstanceLock()) {
     if (rem !== undefined && (typeof rem !== 'object' || rem === null || typeof rem['host'] !== 'string' || !isSshHost(rem['host']) || !isRemotePath(o['cwd']))) {
       throw new Error('잘못된 원격 인자')
     }
-    await control().ready
+    const pendingCwd=Symbol()
+    pendingWorktreeCwds.set(pendingCwd,rem?homedir():o['cwd'])
+    worktreeRevision++
     try {
+      await control().ready
       const ssh = rem ? { file: sshFile(), args: sshArgs({ host: rem['host'] as string, cwd: o['cwd'], paneId, tmux: rem['tmux'] !== false, controlDir: sshControlDir() }) } : undefined
       await control().ptys.spawn(
         event.sender,
@@ -590,6 +660,8 @@ if (!app.requestSingleInstanceLock()) {
     } catch (e) {
       report('error', 'pty-spawn', '셸을 띄우지 못했어요', e)
       throw e
+    } finally {
+      pendingWorktreeCwds.delete(pendingCwd);worktreeRevision++
     }
   })
   // 25단계: 새 일감 대화상자의 호스트 목록 — ~/.ssh/config 를 읽기만(없거나 못 읽으면 빈 목록, Include 는 따라가지 않는다)
@@ -625,9 +697,12 @@ if (!app.requestSingleInstanceLock()) {
     // 손상이면 마지막 정상 백업으로 (17단계)
     const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
+    lastState = loaded.state
+    worktreeRevision++
     stateFile = file
     if (file.canWrite) {
       lastWritten = loaded.state
+      try{workspaceBrowser?.reconcile()}catch(error){report('error','browser-reconcile','브라우저 탭 기록을 정리하지 못했어요',error)}
       secretOpts = optsFrom(loaded.state.settings)
       updatePrefs = prefsFrom(loaded.state.settings)
       setChatPermission(loaded.state.settings.chatPermission)
@@ -658,6 +733,7 @@ if (!app.requestSingleInstanceLock()) {
     if (bytes > MAX_STATE_BYTES) return
     const state = normalizeState(raw, randomUUID)
     lastState = state
+    worktreeRevision++
     if (stateFile?.canWrite) {
       secretOpts = optsFrom(state.settings)
       updatePrefs = prefsFrom(state.settings)
@@ -665,6 +741,9 @@ if (!app.requestSingleInstanceLock()) {
       updater?.prefsChanged()
     }
     stateWriter.push(state)
+    try{workflowRunner?.reconcile()}catch(e){report('error','workflow-stop','작업 흐름을 정리하지 못했어요',e)}
+    try{workspaceBrowser?.reconcileLive()}catch(error){report('error','browser-live-cleanup','브라우저 화면을 정리하지 못했어요',error)}
+    if(stateFile?.canWrite)try{workspaceBrowser?.reconcile()}catch(error){report('error','browser-reconcile','브라우저 탭 기록을 정리하지 못했어요',error)}
   })
 
   // ─── 17단계: 백업 · 되돌리기 · 내보내기/가져오기 ───
@@ -807,7 +886,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // ─── 23단계: 변경 검토 — 폴더 · 경로 모양만 믿는다(경로는 review-git 이 저장소 안인지 · 바뀐 목록에 있는지 다시 본다) ───
-  const okDir = (v: unknown): v is string => typeof v === 'string' && v.startsWith('/') && v.length <= 4096 && !v.includes('\0')
+  const okDir = (v: unknown): v is string => typeof v === 'string' && isAbsolute(v) && v.length <= 4096 && !v.includes('\0')
   const okStrs = (v: unknown, max: number): v is string[] => Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && x.length <= 4096)
   const okBase = (v: unknown): v is string | null => v === null || v === 'main' || v === 'master'
   ipcMain.handle(IPC.reviewLoad, async (event, dir: unknown, base: unknown): Promise<ReviewLoad> => {
@@ -865,7 +944,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event) || !okDir(root) || typeof path !== 'string' || !safeRel(path)) return
     // shell.openPath 는 .command · .app 을 실행한다 — 기본 글 편집기로만 연다. root 가 저장소 뿌리인지 main 이 다시 본다
     void openTarget(runGit, root, path).then((full) => {
-      if (full) execFileChild('/usr/bin/open', ['-t', full], () => {})
+      if (full) void openTextEditor(full).catch((e: unknown) => report('error', 'text-editor', '텍스트 편집기를 열지 못했어요', e))
     })
   })
 
@@ -889,13 +968,17 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.chatRewind, async (event, paneId: unknown, index: unknown, at: unknown, chat: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     const ref = chatRef(chat)
+    if(typeof paneId==='string'&&lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId))throw new Error('작업 흐름의 실행 대화는 되감을 수 없어요')
     if (!isPaneId(paneId) || !isIndex(index) || typeof at !== 'number' || !ref) return null
     return chats().rewind(paneId, index, at, ref)
   })
   ipcMain.handle(IPC.chatBranch, async (event, from: unknown, to: unknown, index: unknown, at: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     if (!isPaneId(from) || !isPaneId(to) || from === to || !isIndex(index) || typeof at !== 'number') return null
-    return chats().branch(from, to, index, at)
+    const source=lastState?.tasks.flatMap(t=>Object.values(t.panes)).find(p=>p.id===from)
+    const result=await chats().branch(from, to, index, at)
+    if(result&&source?.chat)agentAccounts?.copyBinding(from,to,source.chat.agent)
+    return result
   })
   /** 📎 — 그림 파일을 골라 읽는다(renderer 는 파일을 못 읽는다). 크기 · 종류가 맞지 않는 것은 빼고 그 이름을 돌려준다 */
   ipcMain.handle(IPC.chatPickImages, async (event): Promise<{ images: ChatImage[]; skipped: string[] }> => {
@@ -1089,7 +1172,7 @@ if (!app.requestSingleInstanceLock()) {
     if (crashedLast) errlog().write('error', 'crash', '지난번에 Taskminal 이 갑자기 꺼졌어요')
     markRunning(true)
     installAppMenu()
-    cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'))
+    cliSockPath = cliSocketPath(app.getPath('userData'), tmpdir(), (s) => createHash('sha1').update(s).digest('hex'), process.platform)
     // 새 셸을 띄울 때만 불린다 — 같은 pane id 로 새 셸이면 앞 셸의 끝 · 실행 중 표시를 지운다(24 리뷰)
     const newShellEnv = (paneId: string) => {
       paneWatch.forget(paneId)

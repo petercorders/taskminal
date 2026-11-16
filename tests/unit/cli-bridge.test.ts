@@ -141,3 +141,23 @@ describe('handleCliUi', () => {
     expect(e.reply.ok && e.reply.text).toContain('← 여기')
   })
 })
+
+describe('issue.prepare 내부 생성 계약', () => {
+  it('지정 ID의 빈 대화 일감을 만들고 포커스·기본 템플릿 명령을 실행하지 않는다', () => {
+    const state = base()
+    state.settings.defaultTemplateId = 'dangerous'
+    state.settings.templates.push({ id: 'dangerous', name: '시작 명령', tabs: [{ layout: { pane: { command: 'do-not-run' } } }] })
+    const req: UiRequest = { op: 'issue.prepare', taskId: 'issue-task', root: '/repo/issue', issue: { provider: 'github', id: '7', key: '#7', title: '요구사항', body: '외부 지시', url: 'https://github.com/demo/project/issues/7', state: 'open' } }
+    const { e, next } = apply(state, req)
+    expect(e.reply.ok).toBe(true)
+    expect(e.seeTabs).toEqual([])
+    expect(next.activeTaskId).toBe(state.activeTaskId)
+    const created = next.tasks.find(task => task.id === 'issue-task')!
+    expect(created.cwd).toBe('/repo/issue')
+    expect(Object.values(created.panes)).toEqual([expect.objectContaining({ kind: 'chat', chat: { agent: 'claude' } })])
+    expect(Object.values(created.panes).some(pane => pane.pendingCommand)).toBe(false)
+    expect(created.notes?.[0]?.text).toContain('비신뢰 참고 자료')
+    expect(apply(next, req).e.actions).toEqual([])
+    expect(apply(next, { ...req, root: '/other' }).e.reply.ok).toBe(false)
+  })
+})

@@ -125,7 +125,7 @@ export interface HostStats {
 }
 
 const isStr = (v: unknown, max = 4096): v is string => typeof v === 'string' && v.length <= max
-const isAbs = (v: unknown): v is string => isStr(v) && v.startsWith('/') && !v.includes('\0')
+const isAbs = (v: unknown): v is string => isStr(v) && (v.startsWith('/') || /^[A-Za-z]:[\\/]/.test(v) || /^\\\\[^\\]+\\[^\\]+/.test(v)) && !v.includes('\0')
 
 function validEnv(v: unknown): v is Record<string, string> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return false
@@ -177,7 +177,8 @@ export function parseRequest(v: unknown): HostFrame | null {
  * 지킴이 소켓 경로. 기본은 `<userData>/ptyhost-v<버전>.sock`. 경로가 너무 길면(맥 한도 104바이트)
  * `<tmp>/taskminal-<userData 해시>-v<버전>.sock`. hash 는 부르는 쪽(node crypto)이 준다.
  */
-export function socketPath(userData: string, version: number, tmp: string, hash: (s: string) => string): string {
+export function socketPath(userData: string, version: number, tmp: string, hash: (s: string) => string, platform = 'darwin'): string {
+  if (platform === 'win32') return `\\\\.\\pipe\\taskminal-${hash(userData).slice(0, 24)}-ptyhost-v${version}`
   const inside = `${userData.replace(/\/+$/, '')}/ptyhost-v${version}.sock`
   if (new TextEncoder().encode(inside).length <= MAX_SOCKET_PATH) return inside
   return `${tmp.replace(/\/+$/, '')}/taskminal-${hash(userData).slice(0, 12)}-v${version}.sock`

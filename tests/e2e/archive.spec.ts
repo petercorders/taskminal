@@ -174,6 +174,7 @@ test('지운 일감은 보관함 › 최근 지운 것에 남고 되살릴 수 �
   await command('palette')
   const palette = win.getByRole('dialog', { name: '명령 팔레트' })
   await expect(palette.locator('[data-kind="task"]').filter({ hasText: 'Charlie' })).toHaveCount(0)
+  await expect(palette.getByRole('combobox')).toBeFocused()
   await win.keyboard.type('Charl')
   const hit = palette.locator('[data-kind="task"]').filter({ hasText: 'Charlie' })
   await expect(hit).toContainText('🗄 보관함')

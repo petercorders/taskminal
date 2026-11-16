@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { listenerPids, parseLsofListen, parsePsTree, portsByPane, type PortInfo, type ProbeResult } from '../shared/ports'
 
 const PS = '/bin/ps'
-const LSOF = '/usr/sbin/lsof'
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof'
 const TIMEOUT_MS = 2000
 
 function run(file: string, args: string[]): Promise<{ ok: boolean; out: string }> {
@@ -23,6 +23,7 @@ function run(file: string, args: string[]): Promise<{ ok: boolean; out: string }
 export async function probePorts(shellPids: Readonly<Record<string, number>>): Promise<ProbeResult> {
   const valid = Object.fromEntries(Object.entries(shellPids).filter(([, pid]) => Number.isInteger(pid) && pid > 0))
   if (Object.keys(valid).length === 0) return { ok: true, ports: {} }
+  if (process.platform === 'win32') return { ok: false }
   const ps = await run(PS, ['-A', '-o', 'pid=,ppid='])
   if (!ps.ok || !ps.out) return { ok: false }
   const tree = parsePsTree(ps.out)

@@ -21,6 +21,17 @@ export const SHORTCUTS = [
   { command: 'next-task', accel: 'Alt+Command+Down', label: '다음 일감' },
   { command: 'prev-task', accel: 'Alt+Command+Up', label: '이전 일감' },
   { command: 'next-attention', accel: 'Shift+Command+A', label: '다음 확인 필요' },
+  { command: 'conversation-search', accel: '', label: '대화 기록 찾기' },
+  { command: 'workflows', accel: '', label: '작업 흐름' },
+  { command: 'schedules', accel: '', label: '예약과 결과함' },
+  { command: 'worktrees', accel: '', label: '워크트리 관리' },
+  { command: 'issues', accel: '', label: '이슈 연결' },
+  { command: 'overview', accel: '', label: '전체 보기' },
+  { command: 'remote-workspace', accel: '', label: '원격 작업 공간' },
+  { command: 'accounts', accel: '', label: '사용량·계정' },
+  { command: 'workspace-files', accel: '', label: '파일 탐색' },
+  { command: 'workspace-browser', accel: '', label: '내장 브라우저' },
+  { command: 'git-workflow', accel: '', label: 'GitHub PR·push' },
   { command: 'palette', accel: 'Command+P', label: '명령 팔레트' },
   { command: 'settings', accel: 'Command+,', label: '설정' },
   ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((n) => ({ command: `tab-${n}` as const, accel: `Command+${n}`, label: `${n}번째 탭` })),
@@ -161,13 +172,24 @@ function indexOf(table: readonly Shortcut[]): Map<string, AppCommand> {
 
 /** ⌘ 단축키 → 명령. 물리 키(code)로 비교한다 — 한글 입력 상태의 ⌘T 는 key 가 'ㅅ' 라서. ⌃ 는 표에 ⌃ 가 있는 키만(⌃⌘← 상태 옮기기).
  *  한글을 조합하는 중(isComposing)이어도 ⌘ 가 눌렸으면 단축키다 — ⌘ 없는 조합 키는 처음부터 해당이 없다. */
-export function commandForKey(ev: KeyLike, table: readonly Shortcut[] = DEFAULT_TABLE): AppCommand | null {
+export type PrimaryModifier = 'meta' | 'control'
+const logicalKey = (ev: KeyLike, primary: PrimaryModifier): KeyLike => primary === 'meta' ? ev : {
+  key: ev.key, code: ev.code, shiftKey: ev.shiftKey, altKey: ev.altKey, isComposing: ev.isComposing,
+  metaKey: ev.ctrlKey, ctrlKey: ev.metaKey,
+}
+
+/** 저장된 Command는 OS의 기본 명령 키이다. 기존 별도 Control은 비Mac에서 Super로 구분한다. */
+export const nativeAccel = (accel: string, primary: PrimaryModifier): string => primary === 'meta' ? accel : accel.split('+').map((key) => key === 'Command' ? 'Control' : key === 'Control' ? 'Super' : key).join('+')
+
+export function commandForKey(event: KeyLike, table: readonly Shortcut[] = DEFAULT_TABLE, primary: PrimaryModifier = 'meta'): AppCommand | null {
+  const ev = logicalKey(event, primary)
   if (!ev.metaKey) return null
   return indexOf(table).get(signature(ev.code, ev.shiftKey, ev.altKey, ev.ctrlKey)) ?? null
 }
 
 /** 설정 창에서 누른 키 → accel. ⌘ 가 없거나 꾸밈키만 · 모르는 키면 null. */
-export function accelFromEvent(ev: KeyLike): string | null {
+export function accelFromEvent(event: KeyLike, primary: PrimaryModifier = 'meta'): string | null {
+  const ev = logicalKey(event, primary)
   if (!ev.metaKey) return null
   const k = keyOfCode(ev.code)
   if (!k) return null
@@ -224,8 +246,8 @@ export const repeatable = (command: AppCommand): boolean => !ONCE.has(command)
 
 const SYMBOL: Record<string, string> = { Shift: '⇧', Command: '⌘', Alt: '⌥', Control: '⌃', Up: '↑', Down: '↓', Left: '←', Right: '→', '-': '−' }
 /** 'Shift+Command+D' → '⇧⌘D' (팔레트 · 화면 표시용). Alt 가 Shift 보다 앞에 있어도 macOS 순서(⌥⇧⌘)는 맞추지 않는다 */
-export const accelLabel = (accel: string): string =>
-  accel
+export const accelLabel = (accel: string, primary: PrimaryModifier = 'meta'): string =>
+  primary === 'control' ? nativeAccel(accel, primary).replace(/Control/g, 'Ctrl') : accel
     .split('+')
     .map((p) => SYMBOL[p] ?? p)
     .join('')

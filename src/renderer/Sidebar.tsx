@@ -11,6 +11,8 @@ import { SidebarPorts } from './ports-ui'
 import { Icon } from './icons'
 
 interface Props {
+  onOverview(): void
+  onWorkTool(kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'):void
   state: AppState
   /** paneId → 활동 */
   activity: Readonly<Record<Id, PaneActivity>>
@@ -59,7 +61,7 @@ const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null }: Props) {
+export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -261,6 +263,8 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
           </button>
         </span>
       </header>
+      <button type="button" className="sidebar-overview button" onClick={onOverview} disabled={loading}>전체 보기</button>
+      <select className="sidebar-tools-menu" aria-label="작업 도구 선택" value="" onChange={e=>onWorkTool(e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues')}><option value="" disabled>작업 도구</option><option value="accounts">사용량·계정</option><option value="files" disabled={!state.activeTaskId}>파일 탐색</option><option value="browser" disabled={!state.activeTaskId}>브라우저</option><option value="git" disabled={!state.activeTaskId}>GitHub</option><option value="workflow" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>작업 흐름</option><option value="schedule" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>예약과 결과함</option><option value="worktree" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>워크트리 관리</option><option value="issues" disabled={!state.activeTaskId||!!state.tasks.find(task=>task.id===state.activeTaskId)?.host}>이슈 연결</option></select>
       {state.tasks.length > 0 && (
         <div className="sidebar-tools">
           <div className="sidebar-views" role="radiogroup" aria-label="사이드바 보기">
@@ -286,9 +290,13 @@ export function Sidebar({ state, activity, loading, onSelect, onNew, onRemove, o
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return
               if (e.key === 'Escape') {
-                e.preventDefault()
-                setQuery('')
-                onMenuClosed()
+                // A nonempty filter consumes Escape once; an empty drawer filter
+                // lets the modal close and restore its opener's focus.
+                if (query || !e.currentTarget.closest('[aria-modal="true"]')) {
+                  e.preventDefault()
+                  setQuery('')
+                  onMenuClosed()
+                }
               } else if (e.key === 'ArrowDown') {
                 e.preventDefault()
                 e.currentTarget.closest('nav')?.querySelector<HTMLElement>('.task-main')?.focus()

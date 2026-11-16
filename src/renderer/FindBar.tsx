@@ -1,7 +1,8 @@
 // 15d: ⌘F 찾기 막대 — 보고 있는 pane 오른쪽 위. 디자인이 없어 팔레트 보드의 말(판 · 선 · 돋보기 · esc 칩)을 빌렸다.
 import { useEffect, useRef, useState } from 'react'
 import { findCountLabel, findKeyAction } from '../shared/find'
-import { commandForKey, type Shortcut } from '../shared/keymap'
+import type { Shortcut } from '../shared/keymap'
+import { commandForKey } from './keyboard'
 import { findingPanes } from './runtime'
 import { terminals } from './terminals'
 

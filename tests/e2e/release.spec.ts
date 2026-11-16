@@ -1,11 +1,14 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { firstWindow, seedState, waitLoaded } from './helpers'
+
+const CURRENT_VERSION: string = JSON.parse(readFileSync('package.json', 'utf8')).version
+const UPDATE_VERSION = CURRENT_VERSION.split('.').map((part, index) => index === 2 ? String(Number(part.split('-')[0]) + 1) : part).join('.')
 
 // 18단계 출시 기본기: 업데이트(로컬 가짜 피드 + 진짜 electron-updater) · 첫 실행 안내 · 오류 기록 · 지난번 꺼짐.
 let userData: string
@@ -84,34 +87,34 @@ const status = () => win.getByTestId('update-status')
 
 test.describe('업데이트 (로컬 피드)', () => {
   test('메뉴 "업데이트 확인…" → 받기 → 줄 · 바뀐 것 요약 · 받은 파일은 임시 폴더에 → 다음에 → 사이드바 칩 → 설정 › 정보', async () => {
-    feed = { version: '0.1.1', zip: Buffer.alloc(300_000, 7) }
+    feed = { version: UPDATE_VERSION, zip: Buffer.alloc(300_000, 7) }
     const url = await startFeed()
     seedState(userData, [{ id: 't', name: '업데이트', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
     await menu('update-check')
     await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible()
-    await expect(banner('downloaded')).toContainText('Taskminal 0.1.1 을 내려받았어요', { timeout: 15_000 })
+    await expect(banner('downloaded')).toContainText(`Taskminal ${UPDATE_VERSION} 을 내려받았어요`, { timeout: 15_000 })
     await expect(banner('downloaded')).toContainText('대화 pane · 변경 검토 · 고친 것 12개 · 외 2개')
     await expect(banner('downloaded')).toContainText('다시 시작해도 셸은 그대로 이어져요')
-    await expect(status()).toHaveText('● 0.1.1 설치 가능')
-    expect(requests).toEqual(expect.arrayContaining(['/latest-mac.yml', `/${ZIP('0.1.1')}`]))
+    await expect(status()).toHaveText(`● ${UPDATE_VERSION} 설치 가능`)
+    expect(requests).toEqual(expect.arrayContaining(['/latest-mac.yml', `/${ZIP(UPDATE_VERSION)}`]))
     // 받은 zip 은 실제 ~/Library/Caches 가 아니라 시험 폴더에
     const pending = join(userData, 'caches', 'taskminal-updater', 'pending')
-    expect(readdirSync(pending)).toContain(ZIP('0.1.1'))
-    expect(existsSync(join(homedir(), 'Library', 'Caches', 'taskminal-updater', 'pending', ZIP('0.1.1')))).toBe(false)
+    expect(readdirSync(pending)).toContain(ZIP(UPDATE_VERSION))
+    expect(existsSync(join(homedir(), 'Library', 'Caches', 'taskminal-updater', 'pending', ZIP(UPDATE_VERSION)))).toBe(false)
     await win.screenshot({ path: 'test-results/release-downloaded.png' })
 
     await win.keyboard.press('Escape') // 설정 닫기
     await banner('downloaded').getByRole('button', { name: '다음에' }).click()
     await expect(banner('downloaded')).toHaveCount(0)
-    await expect(win.getByTestId('update-chip')).toHaveText('● 0.1.1 설치 가능')
+    await expect(win.getByTestId('update-chip')).toHaveText(`● ${UPDATE_VERSION} 설치 가능`)
     await win.getByTestId('update-chip').click()
     await expect(win.getByRole('heading', { level: 1, name: '정보', exact: true })).toBeVisible()
     await win.screenshot({ path: 'test-results/release-chip-about.png' })
   })
 
   test('이 버전 건너뛰기 → 다시 켜고 확인해도 줄이 안 뜨고 "건너뜀" — 다시 알리기로 되돌린다', async () => {
-    feed = { version: '0.1.1', zip: Buffer.alloc(1000, 1) }
+    feed = { version: UPDATE_VERSION, zip: Buffer.alloc(1000, 1) }
     const url = await startFeed()
     seedState(userData, [{ id: 't', name: '건너뛰기', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
@@ -125,17 +128,17 @@ test.describe('업데이트 (로컬 피드)', () => {
 
     await launch({ TASKMINAL_UPDATE_FEED: url })
     await menu('update-check')
-    await expect(status()).toHaveText('● 최신이에요 · 0.1.1 건너뜀', { timeout: 15_000 })
+    await expect(status()).toHaveText(`● 최신이에요 · ${UPDATE_VERSION} 건너뜀`, { timeout: 15_000 })
     await expect(banner('downloaded')).toHaveCount(0)
     const checks = requests.filter((r) => r === '/latest-mac.yml').length
     await win.getByRole('button', { name: '다시 알리기' }).click()
     // 다시 확인하지 않고 그 버전을 바로 다시 알린다(받기는 첫 실행에서 받아 둔 캐시를 쓴다)
-    await expect(status()).toHaveText('● 0.1.1 설치 가능', { timeout: 15_000 })
+    await expect(status()).toHaveText(`● ${UPDATE_VERSION} 설치 가능`, { timeout: 15_000 })
     expect(requests.filter((r) => r === '/latest-mac.yml').length).toBe(checks)
   })
 
   test('다시 시작해서 설치 — 서명 없는 개발 앱이라 Squirrel 이 거절 → 빨간 줄 · 앱은 그대로 · 오류 기록에 한 줄', async () => {
-    feed = { version: '0.1.1', zip: Buffer.alloc(1000, 2) }
+    feed = { version: UPDATE_VERSION, zip: Buffer.alloc(1000, 2) }
     const url = await startFeed()
     seedState(userData, [{ id: 't', name: '설치', paneId: 'p1' }])
     await launch({ TASKMINAL_UPDATE_FEED: url })
@@ -144,8 +147,8 @@ test.describe('업데이트 (로컬 피드)', () => {
     await win.keyboard.press('Escape')
     await expect(win.getByTestId('settings')).toHaveCount(0)
     await banner('downloaded').getByRole('button', { name: '다시 시작해서 설치' }).click()
-    await expect(banner('install-failed')).toContainText('0.1.1 을 설치하지 못했어요', { timeout: 20_000 })
-    await expect(banner('install-failed')).toContainText('알 수 없는 오류예요 · 지금 버전(0.1.0)은 그대로예요')
+    await expect(banner('install-failed')).toContainText(`${UPDATE_VERSION} 을 설치하지 못했어요`, { timeout: 20_000 })
+    await expect(banner('install-failed')).toContainText(`알 수 없는 오류예요 · 지금 버전(${CURRENT_VERSION})은 그대로예요`)
     await win.screenshot({ path: 'test-results/release-install-failed.png' })
     expect(await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1) // 꺼지지 않았다
     await banner('install-failed').getByRole('button', { name: '오류 기록 보기' }).click()
@@ -159,9 +162,9 @@ test.describe('업데이트 (로컬 피드)', () => {
     await menu('update-check')
     await expect(status()).toContainText('✕ 확인하지 못했어요 · 받는 곳에 새 버전 정보가 없어요 · 6시간 뒤 다시 해요', { timeout: 15_000 })
     const before = requests.filter((r) => r === '/latest-mac.yml').length
-    feed = { version: '0.1.1', zip: Buffer.alloc(1000, 3) }
+    feed = { version: UPDATE_VERSION, zip: Buffer.alloc(1000, 3) }
     await win.getByRole('button', { name: '다시 시도' }).click()
-    await expect(status()).toHaveText('● 0.1.1 설치 가능', { timeout: 15_000 })
+    await expect(status()).toHaveText(`● ${UPDATE_VERSION} 설치 가능`, { timeout: 15_000 })
     expect(requests.filter((r) => r === '/latest-mac.yml').length).toBe(before + 1)
   })
 })

@@ -19,6 +19,14 @@ if [ -x "$up/MacOS/Taskminal" ]; then
   # .app/Contents/Resources/bin
   exe=$up/MacOS/Taskminal
   js=$up/Resources/app.asar/out/main/cli.js
+elif [ -x "$up/taskminal" ]; then
+  # Linux 배포본의 resources/bin
+  exe=$up/taskminal
+  js=$up/resources/app.asar/out/main/cli.js
+elif [ -x "$up/node_modules/electron/dist/electron" ]; then
+  # Linux 개발 폴더
+  exe=$up/node_modules/electron/dist/electron
+  js=$up/out/main/cli.js
 else
   # 저장소의 resources/bin (개발)
   exe=$up/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron

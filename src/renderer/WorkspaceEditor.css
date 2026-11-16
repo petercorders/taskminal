@@ -1,0 +1,9 @@
+.workspace-editor { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.workspace-editor .work-tools-row { flex-wrap: wrap; }
+.workspace-editor p { margin: 0; overflow-wrap: anywhere; }
+.workspace-editor-label { display: flex; min-width: 0; flex-direction: column; gap: var(--space-2); }
+.workspace-editor textarea { box-sizing: border-box; display: block; width: 100%; min-width: 0; min-height: 220px; resize: vertical; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--space-3); font: 13px/1.6 ui-monospace, monospace; tab-size: 2; }
+.workspace-editor textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.workspace-editor-conflict { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.workspace-editor-conflict textarea { min-height: 140px; }
+.workspace-editor .button { white-space: normal; overflow-wrap: anywhere; }

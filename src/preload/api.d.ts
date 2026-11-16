@@ -142,6 +142,16 @@ export interface ChatApi {
 }
 
 export interface TaskminalApi {
+  remote: import('../shared/remote-workspace').RemoteApi
+  issues: import('../shared/issues').IssueApi
+  worktrees: import('../shared/worktree-management').WorktreeApi
+  schedules: import('../shared/schedules').ScheduleApi
+  development: import('../shared/development-tools').DevelopmentApi
+  workflows: import('../shared/workflows').WorkflowApi
+  conversations: import('../shared/conversation-search').ConversationApi
+  accounts: import('../shared/accounts').AccountsApi
+  workspace: import('../shared/workspace').WorkspaceApi
+  gitWorkflow: import('../shared/git-workflow').GitWorkflowApi
   appInfo(): Promise<AppInfo>
   /** macOS 폴더 선택 대화상자. 취소하면 null */
   pickFolder(): Promise<string | null>

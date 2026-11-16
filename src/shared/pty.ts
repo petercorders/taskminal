@@ -1,4 +1,5 @@
 // pty IPC 인자 검사와 출력 묶기. main 이 쓰지만 순수 로직이라 shared 에 두고 단위 시험한다.
+import { isAbsolutePath } from './platform'
 
 export const MAX_WRITE = 1024 * 1024 // 한 번에 받는 입력 상한 (붙여넣기 포함)
 const FLUSH_MS = 8 // 출력이 이어지는 동안 IPC 를 프레임보다 자주 보내지 않게
@@ -79,7 +80,7 @@ export function shellEnv(base: Record<string, string | undefined>): Record<strin
   for (const [k, v] of Object.entries(base)) {
     if (v === undefined) continue
     if (k.startsWith('ELECTRON_') || k.startsWith('TASKMINAL_') || k === 'NODE_OPTIONS') continue
-    env[k] = v
+    env[k === 'Path' ? 'PATH' : k] = v
   }
   env['TERM'] = 'xterm-256color'
   env['COLORTERM'] = 'truecolor'
@@ -112,6 +113,6 @@ export function integrationEnv(env: Record<string, string>, shellPath: string, d
 
 /** 설정의 셸 경로 — /etc/shells 에 있는 절대 경로만 받는다(renderer 가 보낸 값을 그대로 실행하지 않게). 아니면 $SHELL → /bin/zsh. */
 export function pickShell(requested: string | null | undefined, envShell: string | undefined, allowed: readonly string[]): string {
-  if (requested && requested.startsWith('/') && allowed.includes(requested)) return requested
+  if (requested && isAbsolutePath(requested) && allowed.includes(requested)) return requested
   return envShell || '/bin/zsh'
 }
