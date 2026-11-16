@@ -8,6 +8,8 @@ import type { ChatEvent } from '../shared/chat'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
+import type { AgentSignal } from '../shared/agent-hooks'
+import type { UsageMap } from '../shared/usage'
 import type { WorktreeResult } from '../shared/worktree'
 import type { ChatApi as ChatApiT, ReviewApi as ReviewApiT, TaskminalApi } from './api'
 
@@ -47,6 +49,7 @@ const api: TaskminalApi = {
   development: {preview:(root,target)=>ipcRenderer.invoke(IPC.developmentRequest,'preview',[root,target]),prepare:(root,plan,id)=>ipcRenderer.invoke(IPC.developmentRequest,'prepare',[root,plan,id]),preparations:root=>ipcRenderer.invoke(IPC.developmentRequest,'preparations',[root]),cancel:(root,id)=>ipcRenderer.invoke(IPC.developmentRequest,'cancel',[root,id]),inspect:(root,path)=>ipcRenderer.invoke(IPC.developmentRequest,'inspect',[root,path]),install:(root,preview)=>ipcRenderer.invoke(IPC.developmentRequest,'install',[root,preview]),extensions:root=>ipcRenderer.invoke(IPC.developmentRequest,'extensions',[root]),enable:(root,id,enabled)=>ipcRenderer.invoke(IPC.developmentRequest,'enable',[root,id,enabled]),uninstall:(root,id)=>ipcRenderer.invoke(IPC.developmentRequest,'uninstall',[root,id])},
   workflows: {append:(id,step)=>ipcRenderer.invoke(IPC.workflowsAppend,id,step),message:(id,message)=>ipcRenderer.invoke(IPC.workflowsMessage,id,message),answerMessage:(id,message,text)=>ipcRenderer.invoke(IPC.workflowsAnswer,id,message,text),view:()=>ipcRenderer.invoke(IPC.workflowsView),save:w=>ipcRenderer.invoke(IPC.workflowsSave,w),remove:id=>ipcRenderer.invoke(IPC.workflowsRemove,id),start:input=>ipcRenderer.invoke(IPC.workflowsStart,input),stop:id=>ipcRenderer.invoke(IPC.workflowsStop,id),retry:id=>ipcRenderer.invoke(IPC.workflowsRetry,id)},
   conversations: { search: query=>ipcRenderer.invoke(IPC.conversationsSearch,query), verify: hit=>ipcRenderer.invoke(IPC.conversationsVerify,hit) },
+  agentSessions: { list: () => ipcRenderer.invoke(IPC.agentSessionsList), open: (request) => ipcRenderer.invoke(IPC.agentSessionsOpen, request) },
   accounts: {
     tui: (paneId) => ipcRenderer.invoke(IPC.accountsTui, paneId),
     list: () => ipcRenderer.invoke(IPC.accountsList),
@@ -78,6 +81,7 @@ const api: TaskminalApi = {
     push: (dir, target) => ipcRenderer.invoke(IPC.gitWorkflowPush, dir, target),
     create: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowCreate, dir, input),
     merge: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowMerge, dir, input),
+    feedback: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowFeedback, dir, input),
   },
   appInfo: () => ipcRenderer.invoke(IPC.appInfo) as Promise<AppInfo>,
   pickFolder: () => ipcRenderer.invoke(IPC.pickFolder) as Promise<string | null>,
@@ -98,6 +102,12 @@ const api: TaskminalApi = {
     onData: (listener) => subscribe<[string, string]>(IPC.ptyData, listener),
     onExit: (listener) => subscribe<[string, PtyExit]>(IPC.ptyExit, listener),
     cwds: (paneIds) => ipcRenderer.invoke(IPC.ptyCwds, paneIds) as Promise<Record<string, string>>,
+    onAgent: (listener) => subscribe<[string, AgentSignal]>(IPC.ptyAgent, listener),
+    agents: () => ipcRenderer.invoke(IPC.ptyAgents) as Promise<Record<string, AgentSignal>>,
+  },
+  usage: {
+    get: () => ipcRenderer.invoke(IPC.usageGet) as Promise<UsageMap>,
+    onChange: (listener) => subscribe<[UsageMap, Parameters<Parameters<TaskminalApi['usage']['onChange']>[0]>[1]]>(IPC.usageChanged, listener),
   },
   sshHosts: () => ipcRenderer.invoke(IPC.sshHosts) as Promise<string[]>,
   scrollback: {
@@ -182,6 +192,7 @@ const api: TaskminalApi = {
     probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,
     kill: (paneId, port, pid) => ipcRenderer.invoke(IPC.portsKill, paneId, port, pid) as Promise<'killed' | 'gone' | 'failed'>,
   },
+  jira: { status: () => ipcRenderer.invoke(IPC.jiraStatus), save: input => ipcRenderer.invoke(IPC.jiraSave, input), clear: () => ipcRenderer.invoke(IPC.jiraClear), attach: input => ipcRenderer.invoke(IPC.jiraAttach, input) },
 }
 
 contextBridge.exposeInMainWorld('taskminal', api)

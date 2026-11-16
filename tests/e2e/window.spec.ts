@@ -44,6 +44,7 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     // contextBridge 는 contextIsolation 이 꺼져 있으면 노출에 실패하므로 키가 보이는 것 자체가 격리의 증거다.
     apiKeys: Object.keys((globalThis as unknown as { taskminal: object }).taskminal),
     issues: Object.keys(window.taskminal.issues),
+    jira: Object.keys(window.taskminal.jira),
     remote: Object.keys(window.taskminal.remote),
     development: Object.keys(window.taskminal.development),
   }))
@@ -51,8 +52,9 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     remote: ['connect','disconnect','workspaces','open','files','read','save','git','terminal','stream','resize','tail','write','stop','chat','send','history','answer','interrupt'],
     development: ['preview','prepare','preparations','cancel','inspect','install','extensions','enable','uninstall'],
     issues: ['list','configure','links','prepare','linkPr','close'],
+    jira: ['status','save','clear','attach'],
     require: 'undefined', process: 'undefined',
-    apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports'],
+    apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'agentSessions', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'usage', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],
   })
 
   // 설정값이 아니라 실제로 돌고 있는 renderer 프로세스가 OS 샌드박스 안인지 본다.

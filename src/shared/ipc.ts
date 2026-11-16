@@ -12,6 +12,9 @@ export const IPC = {
   workflowsAppend:'workflows:append',workflowsMessage:'workflows:message',workflowsAnswer:'workflows:answer',workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
   conversationsSearch: 'conversations:search',
   conversationsVerify: 'conversations:verify',
+  /** 53단계 밖에서 시작한 에이전트 세션 — 목록 · 이어 하기 대상(경로 없이 id) */
+  agentSessionsList: 'agent-sessions:list',
+  agentSessionsOpen: 'agent-sessions:open',
   accountsList: 'accounts:list',
   accountsTui: 'accounts:tui',
   accountsAdd: 'accounts:add',
@@ -33,6 +36,7 @@ export const IPC = {
   gitWorkflowPush: 'git-workflow:push',
   gitWorkflowCreate: 'git-workflow:create',
   gitWorkflowMerge: 'git-workflow:merge',
+  gitWorkflowFeedback: 'git-workflow:feedback',
   appInfo: 'app:info',
   ptySpawn: 'pty:spawn', // invoke
   ptyWrite: 'pty:write', // send
@@ -57,6 +61,10 @@ export const IPC = {
   gitWorktreeAdd: 'git:worktree-add', // invoke(폴더, 브랜치) → { ok, path } | { ok: false, error } — 새 일감을 worktree 에서 (15f)
   ptyCwds: 'pty:cwds', // invoke(paneId[]) → { paneId: 폴더 } — 셸 통합이 없는 셸의 폴더(lsof)
   ptyAttach: 'pty:attach', // invoke(paneId) → PtyAttachResult — 셸 지킴이에 남은 셸에 다시 붙기 (16단계)
+  ptyAgent: 'pty:agent', // main → renderer (paneId, AgentSignal) — 터미널에서 띄운 claude · codex 의 훅 사건 (51단계)
+  ptyAgents: 'pty:agents', // invoke → { paneId: AgentSignal } — 창 새로 고침 · 앱 재시작 뒤 기록 파일의 마지막 사건
+  usageGet: 'usage:get', // invoke → UsageMap — 계정별 Claude 한도 마지막 값 (52단계)
+  usageChanged: 'usage:changed', // main → renderer (UsageMap, UsageCrossed[]) — 보이는 값이 바뀔 때만
   sshHosts: 'ssh:hosts', // invoke → ~/.ssh/config 의 Host 이름들 (25단계, 읽기만)
   hostView: 'host:view', // invoke → HostView / main → renderer: 바뀔 때마다
   hostSessions: 'host:sessions', // invoke(clearUnseen) → SessionInfo[]
@@ -112,6 +120,8 @@ export const IPC = {
   // 24단계 taskminal 명령 — main 이 소켓으로 받은 요청 중 화면 상태를 바꾸는 것 · 이름 풀기를 창에 묻는다
   cliRequest: 'cli:request', // main → renderer: (번호, UiRequest)
   cliReply: 'cli:reply', // send(번호, UiReply) — 5초 안에, 늦은 답은 main 이 버린다
+  // 55단계 Jira 읽기 — 토큰은 save 로 들어가기만 하고 status 는 '있음' 만 돌려준다
+  jiraStatus: 'jira:status', jiraSave: 'jira:save', jiraClear: 'jira:clear', jiraAttach: 'jira:attach',
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

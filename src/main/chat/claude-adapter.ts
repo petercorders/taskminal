@@ -53,6 +53,8 @@ export interface ClaudeSessionOptions {
   onEvent(ev: ChatEvent): void
   /** 프로세스가 끝났다 (세대가 지난 것은 부르지 않는다) */
   onExit(): void
+  /** 52단계: rate_limit_event 의 rate_limit_info(허용 상태여도) — 한도 실수치 */
+  onUsage?(info: unknown): void
 }
 
 const STDERR_KEEP = 2000
@@ -134,6 +136,7 @@ export class ClaudeSession implements AgentSession {
       delete this.o.forkAt // 갈라진 새 세션이 떴다 — 다음에 다시 띄우면 그냥 --resume
     }
     if (o['type'] === 'assistant' && typeof o['uuid'] === 'string') this.lastUuid = o['uuid']
+    if (o['type'] === 'rate_limit_event' && isObj(o['rate_limit_info'])) this.o.onUsage?.(o['rate_limit_info'])
     if (o['type'] === 'control_request' && typeof o['request_id'] === 'string' && isObj(o['request']) && o['request']['subtype'] === 'can_use_tool') {
       const r = o['request']
       const tool = typeof r['tool_name'] === 'string' ? r['tool_name'] : ''

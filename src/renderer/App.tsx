@@ -4,6 +4,8 @@ import { paneIds } from '../shared/layout'
 import { isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand } from '../shared/keymap'
 import { commandForKey } from './keyboard'
 import { notifyKind } from '../shared/notify'
+import { agentLabel } from '../shared/agent-hooks'
+import { USAGE_LABEL, formatResetIn, type UsageMap } from '../shared/usage'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
@@ -34,6 +36,8 @@ import { CompactSidebar } from './CompactSidebar'
 import './workspace-layout.css'
 import { ConversationSearch } from './ConversationSearch'
 import type { ConversationHit } from '../shared/conversation-search'
+import { AgentSessionsPanel, sessionKey } from './AgentSessionsPanel'
+import { DEADLINE_MS, withDeadline, type AgentSession, type ResumeHow } from '../shared/agent-sessions'
 import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
 import { AccountsPanel } from './AccountsPanel'
@@ -46,6 +50,8 @@ import { WorkflowPanel } from './WorkflowPanel'
 import { SchedulePanel } from './SchedulePanel'
 import { WorktreePanel } from './WorktreePanel'
 import { IssuesPanel } from './IssuesPanel'
+import { JiraTaskHead, jiraSidebarText } from './JiraTaskHead'
+import { loadIssueLinks, useIssueLinks } from './issue-links'
 import type { ChatImage } from '../shared/chat'
 import { ArchivePanel } from './ArchivePanel'
 import { WeeklyPanel } from './WeeklyPanel'
@@ -190,6 +196,9 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [conversationOpen,setConversationOpen]=useState(false)
+  // 53단계 에이전트 세션 패널 — 연 순간의 일감 id
+  const [agentSessionsFor,setAgentSessionsFor]=useState<{taskId:string|null}|null>(null)
+  const resumingSessions=useRef(new Set<string>())
   const [conversationJump,setConversationJump]=useState<{paneId:string;fingerprint:string;at:number;n:number}|null>(null)
   const [conversationRestore,setConversationRestore]=useState<ConversationHit|null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
@@ -205,6 +214,9 @@ export function App() {
     observer.observe(toolbar); measure()
     return () => observer.disconnect()
   }, [])
+  // 55단계: 사이드바 · 일감 머리의 Jira 키 · 마감 — 앱을 열 때 한 번, 이슈 패널이 읽을 때마다 갱신
+  const issueLinks = useIssueLinks()
+  useEffect(() => { loadIssueLinks(window.taskminal.issues) }, [])
   const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';url?:string;runId?:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
@@ -387,7 +399,7 @@ export function App() {
       kind === 'wait'
         ? act?.message
         : kind === 'fail'
-          ? `exit ${act?.exitCode ?? '?'}`
+          ? act?.agent && act.message ? act.message : `exit ${act?.exitCode ?? '?'}` // 에이전트 실패(StopFailure)는 종료 코드가 없다
           : kind === 'long' && act?.startedAt !== undefined && act.endedAt !== undefined
             ? formatDuration(act.endedAt - act.startedAt)
             : undefined
@@ -410,8 +422,11 @@ export function App() {
     const next = applyActivity(prev, ev, { viewed, now: Date.now() })
     if (next !== prev) putActivity({ ...activityRef.current, [paneId]: next })
     // 보고 있는 pane 의 벨 · 알림은 확인 필요가 되지 않지만(applyActivity), '보고 있어도 알리기'(muteViewed 끔)면 알린다 — deliver 가 설정을 본다
-    const kind = notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000) ?? (viewed && (ev.type === 'bell' || ev.type === 'notify') ? 'wait' : null)
-    if (kind) deliver(kind, paneId, ev.type === 'notify' ? { ...next, message: ev.text } : next)
+    const kind =
+      notifyKind(prev, next, ev, stateRef.current.settings.longAfterSec * 1000) ??
+      (viewed && (ev.type === 'bell' || ev.type === 'notify' || (ev.type === 'agent' && !ev.restore && (ev.phase === 'permission' || ev.phase === 'input') && next !== prev)) ? 'wait' : null)
+    // 에이전트 알림의 본문은 'Claude · 허락 기다림'
+    if (kind) deliver(kind, paneId, ev.type === 'notify' ? { ...next, message: ev.text } : next.agent ? { ...next, message: agentLabel(next.agent) } : next)
   }
   const updateActivityRef = useRef(updateActivity)
   updateActivityRef.current = updateActivity
@@ -438,6 +453,15 @@ export function App() {
         }
         for (const f of summary.failed) away(f.paneId, { type: 'end', code: f.code })
         for (const w of summary.waiting) away(w.paneId, { type: 'notify', text: w.message ?? '' })
+        // 51단계: 셸 지킴이에 살아 있는 셸의 claude · codex 상태를 기록 파일의 마지막 사건으로 맞춘다(주의 · 알림 없이)
+        const livePanes = new Set(sessions.filter((s) => !s.exited && inState.has(s.paneId)).map((s) => s.paneId))
+        void window.taskminal.pty.agents().then(
+          (last) => {
+            if (!alive) return
+            for (const [paneId, sig] of Object.entries(last)) if (livePanes.has(paneId)) away(paneId, { type: 'agent', agent: sig.agent, phase: sig.phase, restore: true })
+          },
+          () => {},
+        )
         const label = (paneId: string) => st.tasks.find((t) => t.id === findPaneTask(st, paneId))?.name ?? paneId
         setStartup({ resumed: summary.resumed, awayMs: summary.awayMs, waiting: summary.waiting.map((w) => ({ label: label(w.paneId), ...(w.message ? { message: w.message } : {}) })), fresh: false })
         // 꺼져 있던 동안의 확인 필요가 막 들어왔다 — 처음 읽힐 때의 요약 카드가 그것을 못 봤으면 다시 본다(24단계)
@@ -456,6 +480,33 @@ export function App() {
       clearTimeout(t)
     }
   }, [loadedOnce])
+
+  // 52단계: Claude 한도 — 처음 값 · 바뀔 때마다. 90% 를 새로 넘은 창(초기화 시각마다 한 번)은 알린다
+  const [usage, setUsage] = useState<UsageMap>({})
+  useEffect(() => {
+    let alive = true
+    void window.taskminal.usage.get().then(
+      (m) => alive && setUsage(m),
+      () => {},
+    )
+    const off = window.taskminal.usage.onChange((m, crossed) => {
+      setUsage(m)
+      // 90% 알림은 '입력 기다림' 알림 설정(배너 · 소리)을 따른다 — 알림을 끈 사용자에게 배너를 띄우지 않게
+      const way = stateRef.current.settings.notify.wait
+      for (const c of crossed) {
+        if (!way.banner && !way.sound) continue
+        if (!way.banner) window.taskminal.beep()
+        else new Notification(`Claude ${USAGE_LABEL[c.key]} 한도 ${Math.round(c.used)}%`, { body: formatResetIn(c.resetsAt, Date.now()), silent: !way.sound })
+      }
+    })
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
+
+  // 51단계: 터미널에서 띄운 claude · codex 의 훅 사건
+  useEffect(() => window.taskminal.pty.onAgent((paneId, sig) => updateActivityRef.current(paneId, { type: 'agent', agent: sig.agent, phase: sig.phase })), [])
 
   // 셸이 깨끗하게 끝나면(exit 0) 그 pane 을 닫는다 — 마지막 pane 이면 탭도. 아니면 TerminalPane 이 이유를 보여 주고 키를 누를 때 닫는다.
   // 우리가 끝낸 셸(탭 닫기 · 새로 고침 …)은 main 이 알리지 않는다 → 여기 오는 것은 모두 셸이 스스로 닫힌 것(알림 '셸 닫힘')
@@ -1078,6 +1129,7 @@ export function App() {
 
   const closeDialogs = () => {
     setConversationOpen(false)
+    // 53단계 에이전트 세션 패널은 여기서 닫지 않는다 — 일감 지우기 · 보관이 closeDialogs 를 부르는데, 연 일감이 사라지면 패널이 남아 막고 안내한다
     setConversationRestore(null)
     setCreating(null)
     setRemoving(null)
@@ -1276,7 +1328,7 @@ export function App() {
     measure()
     return () => observer.disconnect()
   }, [workTool, state.activeTaskId])
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null
+  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null || agentSessionsFor !== null
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
   const [seenAt, setSeenAt] = useState<Record<string, number>>({})
@@ -1452,6 +1504,70 @@ export function App() {
     setOverviewOpen(false);setWorkTool(null);setConversationOpen(false)
     setConversationJump({paneId:hit.paneId,fingerprint:hit.fingerprint,at:hit.at,n:Date.now()})
   }
+  // ─── 53단계 에이전트 세션 이어 하기 ───
+  /** 이 앱에 붙어 있는 대화 pane 중 같은 세션 (보관 일감 제외) */
+  const findSessionPane = (st: AppState, agent: string, id: string): { taskId: string; paneId: string } | null => {
+    const key = sessionKey({ agent, id })
+    for (const t of st.tasks) {
+      if (t.archivedAt !== undefined) continue
+      for (const tab of t.tabs)
+        for (const pid of layoutPaneIds(tab.layout)) {
+          const p = t.panes[pid]
+          if (p?.kind === 'chat' && p.chat?.sessionId && sessionKey({ agent: p.chat.agent, id: p.chat.sessionId }) === key) return { taskId: t.id, paneId: pid }
+        }
+    }
+    return null
+  }
+  const openSessionKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const t of state.tasks) {
+      if (t.archivedAt !== undefined) continue
+      for (const tab of t.tabs)
+        for (const pid of layoutPaneIds(tab.layout)) {
+          const p = t.panes[pid]
+          if (p?.kind === 'chat' && p.chat?.sessionId) keys.add(sessionKey({ agent: p.chat.agent, id: p.chat.sessionId }))
+        }
+    }
+    return keys
+  }, [state.tasks])
+  /** 대화 · 터미널로 이어 하기 — 이미 열린 대화면 그리로. main 이 id 로 세션 · 폴더를 다시 찾고, 15초 안에 답이 없으면 오류(탭은 아직 안 만듦).
+   *  같은 세션을 같은 프레임에 두 번: 여기 열쇠 · main 의 합치기(첫 pane 만)로 하나. 열쇠는 성공 뒤 상태가 그려질 때까지 잠깐 더 잡는다. */
+  const resumeAgentSession = async (s: AgentSession, how: ResumeHow, taskId: string) => {
+    const key = sessionKey(s)
+    const moveTo = () => {
+      const hit = findSessionPane(stateRef.current, s.agent, s.id)
+      if (!hit) return false
+      dispatch({ type: 'task/select', id: hit.taskId })
+      dispatch({ type: 'pane/focus', taskId: hit.taskId, paneId: hit.paneId })
+      setOverviewOpen(false)
+      setWorkTool(null)
+      return true
+    }
+    if (moveTo() || resumingSessions.current.has(key)) return
+    const live = () => stateRef.current.tasks.find((t) => t.id === taskId && t.archivedAt === undefined && !t.host)
+    const gone = () => new Error('연 일감이 사라졌어요. 다른 일감에서 다시 열어 주세요.')
+    if (!live()) throw gone()
+    resumingSessions.current.add(key)
+    let hold = false
+    try {
+      const paneId = newId(), tabId = newId()
+      const r = await withDeadline(window.taskminal.agentSessions.open({ agent: s.agent, id: s.id, paneId, how }), DEADLINE_MS, '응답이 없어요. 다시 시도해 주세요.')
+      if (r.paneId !== paneId || moveTo()) return
+      if (!live()) throw gone()
+      if (how === 'chat') dispatch({ type: 'chat/resume-tab', taskId, tabId, paneId, agent: r.agent, sessionId: r.sessionId, cwd: r.cwd, ...(s.summary ? { title: s.summary.slice(0, 40) } : {}) })
+      else {
+        if (!r.command) throw new Error('터미널 시작 명령을 만들지 못했어요.')
+        dispatch({ type: 'tab/add', taskId, tabId, paneId, spec: { cwd: r.cwd, command: r.command } })
+      }
+      dispatch({ type: 'task/select', id: taskId })
+      setOverviewOpen(false)
+      setWorkTool(null)
+      hold = true
+    } finally {
+      if (hold) setTimeout(() => resumingSessions.current.delete(key), 1000)
+      else resumingSessions.current.delete(key)
+    }
+  }
   const closePane = (paneId: string, confirmed = false) => {
     const act = activity[paneId]
     if (!confirmed && act?.busy) return setConfirming({ kind: 'pane', paneId, ...(act.command ? { command: shownActivity[paneId]?.command ?? act.command } : {}) })
@@ -1495,6 +1611,8 @@ export function App() {
     switch (command) {
       case 'conversation-search':
         return setConversationOpen(true)
+      case 'agent-sessions':
+        return setAgentSessionsFor({ taskId: state.activeTaskId })
       case 'overview':
         setWorkTool(null)
         return setOverviewOpen(true)
@@ -1884,6 +2002,7 @@ export function App() {
       <div className="app-body">
         <CompactSidebar open={sidebarCompactOpen} onClose={() => setSidebarCompactOpen(false)}>
         <Sidebar
+          issueOf={(t) => jiraSidebarText(issueLinks.find((link) => link.taskId === t.id && link.issue.provider === 'jira'), new Date())}
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
           onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees',issues:'issues'} as const)[kind]))}
           state={viewState}
@@ -1894,6 +2013,8 @@ export function App() {
             return r ? (r.state.kind === 'up' ? 'up' : r.state.kind === 'down' ? 'down' : 'retry') : null
           }}
           onOpenArchive={() => sidebarAction(() => runCommandRef.current('archive-open'))}
+          usage={usage}
+          onUsage={() => sidebarAction(() => runCommandRef.current('accounts'))}
           onWeekly={() => sidebarAction(() => runCommandRef.current('weekly'))}
           suggestArchive={suggestions}
           onArchiveMany={(ids) => sidebarAction(() => archive(ids))}
@@ -1929,7 +2050,8 @@ export function App() {
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
             <button className="button" disabled={!activeTask||!!activeTask.host} onClick={()=>{if(activeTask){setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'development'})}}}>환경·확장</button>
             <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
-            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(kind!=='accounts'&&kind!=='remote'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="accounts">사용량·계정</option><option value="remote">원격 작업 공간</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option><option value="development">환경·확장</option></>}</>}</select>
+            <button className="button" onClick={()=>setAgentSessionsFor({taskId:state.activeTaskId})}>에이전트 세션</button>
+            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(e.target.value==='agent-sessions'){setAgentSessionsFor({taskId:state.activeTaskId});return}if(kind!=='accounts'&&kind!=='remote'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="agent-sessions">에이전트 세션</option><option value="accounts">사용량·계정</option><option value="remote">원격 작업 공간</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option><option value="development">환경·확장</option></>}</>}</select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
             <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button><button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:'',kind:'remote'})}}>원격 작업 공간</button>
@@ -1946,7 +2068,7 @@ export function App() {
               {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd}/>}
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
-              {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)}/>}
+              {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)} onSendToChat={text=>{const id=activeTask.id;if(!stateRef.current.tasks.some(task=>task.id===id&&task.archivedAt===undefined))return showToast({text:'일감이 사라졌어요.'});askChat(id,text);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onOpen={(path,taskId,signal,expectedCwd)=>{
                 if(signal?.aborted||workToolRef.current!==workTool||stateRef.current.activeTaskId!==activeTask.id)return
                 const current=stateRef.current
@@ -1955,7 +2077,7 @@ export function App() {
                 setWorkTool(null);refocus()
               }}/>}
               {workTool.kind==='schedule'&&<SchedulePanel key={activeTask.id} taskId={activeTask.id} onOpenRun={runId=>{void window.taskminal.workflows.view().then(view=>{const run=view.runs.find(r=>r.id===runId&&r.taskId===activeTask.id);const task=stateRef.current.tasks.find(t=>t.id===activeTask.id&&!t.host&&t.archivedAt===undefined);if(!run||!task)return showToast({text:'실행 기록이나 일감이 사라졌어요.'});if(stateRef.current.activeTaskId!==task.id)return;setWorkTool(old=>old===workTool&&old?.kind==='schedule'&&old.taskId===task.id?{taskId:task.id,kind:'workflow',runId}:old)}).catch(()=>showToast({text:'실행 기록을 읽지 못했어요.'}))}}/>}
-              {workTool.kind==='issues'&&<IssuesPanel key={activeTask.id} api={window.taskminal.issues} taskId={activeTask.id} root={activeTask.cwd} onOpenTask={id=>{const target=stateRef.current.tasks.find(task=>task.id===id&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id});setWorkTool(null);refocus()}} onAttach={(taskId,text)=>{const target=stateRef.current.tasks.find(task=>task.id===taskId&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id:taskId});askChat(taskId,text);setWorkTool(null);refocus()}}/>}
+              {workTool.kind==='issues'&&<IssuesPanel key={activeTask.id} api={window.taskminal.issues} tasks={state.tasks.filter(item=>!item.host&&item.archivedAt===undefined).map(item=>({id:item.id,name:item.name}))} taskId={activeTask.id} root={activeTask.cwd} onOpenTask={id=>{const target=stateRef.current.tasks.find(task=>task.id===id&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id});setWorkTool(null);refocus()}} onAttach={(taskId,text)=>{const target=stateRef.current.tasks.find(task=>task.id===taskId&&!task.host&&task.archivedAt===undefined);if(!target)return showToast({text:'연결 일감이 사라졌어요.'});dispatch({type:'task/select',id:taskId});askChat(taskId,text);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='workflow'&&<WorkflowPanel key={activeTask.id} taskId={activeTask.id} initialRunId={workTool.runId} onOpenPane={paneId=>{const task=stateRef.current.tasks.find(t=>t.id===activeTask.id);if(!task?.panes[paneId])return showToast({text:'실행 대화가 사라졌어요.'});setWorkTool(null);gotoPane(paneId)}}/>}
             </>}
           </aside>}
@@ -1971,6 +2093,7 @@ export function App() {
                 data-task-name={task.name}
                 aria-hidden={!taskActive}
               >
+                {(() => { const link = issueLinks.find((item) => item.taskId === task.id && item.issue.provider === 'jira'); return link ? <JiraTaskHead link={link} /> : null })()}
                 {(() => {
                   const { shown, more } = quickButtons(task, state.settings.quickCommands)
                   // 27단계: 대화 탭에서 빈 '빠른 명령' 안내 띠는 셸 명령 안내라 자리만 차지한다 — 단추가 생기면 그때 보인다
@@ -2294,6 +2417,7 @@ export function App() {
           onClose={closeDialogs}
         />
       )}
+      {agentSessionsFor&&<AgentSessionsPanel taskId={agentSessionsFor.taskId} tasks={state.tasks} openKeys={openSessionKeys} onResume={resumeAgentSession} onClose={()=>{setAgentSessionsFor(null);refocus()}}/>}
       {conversationOpen&&<ConversationSearch tasks={state.tasks} activeTaskId={state.activeTaskId} onOpen={openConversation} onClose={()=>{setConversationOpen(false);refocus()}}/>}
       {conversationRestore&&<ConfirmDialog title="보관한 일감을 되살릴까요?" message="일감을 되살린 뒤 검색 결과를 다시 눌러 주세요. 메시지는 보내지 않아요." confirmLabel="되살리기" onConfirm={()=>{unarchive([conversationRestore.taskId]);setConversationRestore(null)}} onCancel={()=>setConversationRestore(null)}/>}
       {archiveOpen && (

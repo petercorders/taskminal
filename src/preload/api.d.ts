@@ -1,6 +1,8 @@
 // renderer 가 보는 preload API 타입 (window.taskminal). 구현은 preload/index.ts.
 import type { BackupInfo } from '../shared/backup'
 import type { AppInfo, BackupMark, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, RedactStatus, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
+import type { AgentSignal } from '../shared/agent-hooks'
+import type { UsageMap, UsageWindowKey } from '../shared/usage'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { AppState } from '../shared/types'
 
@@ -20,6 +22,17 @@ export interface PtyApi {
   onExit(listener: (paneId: string, exit: PtyExit) => void): () => void
   /** 셸 통합이 없는 셸의 작업 폴더(lsof) — 이 창의 pane 만, 모르면 빠진다 */
   cwds(paneIds: string[]): Promise<Record<string, string>>
+  /** 51단계: 터미널에서 띄운 claude · codex 의 상태(훅 사건) */
+  onAgent(listener: (paneId: string, signal: AgentSignal) => void): () => void
+  /** pane 별 마지막 에이전트 사건 — 다시 열 때 지금 상태를 맞춘다 */
+  agents(): Promise<Record<string, AgentSignal>>
+}
+
+/** 52단계: Claude 한도(5시간 · 주간) 실수치 — 대화 · 터미널이 받은 마지막 값 */
+export interface UsageApi {
+  get(): Promise<UsageMap>
+  /** crossed: 이번에 90% 를 새로 넘은 창 */
+  onChange(listener: (map: UsageMap, crossed: Array<{ account: string; key: UsageWindowKey; used: number; resetsAt: number }>) => void): () => void
 }
 
 export interface ScrollbackApi {
@@ -149,6 +162,8 @@ export interface TaskminalApi {
   development: import('../shared/development-tools').DevelopmentApi
   workflows: import('../shared/workflows').WorkflowApi
   conversations: import('../shared/conversation-search').ConversationApi
+  /** 53단계 밖에서 시작한 에이전트 세션 */
+  agentSessions: import('../shared/agent-sessions').AgentSessionsApi
   accounts: import('../shared/accounts').AccountsApi
   workspace: import('../shared/workspace').WorkspaceApi
   gitWorkflow: import('../shared/git-workflow').GitWorkflowApi
@@ -172,6 +187,7 @@ export interface TaskminalApi {
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi
+  usage: UsageApi
   /** ~/.ssh/config 의 Host 이름들 — 와일드카드 빼고(25단계, main 이 읽기만) */
   sshHosts(): Promise<string[]>
   scrollback: ScrollbackApi
@@ -189,6 +205,8 @@ export interface TaskminalApi {
   review: ReviewApi
   /** taskminal 명령 (24단계) — main 이 묻는 화면 쪽 일 */
   cli: CliApi
+  /** 55단계 Jira 읽기 연동 */
+  jira: import('../shared/jira').JiraApi
 }
 
 export interface CliApi {

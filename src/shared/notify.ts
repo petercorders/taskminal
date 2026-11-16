@@ -5,6 +5,11 @@ import type { NotifyKind } from './types'
 /** 사건 전후 활동으로 알릴 일을 고른다. 알림을 보낼지(설정 · 보고 있는지)는 부르는 쪽이 정한다. */
 export function notifyKind(prev: PaneActivity | undefined, next: PaneActivity, ev: ActivityEvent, longMs: number): NotifyKind | null {
   if (ev.type === 'bell' || ev.type === 'notify') return next !== prev && next.attention && next.state === 'waiting' ? 'wait' : null
+  // 51단계 에이전트: 새로 주의가 켜졌을 때만 — 허락 · 입력 · 턴 끝은 기다림, 턴 실패는 실패. 다시 읽기(restore)는 주의를 켜지 않는다
+  if (ev.type === 'agent') {
+    if (next === prev || !next.attention || prev?.attention) return null
+    return ev.phase === 'failed' ? 'fail' : ev.phase === 'permission' || ev.phase === 'input' || ev.phase === 'done' ? 'wait' : null
+  }
   if (ev.type !== 'end') return null
   if (next.state === 'failed') return 'fail'
   // 시작(C)을 본 명령만 — 셸 통합 전부터 돌던 명령은 걸린 시간을 모른다

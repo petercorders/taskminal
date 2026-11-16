@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AccountStatus, AgentAccount } from '../shared/accounts'
 import type { ChatAgent } from '../shared/chat'
 
-const states = { ready: '조회됨', 'signed-out': '로그인 필요', unsupported: '한도 수치 미지원', unavailable: '조회 불가', missing: 'CLI 없음' }
+const states = { ready: '조회됨', 'signed-out': '로그인 필요', unsupported: '아직 한도 값 없음', unavailable: '조회 불가', missing: 'CLI 없음' }
 export function AccountsPanel() {
   const api = window.taskminal.accounts
   const [list, setList] = useState<AgentAccount[]>([]),

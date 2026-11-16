@@ -28,6 +28,8 @@ export interface ChatManagerDeps {
   /** 에이전트 프로세스에 더할 환경 변수 (24단계 — TASKMINAL_PANE_ID · 소켓 · PATH 의 taskminal) */
   extraEnv?: (paneId: string, path: string, chat: ChatRef) => Record<string, string>
   sessionEnv?: (env: Record<string,string>, paneId:string, chat:ChatRef) => Record<string,string>
+  /** 52단계: Claude 대화의 한도 정보 — env 의 CLAUDE_CONFIG_DIR 로 계정을 안다 */
+  onUsage?: (paneId: string, env: Record<string, string>, info: unknown) => void
 }
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
@@ -138,10 +140,11 @@ export class ChatManager {
       }
       const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
       const initialEnv = { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path, chat) ?? {}) }
+      const sessionEnv = this.d.sessionEnv?.(initialEnv, paneId, chat) ?? initialEnv
       const common = {
         ...(chat.model?{model:chat.model}:{}),...(chat.effort?{effort:chat.effort}:{}),
         bin: found.bin,
-        env: this.d.sessionEnv?.(initialEnv,paneId,chat) ?? initialEnv,
+        env: sessionEnv,
         cwd: expandHome(cwd),
         permission: this.d.permissionFor?.(paneId)??(this.forcedAsk.has(paneId)?'ask':this.d.permission()),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),
@@ -159,7 +162,7 @@ export class ChatManager {
       entry.s =
         chat.agent === 'codex'
           ? new CodexSession({ ...common, saveImage: (img, n) => this.d.store.saveImage(paneId, img, n), ...(this.d.appVersion ? { clientVersion: this.d.appVersion } : {}) })
-          : new ClaudeSession(common)
+          : new ClaudeSession({ ...common, onUsage: (info: unknown) => this.d.onUsage?.(paneId, sessionEnv, info) })
       this.panes.set(paneId, entry)
       if (!entry.s.send(text, images)) return 'busy'
       this.emit(paneId, sink, user)

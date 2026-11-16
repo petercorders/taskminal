@@ -1,5 +1,6 @@
 // 사이드바에 보일 칸 나누기. 순수 함수라 단위 시험한다.
 import { taskActivity, type PaneActivity } from '../shared/activity'
+import { agentLabel } from '../shared/agent-hooks'
 import { paneIds } from '../shared/layout'
 import type { AppState, Group, Id, Task } from '../shared/types'
 
@@ -166,13 +167,20 @@ export function lastLine(task: Task, activity: Readonly<Record<Id, PaneActivity>
   for (const id of Object.keys(task.panes)) {
     const a = activity[id]
     if (!a || a.state === 'idle') continue
-    const at = Math.max(a.endedAt ?? 0, a.startedAt ?? 0) + (a.attention ? 1e15 : 0)
+    const at = Math.max(a.endedAt ?? 0, a.startedAt ?? 0, a.agent?.at ?? 0) + (a.attention ? 1e15 : 0)
     if (at > bestAt) {
       best = a
       bestAt = at
     }
   }
   if (!best) return null
+  // 51단계: 터미널에서 띄운 claude · codex 는 명령 대신 에이전트 상태(Claude · 허락 기다림)
+  if (best.agent) {
+    const label = agentLabel(best.agent)
+    if (best.state === 'failed') return { text: `✗ ${label}`, tone: 'err' }
+    if (best.attention || best.state === 'waiting') return { text: label, tone: 'wait' }
+    return best.state === 'running' ? { text: `● ${label}`, tone: 'run' } : { text: `✓ ${label}`, tone: 'dim' }
+  }
   const cmd = best.command ?? ''
   if (best.attention && best.state !== 'failed') return { text: best.message ?? (cmd ? `입력 기다림 · ${cmd}` : '입력 기다림'), tone: 'wait' }
   switch (best.state) {

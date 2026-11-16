@@ -148,6 +148,8 @@ export interface Settings {
   sidebarDensity: SidebarDensity
   // 터미널
   shellIntegration: boolean
+  /** 51단계: 터미널에서 띄운 claude · codex 에 이 실행만의 훅을 붙여 상태(작업 중 · 허락 기다림)를 알아낸다 */
+  agentHooks: boolean
   /** 다시 열 때 이전 출력을 보여 주기 (pane 마다 디스크에 저장) */
   restoreScrollback: boolean
   scrollback: number

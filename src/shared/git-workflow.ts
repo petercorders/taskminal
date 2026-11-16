@@ -39,6 +39,8 @@ export interface GitWorkflowView {
 }
 export interface CreatePullRequest { target: GitTarget; title: string; body: string }
 export interface MergePullRequest { target: GitTarget; number: number; head: string }
+/** 54단계: PR 의 실패 체크 · 리뷰 의견 읽기 — 화면이 본 PR 번호 · 머리 */
+export interface PrFeedbackRequest { target: GitTarget; number: number; head: string }
 export interface GitWorkflowResult {
   state: 'ok' | 'busy' | 'changed' | 'blocked' | 'unknown' | 'error'
   message: string
@@ -49,6 +51,7 @@ export interface GitWorkflowApi {
   push(dir: string, target: GitTarget): Promise<GitWorkflowResult>
   create(dir: string, request: CreatePullRequest): Promise<GitWorkflowResult>
   merge(dir: string, request: MergePullRequest): Promise<GitWorkflowResult>
+  feedback(dir: string, request: PrFeedbackRequest): Promise<import('./ci-feedback').PrFeedbackResult>
 }
 export function validWorkflowOptions(value: unknown): value is WorkflowOptions {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false

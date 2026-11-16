@@ -1,0 +1,10 @@
+/* 55단계 Jira — 일감 머리 띠 · 사이드바 둘째 줄 칩 · 패널 상태 글 */
+.jira-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.jira-head .jira-key { min-height: 24px; height: auto; padding: 0 var(--space-2); font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; color: var(--fg); }
+.jira-head .jira-title { flex: 1 1 120px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fg); }
+.jira-head .jira-state { flex: none; }
+.jira-due { flex: none; }
+.jira-due.overdue, .task-issue.overdue { color: var(--danger); font-weight: 600; }
+/* 짧은 글이라 줄지 않는다 — 폴더(.task-where)가 먼저 줄어든다 */
+.task-issue { flex: none; font-family: 'JetBrains Mono', Menlo, monospace; }
+.issues-panel .jira-state-line { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }

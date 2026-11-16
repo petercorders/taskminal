@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline'
 import type { ChatAgent } from '../shared/chat'
 import { codexUsage, type AccountStatus, type AgentAccount } from '../shared/accounts'
 import { redact } from '../shared/redact'
+import { accountWindows, usageAgo, type UsageSnapshot } from '../shared/usage'
 import { AgentBinFinder, agentLaunch } from './chat/find-bin'
 
 interface Saved {
@@ -20,6 +21,11 @@ export class Accounts {
   private queries = new Set<ChildProcess>()
   private finder = new AgentBinFinder()
   private corrupt = false
+  /** 52단계: 계정별 Claude 한도 마지막 값(대화 · 터미널 statusLine) */
+  private usageOf: ((id: string) => UsageSnapshot | undefined) | null = null
+  setUsageSource(fn: (id: string) => UsageSnapshot | undefined): void {
+    this.usageOf = fn
+  }
   constructor(private dir: string) {
     mkdirSync(dir, { recursive: true, mode: 0o700 })
     try {
@@ -134,12 +140,19 @@ export class Accounts {
       .join(' ')
     // Login-shell startup files can add credentials not present in the GUI process.
     // Start from an explicit environment rather than trying to enumerate secret names.
+    // 51단계: env -i 는 셸 통합의 claude · codex 함수를 거치지 않는다 — 앱이 켠 셸이면(변수 있음) 훅 인자를 직접 붙인다.
+    // ${X:+a} ${X:+"$X"} 두 낱말로 나눠 변수가 비면 빈 인자 없이 사라진다(zsh · bash 같다)
+    const hooks =
+      agent === 'codex'
+        ? ' ${TASKMINAL_CODEX_NOTIFY:+-c} ${TASKMINAL_CODEX_NOTIFY:+"$TASKMINAL_CODEX_NOTIFY"}'
+        : ' ${TASKMINAL_CLAUDE_SETTINGS:+--settings} ${TASKMINAL_CLAUDE_SETTINGS:+"$TASKMINAL_CLAUDE_SETTINGS"}'
     return (
-      'env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" LANG="${LANG:-en_US.UTF-8}" TMPDIR="$TMPDIR" SHELL="$SHELL" SSH_AUTH_SOCK="$SSH_AUTH_SOCK" TASKMINAL_PANE_ID="$TASKMINAL_PANE_ID" TASKMINAL_TASK_ID="$TASKMINAL_TASK_ID" TASKMINAL_SOCKET="$TASKMINAL_SOCKET" TASKMINAL_CLI_NODE="$TASKMINAL_CLI_NODE" TASKMINAL_CLI_JS="$TASKMINAL_CLI_JS" ' +
+      'env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" LANG="${LANG:-en_US.UTF-8}" TMPDIR="$TMPDIR" SHELL="$SHELL" SSH_AUTH_SOCK="$SSH_AUTH_SOCK" TASKMINAL_PANE_ID="$TASKMINAL_PANE_ID" TASKMINAL_TASK_ID="$TASKMINAL_TASK_ID" TASKMINAL_SOCKET="$TASKMINAL_SOCKET" TASKMINAL_CLI_NODE="$TASKMINAL_CLI_NODE" TASKMINAL_CLI_JS="$TASKMINAL_CLI_JS" TASKMINAL_AGENT_EVENTS="$TASKMINAL_AGENT_EVENTS" ' +
       vars +
       ' ' +
       bin +
-      (agent === 'codex' ? ' -c \'cli_auth_credentials_store="file"\'' : '')
+      (agent === 'codex' ? ' -c \'cli_auth_credentials_store="file"\'' : '') +
+      hooks
     )
   }
   async status(id: string): Promise<AccountStatus> {
@@ -163,11 +176,13 @@ export class Accounts {
           try {
             const d = JSON.parse(stdout)
             const signed = d.loggedIn === true || (typeof d.authMethod === 'string' && d.authMethod !== 'none')
-            resolve({
-              ...base,
-              state: signed ? 'unsupported' : 'signed-out',
-              message: signed ? '로그인됨 · Claude 플랜 한도 조회는 지원하지 않아요.' : '로그인이 필요해요.',
-            })
+            // 52단계: 한도는 조회하지 않고 대화 · 터미널이 받은 마지막 값을 보인다
+            const usage = this.usageOf?.(id)
+            const windows = accountWindows(usage)
+            if (!signed) resolve({ ...base, state: 'signed-out', message: '로그인이 필요해요.' })
+            else if (usage && windows.length > 0)
+              resolve({ ...base, windows, updatedAt: usage.at, state: 'ready', message: `${usageAgo(usage.at, Date.now())} ${usage.source === 'chat' ? '대화' : '터미널'}에서 받은 값` })
+            else resolve({ ...base, state: 'unsupported', message: '로그인됨 · 대화나 터미널에서 Claude 를 한 번 쓰면 한도가 보여요.' })
           } catch {
             resolve({ ...base, state: err ? 'unavailable' : 'unsupported', message: '계정 상태를 읽지 못했어요. CLI 버전을 확인해 주세요.' })
           }
@@ -300,6 +315,13 @@ export class Accounts {
       l.running = false
       l.output += '\n로그인을 중단했어요. 이미 완료된 인증은 유지될 수 있어요.'
     }
+  }
+  /** 53단계: 밖에서 시작한 세션을 이어 할 새 pane 을 그 세션의 계정에 묶는다(이어 하기는 같은 계정 폴더에서만 세션을 찾는다) */
+  bindTo(pane: string, agent: ChatAgent, accountId: string) {
+    const a = this.account(accountId)
+    if (a.agent !== agent) throw new Error('계정과 에이전트가 맞지 않아요')
+    this.data.bindings[`${agent}:${pane}`] = accountId
+    this.save()
   }
   dispose() {
     for (const l of this.logins.values()) if (l.running) l.child?.kill()

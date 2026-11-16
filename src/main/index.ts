@@ -59,6 +59,11 @@ import { Updater, type UpdateEngine, type UpdatePrefs } from './updater'
 import { defaultShell } from '../shared/platform'
 import { openTextEditor } from './text-editor'
 import { isAppPage } from './page-origin'
+import { AgentEvents, writeHookFiles, type HookFiles } from './agent-events'
+import { codexHasNotify, codexNotifyArg } from '../shared/agent-hooks'
+import { parseStatusFile, usageFromRateLimitInfo, usageFromStatusLine } from '../shared/usage'
+import { UsageStore, claudeAccountId } from './usage-store'
+import { syncUserStatusLine } from './agent-events'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -105,6 +110,36 @@ let agentAccounts: Accounts | null = null
 let workspaceBrowser:WorkspaceBrowser|null=null
 let workflowRunner: WorkflowRunner | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
+// 51단계: 터미널에서 띄운 claude · codex 의 훅 — ready 뒤 만든다(userData)
+let agentEvents: AgentEvents | null = null
+let hookFiles: HookFiles | null = null
+// 52단계: 계정별 Claude 한도 — ready 뒤 만든다(userData)
+let usageStore: UsageStore | null = null
+const accountsRoot = () => join(app.getPath('userData'), 'accounts')
+function putUsage(configDir: string | undefined, snap: ReturnType<typeof usageFromStatusLine>): void {
+  if (snap) usageStore?.put(claudeAccountId(configDir, accountsRoot()), snap)
+}
+/** 새 셸에 넣는 에이전트 훅 변수. 설정이 켜져 있고 훅 파일이 있을 때만. 새 셸마다 지금 설정 · 사용자 codex notify 를 본다(처음 한 번만 읽지 않는다) */
+function agentEnv(paneId: string): Record<string, string> {
+  const file = agentEvents?.fileFor(paneId)
+  if (!hookFiles || !file || lastState?.settings.agentHooks === false) return {}
+  // 52단계: 사용자 statusLine 을 지금 값으로(바뀌었으면) — 앱 statusLine 스크립트가 잇는다
+  try {
+    syncUserStatusLine(dirname(hookFiles.claudeSettings), process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude'))
+  } catch (e) {
+    report('error', 'agent-statusline', '사용자 statusLine 을 읽지 못했어요', e)
+  }
+  const env: Record<string, string> = { TASKMINAL_AGENT_EVENTS: file, TASKMINAL_CLAUDE_SETTINGS: hookFiles.claudeSettings }
+  let toml = ''
+  try {
+    toml = readFileSync(join(process.env['CODEX_HOME'] || join(homedir(), '.codex'), 'config.toml'), 'utf8').slice(0, 1_000_000)
+  } catch {
+    toml = '' // 없으면 사용자 notify 도 없다
+  }
+  // 사용자가 notify 를 두었으면 -c 로 덮지 않는다
+  if (!codexHasNotify(toml)) env['TASKMINAL_CODEX_NOTIFY'] = codexNotifyArg(hookFiles.codexNotify)
+  return env
+}
 /** pane 의 셸 · 대화 에이전트에 넣는 값 — 그 안의 taskminal 이 '이 터미널' 을 안다 */
 function cliEnv(paneId: string): Record<string, string> {
   const taskId = lastState?.tasks.find((t) => Object.hasOwn(t.panes, paneId))?.id
@@ -271,6 +306,7 @@ const chats = () =>
     // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
     extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || process.env['Path'] || ''}${delimiter}${cliBinDir}` }),
     sessionEnv: (env,paneId,chat) => agentAccounts?.sessionEnvironment(paneId,chat.agent,!!chat.sessionId,env) ?? env,
+    onUsage: (_paneId, env, info) => putUsage(env['CLAUDE_CONFIG_DIR'], usageFromRateLimitInfo(info, Date.now())),
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
@@ -698,6 +734,8 @@ if (!app.requestSingleInstanceLock()) {
     const file = new StateFile(app.getPath('userData'), randomUUID, () => backups().latestGood(randomUUID))
     const loaded = file.load() // 실패(EACCES 등)하면 저장 대상은 그대로 두고 renderer 에 예외로 알린다
     lastState = loaded.state
+    // 상태에 없는 pane 의 에이전트 기록 파일을 지운다(닫힌 pane · 지난 실행의 찌꺼기)
+    agentEvents?.keepOnly(new Set(loaded.state.tasks.flatMap((t) => Object.keys(t.panes))))
     worktreeRevision++
     stateFile = file
     if (file.canWrite) {
@@ -861,6 +899,14 @@ if (!app.requestSingleInstanceLock()) {
       return { ok: false, error: '잘못된 요청' }
     }
     return addWorktree(dir, branch, homedir())
+  })
+  ipcMain.handle(IPC.usageGet, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return usageStore?.get() ?? {}
+  })
+  ipcMain.handle(IPC.ptyAgents, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return agentEvents?.last() ?? {}
   })
   ipcMain.handle(IPC.ptyCwds, async (event, paneIds: unknown): Promise<Record<string, string>> => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
@@ -1176,11 +1222,38 @@ if (!app.requestSingleInstanceLock()) {
     // 새 셸을 띄울 때만 불린다 — 같은 pane id 로 새 셸이면 앞 셸의 끝 · 실행 중 표시를 지운다(24 리뷰)
     const newShellEnv = (paneId: string) => {
       paneWatch.forget(paneId)
-      return cliEnv(paneId)
+      agentEvents?.forget(paneId) // 앞 셸의 claude 기록이 새 셸에 남지 않게
+      return { ...cliEnv(paneId), ...agentEnv(paneId) }
+    }
+    usageStore = new UsageStore(join(app.getPath('userData'), 'usage.json'), (map, crossed) => {
+      const w = mainWindow
+      if (w && !w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(IPC.usageChanged, map, crossed)
+    })
+    agentAccounts?.setUsageSource((id) => usageStore?.get()[id])
+    try {
+      hookFiles = writeHookFiles(join(app.getPath('userData'), 'agent-hooks'))
+      agentEvents = new AgentEvents({
+        dir: join(app.getPath('userData'), 'agent-events'),
+        onSignal: (paneId, signal) => {
+          const w = mainWindow
+          if (w && !w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(IPC.ptyAgent, paneId, signal)
+        },
+        onStatus: (_paneId, text) => {
+          const st = parseStatusFile(text)
+          if (st) putUsage(st.configDir, usageFromStatusLine(st.rateLimits, Date.now()))
+        },
+      })
+      agentEvents.start()
+    } catch (e) {
+      hookFiles = null // 훅 없이 셸은 그대로 뜬다
+      report('error', 'agent-hooks', '에이전트 상태 훅을 준비하지 못했어요', e)
     }
     hostControl = createHostControl(zshIntegrationDir, allowedShells, (error) => report('error', 'host-down', '셸 지킴이에 연결하지 못했어요', error), newShellEnv, {
       data: (paneId, data) => paneWatch.feed(paneId, data),
-      exit: (paneId, code) => paneWatch.exit(paneId, code),
+      exit: (paneId, code) => {
+        paneWatch.exit(paneId, code)
+        agentEvents?.forget(paneId)
+      },
     })
     startCliServer()
     updater = createUpdater()

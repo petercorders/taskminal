@@ -9,6 +9,8 @@ import { TaskMenu } from './TaskMenu'
 import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
 import { SidebarPorts } from './ports-ui'
 import { Icon } from './icons'
+import { UsageBars } from './UsageBars'
+import type { UsageMap } from '../shared/usage'
 
 interface Props {
   onOverview(): void
@@ -55,13 +57,18 @@ interface Props {
   onArchiveMany?(ids: Id[]): void
   /** 원격 일감의 연결 상태 — 사이드바 '⇄ host' 칩의 점 */
   remoteStateOf?(task: Task): 'up' | 'retry' | 'down' | null
+  /** 52단계: Claude 한도(계정별 마지막 값) — 아래에 막대 · 누르면 사용량·계정 */
+  usage?: UsageMap
+  onUsage?(): void
+  /** 55단계 연결한 Jira 키 · 마감 — 둘째 줄 칩 (지났으면 빨강 + '마감 지남' 글자) */
+  issueOf?(task: Task): { text: string; overdue: boolean; title?: string } | null
 }
 
 const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null }: Props) {
+export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, usage, onUsage, issueOf = () => null }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -134,6 +141,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
   const row = (task: Task, where: 'attention' | 'need' | 'list') => {
     const status = statusOf(task)
     const active = task.id === state.activeTaskId
+    const issue = issueOf(task)
     const act = activityOf(task)
     const editing = renaming === task.id && where !== 'attention'
     return (
@@ -196,6 +204,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
                       ⇄ {task.host}
                     </span>
                   )}
+                  {issue && <span className={`task-issue${issue.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issue.title ?? issue.text}>{issue.text}</span>}
                   <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>
@@ -432,6 +441,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
             ● {updateChip} 설치 가능
           </button>
         )}
+        {usage && <UsageBars usage={usage} now={now} {...(onUsage ? { onOpen: onUsage } : {})} />}
         <div className="sidebar-foot-row">
           <button type="button" className="sidebar-foot-button" onClick={onWeekly} data-testid="weekly-open" title="이번 주 정리">
             <Icon name="chart" />

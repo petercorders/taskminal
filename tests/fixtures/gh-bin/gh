@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+// 54단계 e2e 가짜 gh — 저장소 o/r 의 PR #7 하나. FAKE_GH_DIR 의 파일로 응답을 정한다:
+//   calls.log  받은 인자(JSON 한 줄씩) · done.log  피드백(pr view) 응답을 낸 커밋
+//   slow       `<all|커밋 sha>⇥<ms>` — 그 커밋의 pr view 를 ms 만큼 늦춘다
+// 실제 GitHub 의 권한 · 페이지 나눔 · 로그 크기 · 체크 종류는 흉내 내지 않는다.
+const { appendFileSync, readFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { execFileSync } = require('node:child_process')
+
+const args = process.argv.slice(2)
+const dir = process.env.FAKE_GH_DIR
+appendFileSync(join(dir, 'calls.log'), JSON.stringify(args) + '\n')
+const head = () => execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+const out = (v) => process.stdout.write(typeof v === 'string' ? v : JSON.stringify(v))
+const TOKEN = 'ghp_' + 'Z'.repeat(36)
+const failed = { __typename: 'CheckRun', name: 'build', workflowName: 'CI', status: 'COMPLETED', conclusion: 'FAILURE', detailsUrl: 'https://github.com/o/r/actions/runs/111/job/222' }
+const passed = { __typename: 'CheckRun', name: 'lint', workflowName: 'CI', status: 'COMPLETED', conclusion: 'SUCCESS', detailsUrl: 'https://github.com/o/r/actions/runs/111/job/223' }
+
+async function main() {
+  const [a, b] = args
+  if (a === 'auth' && b === 'status') return 0
+  if (a === 'repo' && b === 'view') return out({ defaultBranchRef: { name: 'main' } }), 0
+  if (a === 'pr' && b === 'list')
+    return out([{ number: 7, title: 'Fix it', url: 'https://github.com/o/r/pull/7', state: 'OPEN', isDraft: false, headRefOid: head(), headRefName: 'feature', isCrossRepository: false, baseRefName: 'main', reviewDecision: 'CHANGES_REQUESTED', mergeStateStatus: 'BLOCKED', statusCheckRollup: [failed, passed] }]), 0
+  if (a === 'pr' && b === 'view' && args[2] === '7') {
+    const sha = head()
+    let slow = ''
+    try { slow = readFileSync(join(dir, 'slow'), 'utf8').trim() } catch {}
+    const [who, ms] = slow.split('\t')
+    if (who === 'all' || who === sha) await new Promise((r) => setTimeout(r, Number(ms)))
+    out({
+      number: 7,
+      headRefOid: sha,
+      statusCheckRollup: [failed, passed],
+      reviews: [{ id: 'R1', author: { login: 'alice' }, state: 'CHANGES_REQUESTED', body: `리뷰 ${sha.slice(0, 7)}: 실패 처리를 고쳐 주세요`, submittedAt: '2026-11-13T10:00:00Z' }],
+      comments: [{ id: 'C1', author: { login: 'carol' }, body: '대화 의견: 이름을 바꿔 주세요', createdAt: '2026-11-13T09:00:00Z', url: 'https://github.com/o/r/pull/7#issuecomment-1' }],
+    })
+    appendFileSync(join(dir, 'done.log'), sha + '\n')
+    return 0
+  }
+  if (a === 'api' && b === 'repos/o/r/pulls/7/comments?per_page=100&sort=created&direction=desc')
+    return out([{ id: 9, user: { login: 'dave' }, path: 'src/a.ts', line: 12, body: '여기 null 확인', created_at: '2026-11-13T13:00:00Z', html_url: 'https://github.com/o/r/pull/7#discussion_r9' }]), 0
+  if (a === 'run' && b === 'view' && args[2] === '111' && args.includes('222') && args.includes('--log-failed'))
+    return out(['setup ok', 'npm test', `GH_TOKEN=${TOKEN}`, '\x1b[31mFAIL: expected 2, got 3\x1b[0m', 'exit 1'].map((l) => `build\tRun tests\t2026-11-13T16:01:26.2423400Z ${l}`).join('\n') + '\n'), 0
+  process.stderr.write(`fake gh: 모르는 명령 ${args.join(' ')}\n`)
+  return 1
+}
+main().then((code) => process.exit(code))

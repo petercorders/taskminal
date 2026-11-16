@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { validGitTarget, validRefPart, validWorkflowOptions, type CreatePullRequest, type GitTarget, type GitWorkflowResult, type GitWorkflowView, type MergePullRequest, type PullRequestView, type WorkflowOptions } from '../shared/git-workflow'
+import { validGitTarget, validRefPart, validWorkflowOptions, type CreatePullRequest, type GitTarget, type GitWorkflowResult, type GitWorkflowView, type MergePullRequest, type PrFeedbackRequest, type PullRequestView, type WorkflowOptions } from '../shared/git-workflow'
+import { FAILED_CHECK_STATES, LOG_CHECKS, failedChecks, logTail, reviewNotes, type FailedCheck, type PrFeedbackResult } from '../shared/ci-feedback'
 
 export interface WorkflowOutput { code: number; stdout: string; timedOut: boolean; missing: boolean }
 export type WorkflowRunner = (tool: 'git' | 'gh', args: readonly string[], cwd: string, input?: string) => Promise<WorkflowOutput>
@@ -12,7 +13,8 @@ export function makeWorkflowRunner(bins: { git?: string; gh?: string } = {}): Wo
     const child = execFile(bins[tool] ?? tool, [...args], {
       cwd, env: { ...process.env, LC_ALL: 'C', GIT_TERMINAL_PROMPT: '0', GIT_PAGER: 'cat', GH_PROMPT_DISABLED: '1', GH_PAGER: 'cat' },
       timeout: args[0] === 'push' || args[1] === 'merge' || args[1] === 'create' ? 120_000 : 30_000,
-      maxBuffer: 2 * 1024 * 1024, encoding: 'utf8',
+      // 54단계: 실패 로그는 끝이 필요하다 — 버퍼를 넘으면 앞부분만 남으므로 run 은 넉넉히
+      maxBuffer: (args[0] === 'run' ? 16 : 2) * 1024 * 1024, encoding: 'utf8',
     }, (err, stdout) => {
       const e = err as (NodeJS.ErrnoException & { killed?: boolean; code?: string | number }) | null
       resolve({ code: e ? typeof e.code === 'number' ? e.code : -1 : 0, stdout: String(stdout), timedOut: !!e?.killed && e.code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', missing: e?.code === 'ENOENT' })
@@ -28,13 +30,18 @@ function githubRepo(url: string): string | null {
   return /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? null
 }
 function safeUrl(url: string): string { return url.replace(/(https?:\/\/)[^/@\s]+@/g, '$1').replace(/[?#].*$/, '') }
+/** 한도 안에 끝나지 않으면 fallback — 밑의 작업은 멈추지 않는다(gh 는 runner 의 30초 한도로 끝난다) */
+function within<T, F>(work: Promise<T>, ms: number, fallback: F): Promise<T | F> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([work, new Promise<F>((resolve) => { timer = setTimeout(() => resolve(fallback), ms) })]).finally(() => clearTimeout(timer))
+}
 function json(raw: string): unknown { try { return JSON.parse(raw) } catch { return null } }
 function obj(raw: unknown): Record<string, unknown> | null { return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null }
 function parsePr(raw: unknown): PullRequestView | null {
   const p = obj(raw)
   if (!p || !Number.isSafeInteger(p.number) || (p.number as number) < 1 || typeof p.headRefOid !== 'string' || typeof p.headRefName !== 'string' || p.isCrossRepository === true || typeof p.baseRefName !== 'string' || typeof p.url !== 'string' || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(p.url)) return null
   const checks = Array.isArray(p.statusCheckRollup) ? p.statusCheckRollup.map(obj).filter((x): x is Record<string, unknown> => !!x) : []
-  const failed = checks.some((c) => ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STALE'].includes(String(c.conclusion ?? c.state)))
+  const failed = checks.some((c) => FAILED_CHECK_STATES.includes(String(c.conclusion ?? c.state)))
   const pending = checks.some((c) => !['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(String(c.conclusion ?? c.state)))
   const checkState = failed ? 'failed' : pending ? 'pending' : checks.length ? 'passed' : 'none'
   return { number: p.number as number, title: typeof p.title === 'string' ? p.title : '', url: p.url, state: String(p.state), head: p.headRefOid, branch: p.headRefName, base: p.baseRefName, draft: p.isDraft === true, review: String(p.reviewDecision ?? ''), checks: checkState, mergeable: p.mergeStateStatus === 'CLEAN' && p.isDraft !== true && p.reviewDecision !== 'CHANGES_REQUESTED' && p.reviewDecision !== 'REVIEW_REQUIRED' && checkState !== 'failed' && checkState !== 'pending' }
@@ -45,7 +52,9 @@ export class GitWorkflowService {
   // PR 생성이 적용됐을 수 있으면 같은 작업을 다시 POST하지 않는다.
   private readonly uncertainCreates = new Set<string>()
   private storageError = false
-  constructor(private readonly run: WorkflowRunner = makeWorkflowRunner(), private readonly pendingFile?: string) {
+  // 54단계: 같은 PR · 같은 머리의 피드백 읽기는 한 번에 하나 — 진행 중 다시 누르면 같은 읽기를 기다린다
+  private readonly feedbackRuns = new Map<string, Promise<PrFeedbackResult>>()
+  constructor(private readonly run: WorkflowRunner = makeWorkflowRunner(), private readonly pendingFile?: string, private readonly feedbackLimitMs = 15_000) {
     if (pendingFile) {
       try {
         if (statSync(pendingFile).size > 1024 * 1024) throw new Error('size')
@@ -176,5 +185,49 @@ export class GitWorkflowService {
       const after = afterRead.code === 0 ? parsePr(json(afterRead.stdout)) : null
       return after?.state === 'MERGED' ? result('ok', 'PR을 병합했어요.', after.url) : r.timedOut || r.code === 0 || !after ? result('unknown', '병합 결과를 확인하지 못했어요. 다시 시도하면 PR부터 확인해요.') : result('error', '병합하지 못했어요. 최신 체크와 보호 규칙을 확인해 주세요.')
     })
+  }
+  /** 54단계: 실패 체크(로그 끝) · 리뷰 의견. 읽기만 하며 한도(15초) 안에 답이 없으면 timeout — 화면은 마지막 값을 남긴다 */
+  feedback(dir: string, request: PrFeedbackRequest, redact: (text: string) => string = (text) => text): Promise<PrFeedbackResult> {
+    if (typeof dir !== 'string' || !isAbsolute(dir) || dir.includes('\0') || !request || !validGitTarget(request.target) || !request.target.repo || !Number.isSafeInteger(request.number) || request.number < 1 || typeof request.head !== 'string' || !/^[a-f0-9]{40,64}$/.test(request.head))
+      return Promise.resolve({ state: 'error', message: 'PR을 확인해 주세요.' })
+    const repo = request.target.repo
+    const key = `${repo}#${request.number}@${request.head}`
+    let work = this.feedbackRuns.get(key)
+    if (!work) {
+      work = this.readFeedback(dir, repo, request.number, redact)
+        .catch((): PrFeedbackResult => ({ state: 'error', message: 'PR 체크·리뷰를 읽지 못했어요. 다시 시도해 주세요.' }))
+        .finally(() => this.feedbackRuns.delete(key))
+      this.feedbackRuns.set(key, work)
+    }
+    return within(work, this.feedbackLimitMs, { state: 'timeout', message: '응답이 없어요. 다시 시도해 주세요.' } as const)
+  }
+  private async readFeedback(cwd: string, repo: string, n: number, redact: (text: string) => string): Promise<PrFeedbackResult> {
+    const start = Date.now()
+    const [view, lines] = await Promise.all([
+      this.run('gh', ['pr', 'view', String(n), '--repo', repo, '--json', 'number,headRefOid,statusCheckRollup,reviews,comments'], cwd),
+      this.run('gh', ['api', `repos/${repo}/pulls/${n}/comments?per_page=100&sort=created&direction=desc`], cwd),
+    ])
+    if (view.missing) return { state: 'error', message: 'GitHub CLI(gh)를 설치해 주세요.' }
+    const pv = view.code === 0 ? obj(json(view.stdout)) : null
+    if (!pv || pv.number !== n || typeof pv.headRefOid !== 'string' || !/^[a-f0-9]{40,64}$/.test(pv.headRefOid))
+      return { state: 'error', message: view.timedOut ? '응답이 없어요. 다시 시도해 주세요.' : 'PR 체크·리뷰를 읽지 못했어요. 다시 시도해 주세요.' }
+    const head = pv.headRefOid
+    const lineRows = lines.code === 0 ? json(lines.stdout) : null
+    const found = failedChecks(pv.statusCheckRollup, repo)
+    const withLog = new Set(found.filter((c) => c.runId !== null && c.jobId !== null).slice(0, LOG_CHECKS))
+    // 로그는 남은 한도 안에서만 기다린다 — 늦은 로그 때문에 체크 · 리뷰까지 timeout 이 되지 않게
+    const budget = Math.max(0, this.feedbackLimitMs - (Date.now() - start) - Math.min(1000, this.feedbackLimitMs / 5))
+    const checks = await Promise.all(found.map(async (c): Promise<FailedCheck> => {
+      const base = { ...c, name: redact(c.name), workflow: redact(c.workflow) }
+      if (c.runId === null || c.jobId === null) return { ...base, log: '', logState: 'not-actions' }
+      if (!withLog.has(c)) return { ...base, log: '', logState: 'skipped' }
+      const r = await within(this.run('gh', ['run', 'view', String(c.runId), '--repo', repo, '--job', String(c.jobId), '--log-failed'], cwd), budget, null)
+      if (!r) return { ...base, log: '', logState: 'timeout' }
+      if (r.code !== 0) return { ...base, log: '', logState: 'error' }
+      const log = logTail(r.stdout, redact)
+      return { ...base, log, logState: log ? 'ok' : 'empty' }
+    }))
+    const { notes, more } = reviewNotes(pv, lineRows, redact)
+    return { state: 'ok', number: n, head, checks, notes, more, lineComments: Array.isArray(lineRows) ? 'ok' : 'error', at: Date.now() }
   }
 }

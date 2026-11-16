@@ -32,3 +32,60 @@ __taskminal_precmd() {
   __taskminal_cwd
   builtin printf '\e]133;A\a'
 }
+
+# 51단계: 터미널에서 띄운 claude · codex 의 상태 훅. 앱이 변수를 줄 때만(설정 '에이전트 상태 알아내기') 감싼다.
+# claude 는 이 실행에만 --settings(훅 → pane 기록 파일), codex 는 -c notify(턴 끝). 사용자 전역 설정은 건드리지 않는다.
+# 사용자가 같은 이름의 alias · 함수를 두었으면 덮지 않는다. 하위 명령 · 이미 --settings 를 준 실행은 그대로 넘긴다.
+# `function 이름 {` 으로 정의한다 — `이름() {` 은 읽을 때 사용자 alias 로 펼쳐져 구문 오류가 난다(조건이 거짓이어도 읽는다).
+__taskminal_agent_exit() {
+  [[ -n ${TASKMINAL_AGENT_EVENTS-} ]] || return 0
+  { builtin printf 'v1\t%s\t%s\tTaskminalExit\t\n' "$(command date +%s)" "$1" >> "$TASKMINAL_AGENT_EVENTS"; } 2>/dev/null
+}
+# 감쌀 수 있나: 앱이 값을 줬고 사용자 alias · 함수가 없다(case 패턴은 사용자 sh_glob 같은 옵션에도 그대로 돈다)
+__taskminal_agent_wrappable() {
+  [[ -n $2 ]] || return 1
+  case $(builtin whence -w $1) in (*alias|*function) return 1 ;; esac
+  return 0
+}
+if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}"; then
+  # 52단계 리뷰: 실행 위치(현재 폴더 · git 최상위)의 프로젝트 설정에 statusLine 이 있으면 훅만 든 설정을 고른다 —
+  # --settings 의 statusLine 이 Claude 설정 우선순위에서 프로젝트 statusLine 을 덮지 않게(그곳에선 터미널 한도 값을 받지 않는다)
+  function __taskminal_claude_settings {
+    local d top only=${TASKMINAL_CLAUDE_SETTINGS%.json}-hooks.json
+    top=$(command git rev-parse --show-toplevel 2>/dev/null)
+    for d in $PWD $top; do
+      if [[ -r $only ]] && command grep -qs '"statusLine"' $d/.claude/settings.json $d/.claude/settings.local.json; then
+        builtin print -r -- $only
+        return
+      fi
+    done
+    builtin print -r -- $TASKMINAL_CLAUDE_SETTINGS
+  }
+  function claude {
+    local a ret
+    case ${1-} in
+      (agents|attach|auth|auto-mode|config|doctor|gateway|import|install|kill|logs|mcp|migrate-installer|plugin|plugins|purge|respawn|rm|setup-token|stop|ultrareview|update|upgrade|-h|--help|-v|--version)
+        command claude "$@"; return ;;
+    esac
+    for a in "$@"; do
+      [[ $a == --settings || $a == --settings=* ]] && { command claude "$@"; return; }
+    done
+    command claude --settings "$(__taskminal_claude_settings)" "$@"
+    ret=$?
+    __taskminal_agent_exit claude
+    return $ret
+  }
+fi
+if __taskminal_agent_wrappable codex "${TASKMINAL_CODEX_NOTIFY-}"; then
+  function codex {
+    local ret
+    case ${1-} in
+      (agents|app|app-server|apply|archive|cloud|completion|debug|delete|doctor|exec-server|features|help|login|logout|mcp|mcp-server|migrate-nfs-db|migrate-rollouts|plugin|queue|remote-control|sandbox|unarchive|update|-h|--help|-V|--version)
+        command codex "$@"; return ;;
+    esac
+    command codex -c "$TASKMINAL_CODEX_NOTIFY" "$@"
+    ret=$?
+    __taskminal_agent_exit codex
+    return $ret
+  }
+fi

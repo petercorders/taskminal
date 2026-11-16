@@ -448,7 +448,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     }
     const input = term.onData((data) => {
       if (ended) return onClosedRef.current()
-      if (live) return send(data)
+      if (live) {
+        // 51단계: 사용자가 친 Enter 한 번(붙여넣기 아님) — 시작 훅이 없는 codex 의 턴 시작 짐작(활동 모델이 codex 일 때만 쓴다)
+        if (data === '\r') emit({ type: 'submit' })
+        return send(data)
+      }
       if (remote && (attempt > 0 || sshSeen)) return // 원격이 끊긴 동안 친 키는 버린다(띠가 알린다) — 모아 두는 것은 첫 연결만
       // 되돌려 받은 화면 · 되살린 출력의 질의에 xterm 이 낸 답은 사용자가 친 키가 아니다
       if (isTerminalReply(data)) return

@@ -1,5 +1,7 @@
 // pane 의 '활동' — 터미널이 알려 주는 것(실행 중 · 입력 기다림 · 끝남 · 실패). 사용자가 정하는 '상태'와 섞지 않는다.
-// 저장하지 않는 런타임 값이다. 신호: 셸 통합의 OSC 133(A 프롬프트 · C 시작 · D;코드 끝) · OSC 6973;cmd(명령 글자) · 벨 · OSC 9/777 알림.
+// 저장하지 않는 런타임 값이다. 신호: 셸 통합의 OSC 133(A 프롬프트 · C 시작 · D;코드 끝) · OSC 6973;cmd(명령 글자) · 벨 · OSC 9/777 알림
+// · 51단계 에이전트 훅(터미널에서 띄운 claude · codex 의 작업 중 · 허락 · 입력 기다림 · 턴 끝).
+import type { AgentKind, AgentPhase } from './agent-hooks'
 
 export type ActivityState = 'idle' | 'running' | 'waiting' | 'done' | 'failed'
 
@@ -15,6 +17,17 @@ export interface PaneActivity {
   exitCode?: number
   /** 알림 글자(OSC 9 · 777) */
   message?: string
+  /** 이 pane 에서 도는 에이전트(claude · codex)의 지금 상태 — 세션 끝 · 명령 끝에 지운다 */
+  agent?: PaneAgent
+}
+
+export interface PaneAgent {
+  agent: AgentKind
+  phase: Exclude<AgentPhase, 'ended'>
+  /** 이 상태가 된 시각(ms) */
+  at: number
+  /** 에이전트가 붙기 전 셸 명령이 돌고 있었나(133;C) — 끝나면 busy 를 이 값으로 돌린다(셸 통합이 없으면 false) */
+  shellBusy: boolean
 }
 
 export type ActivityEvent =
@@ -26,6 +39,10 @@ export type ActivityEvent =
   | { type: 'notify'; text: string }
   /** 사용자가 이 pane 을 봤다(활성 일감 · 탭 · pane 이고 창에 포커스) */
   | { type: 'viewed' }
+  /** 에이전트 훅 사건. restore = 창 새로 고침 · 앱 재시작 뒤 기록 파일의 마지막 사건(주의 · 알림 없이 상태만) */
+  | { type: 'agent'; agent: AgentKind; phase: AgentPhase; restore?: boolean }
+  /** 사용자가 이 pane 에 Enter 를 보냈다 — 작업 시작 훅이 없는 codex 의 턴 시작으로 본다 */
+  | { type: 'submit' }
 
 export interface ActivityContext {
   /** 사건이 온 지금 사용자가 이 pane 을 보고 있나 */
@@ -35,26 +52,54 @@ export interface ActivityContext {
 
 const IDLE: PaneActivity = { state: 'idle', busy: false, attention: false }
 
+function withoutAgent(a: PaneActivity): PaneActivity {
+  if (!a.agent) return a
+  const { agent: _a, ...rest } = a
+  return rest
+}
+
+function applyAgent(a: PaneActivity, ev: Extract<ActivityEvent, { type: 'agent' }>, ctx: ActivityContext): PaneActivity {
+  if (ev.phase === 'ended') {
+    if (!a.agent) return a
+    const shell = a.agent.shellBusy
+    return { ...withoutAgent(a), state: shell ? 'running' : a.state === 'waiting' || a.state === 'running' ? 'idle' : a.state, busy: shell, attention: false }
+  }
+  const look = ctx.viewed || ev.restore === true
+  const state: ActivityState = ev.phase === 'working' ? 'running' : ev.phase === 'done' ? 'done' : ev.phase === 'failed' ? 'failed' : 'waiting'
+  // working 은 주의를 끈다(사용자가 지시했다). 같은 기다림이 또 오면 이미 켜진 주의를 그대로 둔다
+  const same = a.agent?.agent === ev.agent && a.agent.phase === ev.phase
+  const attention = ev.phase === 'working' ? false : look ? (same ? a.attention : false) : true
+  if (same && a.state === state && a.attention === attention && a.busy) return a
+  return { ...a, state, busy: true, attention, agent: { agent: ev.agent, phase: ev.phase, at: same ? a.agent!.at : ctx.now, shellBusy: a.agent ? a.agent.shellBusy : a.busy } }
+}
+
 /** 바뀐 것이 없으면 같은 객체를 돌려준다 — 같은 벨이 여러 번 와도 다시 그리지 않게. */
 export function applyActivity(prev: PaneActivity | undefined, ev: ActivityEvent, ctx: ActivityContext): PaneActivity {
   const a = prev ?? IDLE
   switch (ev.type) {
     case 'command':
       return a.command === ev.text ? a : { ...a, command: ev.text }
+    case 'agent':
+      return applyAgent(a, ev, ctx)
+    case 'submit':
+      // claude 는 훅(UserPromptSubmit)이 정확하다 — Enter 로 짐작하는 것은 시작 훅이 없는 codex 뿐
+      return a.agent?.agent === 'codex' && a.agent.phase !== 'working' ? applyAgent(a, { type: 'agent', agent: 'codex', phase: 'working' }, ctx) : a
     case 'start': {
+      // 에이전트가 도는 중의 시작은 셸 지킴이에 다시 붙을 때 되살린 133;C 다 — 에이전트 상태를 그대로 둔다(끝은 D · 프롬프트가 닫는다)
+      if (a.agent) return a.busy && a.agent.shellBusy ? a : { ...a, busy: true, agent: { ...a.agent, shellBusy: true } }
       const { exitCode: _e, endedAt: _t, message: _m, ...rest } = a
       return { ...rest, state: 'running', busy: true, attention: false, startedAt: ctx.now }
     }
     case 'end': {
       const failed = ev.code !== null && ev.code !== 0
-      const next: PaneActivity = { ...a, state: failed ? 'failed' : 'done', busy: false, endedAt: ctx.now, attention: a.attention || (failed && !ctx.viewed) }
+      const next: PaneActivity = { ...withoutAgent(a), state: failed ? 'failed' : 'done', busy: false, endedAt: ctx.now, attention: a.attention || (failed && !ctx.viewed) }
       if (ev.code === null) delete next.exitCode
       else next.exitCode = ev.code
       return next
     }
     case 'prompt':
       // 끝(D)을 놓친 명령이 영원히 실행 중으로 남지 않게
-      return a.busy || a.state === 'running' ? { ...a, state: 'idle', busy: false } : a
+      return a.busy || a.state === 'running' || a.agent ? { ...withoutAgent(a), state: 'idle', busy: false } : a
     case 'bell':
     case 'notify': {
       if (ctx.viewed) return a
@@ -65,6 +110,8 @@ export function applyActivity(prev: PaneActivity | undefined, ev: ActivityEvent,
       return next
     }
     case 'viewed': {
+      // 에이전트가 허락 · 입력을 기다리는 동안은 봤어도 기다림 표시를 남긴다(주의만 끈다)
+      if (a.agent && a.state === 'waiting') return a.attention ? { ...a, attention: false } : a
       if (!a.attention && a.state !== 'waiting') return a
       const state: ActivityState = a.state === 'waiting' ? (a.busy ? 'running' : 'idle') : a.state
       return { ...a, state, attention: false }

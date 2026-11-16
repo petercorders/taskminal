@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatDuration, type ActivityState, type PaneActivity } from '../shared/activity'
+import { agentLabel } from '../shared/agent-hooks'
 
 export const ACTIVITY_LABEL: Record<ActivityState, string> = {
   idle: '쉬는 중',
@@ -34,13 +35,19 @@ function useNow(ticking: boolean): number {
   return now
 }
 
-/** pane 머리: 명령(없으면 '셸') · 폴더 · 실행 상태(● 실행 중 경과 / ✓ exit 0 걸린 시간 / ✗ exit N) */
+/** 활동 글자 — 에이전트(51단계)가 있으면 `Claude · 허락 기다림`, 없으면 상태 이름 */
+export function activityText(a: PaneActivity | undefined): string {
+  return a?.agent ? agentLabel(a.agent) : ACTIVITY_LABEL[a?.state ?? 'idle']
+}
+
+/** pane 머리: 명령(없으면 '셸') · 폴더 · 실행 상태(● 실행 중 경과 / ✓ exit 0 걸린 시간 / ✗ exit N / Claude · 작업 중 경과) */
 export function PaneHead({ activity, folder, focused }: { activity: PaneActivity | undefined; folder: string; focused: boolean }) {
   const a = activity
   const now = useNow(a?.busy ?? false)
   const took = a?.startedAt !== undefined ? formatDuration((a.endedAt ?? now) - a.startedAt) : null
   let status: string | null = null
-  if (a?.state === 'running' || (a?.state === 'waiting' && a.busy)) status = `${ACTIVITY_LABEL[a.state]}${took ? ` · ${took}` : ''}`
+  if (a?.agent) status = `${agentLabel(a.agent)}${a.agent.phase === 'working' ? ` · ${formatDuration(now - a.agent.at)}` : ''}`
+  else if (a?.state === 'running' || (a?.state === 'waiting' && a.busy)) status = `${ACTIVITY_LABEL[a.state]}${took ? ` · ${took}` : ''}`
   else if (a?.state === 'waiting') status = ACTIVITY_LABEL.waiting
   else if (a?.state === 'done' || a?.state === 'failed') status = `${a.exitCode === undefined ? ACTIVITY_LABEL[a.state] : `exit ${a.exitCode}`}${took ? ` · ${took}` : ''}`
   return (

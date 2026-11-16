@@ -127,7 +127,7 @@ test('내장 웹은 앱 API가 없고 금지 주소·모달 가림·페이지 �
   await win.evaluate(() => window.taskminal.workspace.browserState('t'))
   expect(await app.evaluate(({ webContents }) => webContents.getAllWebContents().filter((w) => w.getURL().startsWith('http://127.0.0.1:')).length)).toBe(0)
 })
-test('추가 계정 선택은 명확한 기본 표시를 제공하고 미지원 한도와 0%를 구별한다', async () => {
+test('추가 계정 선택은 명확한 기본 표시를 제공하고 값 없는 한도와 0%를 구별한다', async () => {
   await app.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('accounts:status')
     ipcMain.handle('accounts:status', (_e, id) => ({
@@ -139,7 +139,7 @@ test('추가 계정 선택은 명확한 기본 표시를 제공하고 미지원 
     }))
   })
   await win.getByRole('button', { name: '사용량·계정', exact: true }).click()
-  await expect(win.getByRole('status')).toContainText('한도 수치 미지원')
+  await expect(win.getByRole('status')).toContainText('아직 한도 값 없음') // 52단계: Claude 는 대화 · 터미널에서 받은 값을 보인다 — 없으면 이 글
   await win.getByLabel('계정 이름', { exact: true }).fill('개발 계정')
   await win.getByRole('button', { name: '계정 추가', exact: true }).click()
   await expect(win.getByRole('option', { name: '개발 계정' })).toHaveCount(1)

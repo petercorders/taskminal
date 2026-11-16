@@ -38,6 +38,7 @@ import {
   saveQuick,
   type TaskEdit,
   addChatTab,
+  addResumedChatTab,
   branchChat,
   chatRewound,
   chatToTerminal,
@@ -109,6 +110,8 @@ export type Action =
   // 대화 pane (21단계) — id 는 부르는 쪽이 만든다(같은 동작이 두 번 돌아도 같은 결과)
   | { type: 'chat/add-tab'; taskId: Id; tabId: Id; paneId: Id; agent?: ChatAgent; workflowRunId?: string; label?:string; cwd?:string }
   | { type: 'chat/split'; taskId: Id; paneId: Id; agent?: ChatAgent; dir?: SplitDir }
+  // 53단계: 밖에서 시작한 세션을 새 탭 대화 pane 으로 이어 하기 (세션 폴더 · sessionId)
+  | { type: 'chat/resume-tab'; taskId: Id; tabId: Id; paneId: Id; agent: ChatAgent; sessionId: string; cwd: string; title?: string }
   | { type: 'review/open'; taskId: Id; ids: [Id, Id] }
   | { type: 'chat/rewound'; paneId: Id; forkAt: string | null; sessionId?: string }
   | { type: 'chat/branch'; paneId: Id; newPaneId: Id; forkAt: string; sessionId?: string }
@@ -263,6 +266,10 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case 'shell/toggle':
       return updateTask(state, action.taskId, (t) => shellToggle(t, () => action.paneId))
+    case 'chat/resume-tab': {
+      const ids = [action.tabId, action.paneId]
+      return updateTask(state, action.taskId, (t) => addResumedChatTab(t, () => ids.shift()!, action.agent, action.sessionId, action.cwd, action.title))
+    }
     case 'chat/split':
       return updateTask(state, action.taskId, (t) => splitActivePaneChat(t, action.dir ?? 'right', () => action.paneId, action.agent))
     case 'chat/rewound': {
