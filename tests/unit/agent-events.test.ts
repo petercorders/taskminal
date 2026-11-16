@@ -121,6 +121,12 @@ describe('훅 파일 쓰기', () => {
     expect(statSync(a.codexNotify).mode & 0o777).toBe(0o700)
     expect(statSync(a.claudeSettings).mode & 0o777).toBe(0o600)
     expect(JSON.parse(readFileSync(a.claudeSettings, 'utf8')).hooks.Stop[0].hooks[0].command).toContain(a.claudeHook)
+    // 프로젝트 statusLine 이 있는 곳에서 쓰는 훅만 든 설정 — 감싸기가 이름(-hooks)으로 찾는다
+    expect(a.claudeHooksOnly).toBe(a.claudeSettings.replace(/\.json$/, '-hooks.json'))
+    const only = JSON.parse(readFileSync(a.claudeHooksOnly, 'utf8'))
+    expect(only.statusLine).toBeUndefined()
+    expect(only.hooks.Stop[0].hooks[0].command).toContain(a.claudeHook)
+    expect(statSync(a.claudeHooksOnly).mode & 0o777).toBe(0o600)
     const ino = statSync(a.claudeHook).ino
     writeHookFiles(hooks)
     expect(statSync(a.claudeHook).ino).toBe(ino)

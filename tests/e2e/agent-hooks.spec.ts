@@ -114,6 +114,26 @@ test('터미널의 claude: 훅 설정을 붙여 띄우고 작업 중 → 허락 
   await expect.poll(() => existsSync(join(userData, 'agent-events', 'pane-a.log')), { timeout: 10_000 }).toBe(false)
 })
 
+test('다른 일감을 보는 동안 턴 실패(StopFailure) → 실패 알림 본문은 Claude · 실패(종료 코드 없음)', async () => {
+  await launch()
+  // 페이지의 Notification 을 가짜로 — 보낸 것을 모은다
+  await win.evaluate(`(() => {
+    const sent = []
+    window.__sent = sent
+    window.Notification = class { constructor(title, opts = {}) { this.onclick = null; sent.push({ title, body: opts.body ?? '' }) } }
+  })()`)
+  const sent = () => win.evaluate<Array<{ title: string; body: string }>>('window.__sent')
+  await term('pane-a').click()
+  await waitText('pane-a', /%/)
+  await type(`export PATH="${FAKE_BIN}:$PATH"; claude`)
+  await waitText('pane-a', /FAKE READY/)
+  await type('faillater')
+  await waitText('pane-a', /FAKE FAILLATER/)
+  await row('B 일감').click()
+  await expect.poll(sent, { timeout: 10_000 }).toEqual([expect.objectContaining({ title: '명령이 실패했습니다', body: expect.stringContaining('Claude · 실패') })])
+  expect((await sent())[0]!.body).not.toContain('exit')
+})
+
 test('설정을 끄면 새 셸의 claude 를 감싸지 않고 기록 파일 변수도 없다', async () => {
   await launch({ agentHooks: false })
   await term('pane-a').click()

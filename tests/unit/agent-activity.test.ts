@@ -49,6 +49,15 @@ describe('에이전트 사건 → 활동', () => {
     expect(a).toMatchObject({ state: 'running', attention: false })
   })
 
+  it('셸이 바쁘지 않던 pane(셸 통합 없음)의 세션 끝은 실행 중에 묶이지 않는다', () => {
+    const quiet: PaneActivity = { state: 'idle', busy: false, attention: false }
+    expect(chain([ag('working'), ag('ended')], away, quiet)).toMatchObject({ state: 'idle', busy: false })
+    expect(chain([ag('working'), ag('done'), ag('ended')], seen, quiet)).toMatchObject({ state: 'done', busy: false })
+    // 되살린 133;C 를 본 뒤면 셸 명령이 도는 중이다 — D 가 닫는다
+    const restored = chain([ag('permission', { restore: true } as Partial<ActivityEvent>), { type: 'start' }], away, quiet)
+    expect(applyActivity(restored, ag('ended'), away)).toMatchObject({ state: 'running', busy: true })
+  })
+
   it('명령 끝(OSC 133 D) · 프롬프트는 남은 에이전트 상태를 닫는다(죽은 claude 의 작업 중이 남지 않게)', () => {
     expect(chain([ag('working'), { type: 'end', code: 0 }]).agent).toBeUndefined()
     expect(chain([ag('working'), { type: 'prompt' }]).agent).toBeUndefined()

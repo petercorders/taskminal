@@ -1,7 +1,7 @@
 #!/bin/sh
 # 51단계 e2e 가짜 claude — 받은 인자를 보이고, --settings 의 훅 명령을 실제 sh 로 부른다(JSON 을 stdin 으로).
 # 실제 Claude 의 훅 순서 · 타이밍 · 신뢰 화면 · statusLine 은 흉내 내지 않는다.
-# 입력 줄: perm(허락 기다림) · idle(입력 기다림) · go(작업 중) · done(턴 끝) · later(2초 뒤 턴 끝) · quit(세션 끝 뒤 종료)
+# 입력 줄: perm(허락 기다림) · idle(입력 기다림) · go(작업 중) · done(턴 끝) · later(2초 뒤 턴 끝) · faillater(2초 뒤 턴 실패) · quit(세션 끝 뒤 종료)
 #        · status 5h 7d(52단계: --settings 의 statusLine 명령을 rate_limits 입력으로 부르고 그 출력을 STATUS OUT: 뒤에 보인다)
 settings=
 for a in "$@"; do
@@ -26,6 +26,7 @@ while read -r line; do
     go) fire PostToolUse; echo "FAKE GO" ;;
     done) fire Stop; echo "FAKE DONE" ;;
     later) (sleep 2; fire Stop) & echo "FAKE LATER" ;;
+    faillater) (sleep 2; fire StopFailure) & echo "FAKE FAILLATER" ;;
     quit) fire SessionEnd; echo "FAKE BYE"; exit 0 ;;
     status\ *)
       set -- $line

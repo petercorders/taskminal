@@ -73,10 +73,12 @@ export function parseStatusFile(text: string): { configDir: string; rateLimits: 
 }
 
 const sameWindow = (a: UsageWindow | undefined, b: UsageWindow | undefined): boolean => a?.used === b?.used && a?.resetsAt === b?.resetsAt
+/** 같은 값이어도 이만큼 지나면 받은 시각을 새로 — 화면의 'n분 전' · 가장 최근 계정 고르기가 낡지 않게(쓰기는 1분에 한 번 이하) */
+const REFRESH_MS = 60_000
 
 /**
  * 더 새 값만 받는다(늦게 도착한 옛 값이 새 값을 덮지 않게). 새 값에 없는 창은 초기화 전이면 앞 값을 남긴다.
- * 받을 것이 없거나 보이는 값이 같으면 null — 저장 · 화면 전송을 하지 않는다.
+ * 받을 것이 없거나 보이는 값이 같으면(1분 안) null — 저장 · 화면 전송을 하지 않는다.
  */
 export function mergeUsage(prev: UsageSnapshot | undefined, next: UsageSnapshot, now: number): UsageSnapshot | null {
   if (!prev) return next
@@ -86,7 +88,7 @@ export function mergeUsage(prev: UsageSnapshot | undefined, next: UsageSnapshot,
     const w = next[key] ?? (prev[key] && prev[key]!.resetsAt > now ? prev[key] : undefined)
     if (w) out[key] = w
   }
-  if (KEYS.every(([k]) => sameWindow(prev[k], out[k]))) return null
+  if (KEYS.every(([k]) => sameWindow(prev[k], out[k])) && next.at - prev.at < REFRESH_MS) return null
   return out
 }
 

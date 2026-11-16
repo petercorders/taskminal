@@ -34,8 +34,11 @@ export function CiFeedback({ api, dir, target, pr, onSend, onOpenUrl }: Props) {
     try {
       const r = await api.feedback(dir, { target: t, number: p.number, head: p.head })
       if (!mounted.current || id !== seq.current) return // 늦게 온 옛 응답(앞 커밋 · 닫은 화면)은 버린다
-      if (r.state === 'ok') setData(r)
-      else setError(r.message)
+      if (r.state === 'ok') {
+        setData(r)
+        sentRef.current = false // 새로 읽은 값은 다시 보낼 수 있다(보낸 뒤 화면이 남은 경우)
+        setSent(false)
+      } else setError(r.message)
     } catch {
       if (mounted.current && id === seq.current) setError('응답을 받지 못했어요. 다시 시도해 주세요.')
     } finally {

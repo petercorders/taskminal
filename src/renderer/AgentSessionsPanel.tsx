@@ -100,13 +100,14 @@ export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose 
   const shown = all.slice(0, SHOWN_MAX)
 
   const resume = async (s: AgentSession, how: ResumeHow) => {
-    if (resuming.current || !taskId) return
-    resuming.current = true
     const key = sessionKey(s)
+    // 이미 열린 대화로 가기는 일감이 없어도 된다(일감이 필요한 것은 새로 이어 하기뿐)
+    if (resuming.current || (!taskId && !openKeys.has(key))) return
+    resuming.current = true
     setBusy(key)
     setFailure(null)
     try {
-      await onResume(s, how, taskId)
+      await onResume(s, how, taskId ?? '')
       if (mounted.current) onClose()
     } catch (reason) {
       if (mounted.current) setFailure({ key, message: reason instanceof Error ? reason.message : '이어 하지 못했어요.', retry: () => void resume(s, how) })

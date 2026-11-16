@@ -1,6 +1,7 @@
 // 53단계: 밖에서 시작한 에이전트 세션(~/.claude/projects · ~/.codex/sessions) 기록 · 이어 하기.
 // 순수 함수만 — 파일 읽기는 main/agent-sessions.ts, 화면은 renderer/AgentSessionsPanel.tsx.
 import type { ChatAgent } from './chat'
+import { isObj, type Obj } from './guards'
 
 /** 파일마다 앞에서 읽는 양 — 큰 대화도 머리만 본다 */
 export const HEAD_BYTES = 256 * 1024
@@ -91,8 +92,7 @@ export type HeadResult =
   | { kind: 'skip'; badLines: number }
   | { kind: 'subagent'; badLines: number }
 
-type Row = Record<string, unknown>
-const isObj = (v: unknown): v is Row => !!v && typeof v === 'object' && !Array.isArray(v)
+type Row = Obj
 
 /** 줄마다 JSON — 손상 줄은 세고 건너뛴다. 앞부분만 읽었으면(truncated) 마지막 반쪽 줄은 버린다.
  *  끝까지 읽었는데 마지막 줄만 안 맞으면 쓰는 중일 수 있어 손상으로 세지 않는다. */

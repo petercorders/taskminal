@@ -98,7 +98,8 @@ describe('상태 파일 감시', () => {
   it('pane 상태 파일이 바뀌면 250ms 로 묶어 한 번 알린다', async () => {
     const dir = join(root, 'agent-events')
     const seen: Array<[string, string]> = []
-    const ev = new AgentEvents({ dir, onSignal: () => {}, onStatus: (p, t) => seen.push([p, t]), pollMs: 0 })
+    // 감시가 늦거나 놓쳐도 주기 읽기가 받는다(전체 시험 부하에서 FSEvents 가 3초 넘게 늦은 적이 있다)
+    const ev = new AgentEvents({ dir, onSignal: () => {}, onStatus: (p, t) => seen.push([p, t]), pollMs: 200 })
     ev.start()
     try {
       for (let i = 0; i < 3; i++) writeFileSync(join(dir, 'p1.status'), `v1\t\t{"five_hour":{"used_percentage":${i},"resets_at":1}}\n`)
@@ -107,6 +108,26 @@ describe('상태 파일 감시', () => {
       expect(seen).toHaveLength(1)
       expect(seen[0]![0]).toBe('p1')
       expect(seen[0]![1]).toContain('"used_percentage":2')
+    } finally {
+      ev.stop()
+    }
+  })
+
+  it('감시 없이도 주기 읽기로 상태 파일 변화를 알리고, 시작 때 남아 있던 파일 · 같은 파일은 다시 알리지 않는다', async () => {
+    const dir = join(root, 'agent-events')
+    mkdirSync(dir)
+    writeFileSync(join(dir, 'old.status'), 'v1\t\t{}\n') // 받은 시각을 모르는 지난 값
+    const seen: Array<[string, string]> = []
+    const ev = new AgentEvents({ dir, onSignal: () => {}, onStatus: (p, t) => seen.push([p, t]), pollMs: 100, watch: false })
+    ev.start()
+    try {
+      writeFileSync(join(dir, 'p1.status'), 'v1\t\t{"a":1}\n')
+      await vi.waitFor(() => expect(seen).toEqual([['p1', 'v1\t\t{"a":1}\n']]), { timeout: 3000, interval: 50 })
+      await new Promise((r) => setTimeout(r, 500))
+      expect(seen).toHaveLength(1)
+      writeFileSync(join(dir, 'p1.status'), 'v1\t\t{"a":22}\n')
+      await vi.waitFor(() => expect(seen.at(-1)).toEqual(['p1', 'v1\t\t{"a":22}\n']), { timeout: 3000, interval: 50 })
+      expect(seen.some(([p]) => p === 'old')).toBe(false)
     } finally {
       ev.stop()
     }

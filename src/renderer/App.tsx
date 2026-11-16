@@ -399,7 +399,7 @@ export function App() {
       kind === 'wait'
         ? act?.message
         : kind === 'fail'
-          ? `exit ${act?.exitCode ?? '?'}`
+          ? act?.agent && act.message ? act.message : `exit ${act?.exitCode ?? '?'}` // 에이전트 실패(StopFailure)는 종료 코드가 없다
           : kind === 'long' && act?.startedAt !== undefined && act.endedAt !== undefined
             ? formatDuration(act.endedAt - act.startedAt)
             : undefined
@@ -491,7 +491,13 @@ export function App() {
     )
     const off = window.taskminal.usage.onChange((m, crossed) => {
       setUsage(m)
-      for (const c of crossed) new Notification(`Claude ${USAGE_LABEL[c.key]} 한도 ${Math.round(c.used)}%`, { body: formatResetIn(c.resetsAt, Date.now()) })
+      // 90% 알림은 '입력 기다림' 알림 설정(배너 · 소리)을 따른다 — 알림을 끈 사용자에게 배너를 띄우지 않게
+      const way = stateRef.current.settings.notify.wait
+      for (const c of crossed) {
+        if (!way.banner && !way.sound) continue
+        if (!way.banner) window.taskminal.beep()
+        else new Notification(`Claude ${USAGE_LABEL[c.key]} 한도 ${Math.round(c.used)}%`, { body: formatResetIn(c.resetsAt, Date.now()), silent: !way.sound })
+      }
     })
     return () => {
       alive = false

@@ -10,6 +10,8 @@ import { isPaneId } from '../shared/pty'
 export interface HookFiles {
   claudeHook: string
   claudeSettings: string
+  /** 훅만 든 설정(statusLine 없음) — 프로젝트 statusLine 이 있는 곳에서 zsh 감싸기가 고른다. 이름은 claudeSettings 의 '-hooks' */
+  claudeHooksOnly: string
   claudeStatusLine: string
   codexNotify: string
 }
@@ -39,6 +41,7 @@ export function writeHookFiles(hooksDir: string): HookFiles {
   const files: HookFiles = {
     claudeHook: join(hooksDir, 'claude-hook.sh'),
     claudeSettings: join(hooksDir, 'claude-settings.json'),
+    claudeHooksOnly: join(hooksDir, 'claude-settings-hooks.json'),
     claudeStatusLine: join(hooksDir, 'claude-statusline.sh'),
     codexNotify: join(hooksDir, 'codex-notify.sh'),
   }
@@ -46,6 +49,7 @@ export function writeHookFiles(hooksDir: string): HookFiles {
   writeIfChanged(files.claudeStatusLine, claudeStatusLineScript(), 0o700)
   writeIfChanged(files.codexNotify, codexNotifyScript(), 0o700)
   writeIfChanged(files.claudeSettings, claudeHookSettings(files.claudeHook, files.claudeStatusLine), 0o600)
+  writeIfChanged(files.claudeHooksOnly, claudeHookSettings(files.claudeHook), 0o600)
   return files
 }
 
@@ -93,6 +97,8 @@ export interface AgentEventsOptions {
   maxBytes?: number
   /** 감시를 놓쳤을 때를 위한 주기(ms). 0 이면 끔(시험) */
   pollMs?: number
+  /** false 면 폴더 감시를 걸지 않는다 — 감시를 못 거는 환경과 같게(시험) */
+  watch?: boolean
   /** 52단계: pane 상태 파일(statusLine 의 rate_limits)이 바뀌었다 — 250ms 로 묶어 한 번 */
   onStatus?: (paneId: string, text: string) => void
 }
@@ -108,6 +114,8 @@ export class AgentEvents {
   private watcher: FSWatcher | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private readonly statusTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  // 상태 파일의 마지막으로 본 (inode · 수정 시각 · 크기) — 주기 읽기가 감시가 놓친 변화를 찾는다
+  private readonly statusSeen = new Map<string, string>()
   private readonly maxBytes: number
 
   constructor(private readonly opts: AgentEventsOptions) {
@@ -121,8 +129,11 @@ export class AgentEvents {
     for (const name of readdirSync(this.opts.dir)) {
       const m = LOG.exec(name)
       if (m) this.read(m[1]!, false)
+      // 남아 있던 상태 파일은 받은 시각을 몰라 알리지 않고 기억만 한다
+      const st = STATUS.exec(name)
+      if (st) this.markStatus(st[1]!)
     }
-    try {
+    if (this.opts.watch !== false) try {
       this.watcher = watch(this.opts.dir, (_ev, name) => {
         if (typeof name !== 'string') return
         const m = LOG.exec(name)
@@ -141,6 +152,8 @@ export class AgentEvents {
         for (const name of safeList(this.opts.dir)) {
           const m = LOG.exec(name)
           if (m && !this.cursors.has(m[1]!)) this.poll(m[1]!)
+          const st = STATUS.exec(name)
+          if (st && this.statusSig(st[1]!) !== this.statusSeen.get(st[1]!)) this.statusChanged(st[1]!)
         }
       }, every)
       this.timer.unref?.()
@@ -152,6 +165,7 @@ export class AgentEvents {
     if (!this.opts.onStatus || this.statusTimers.has(paneId)) return
     const t = setTimeout(() => {
       this.statusTimers.delete(paneId)
+      this.markStatus(paneId)
       let text = ''
       try {
         text = readFileSync(join(this.opts.dir, `${paneId}.status`), 'utf8').slice(0, 64 * 1024)
@@ -162,6 +176,20 @@ export class AgentEvents {
     }, STATUS_BATCH_MS)
     t.unref?.()
     this.statusTimers.set(paneId, t)
+  }
+
+  private statusSig(paneId: string): string | undefined {
+    try {
+      const st = statSync(join(this.opts.dir, `${paneId}.status`))
+      return `${st.ino}:${st.mtimeMs}:${st.size}`
+    } catch {
+      return undefined
+    }
+  }
+  private markStatus(paneId: string): void {
+    const sig = this.statusSig(paneId)
+    if (sig) this.statusSeen.set(paneId, sig)
+    else this.statusSeen.delete(paneId)
   }
 
   stop(): void {
@@ -193,6 +221,7 @@ export class AgentEvents {
     const file = this.fileFor(paneId)
     this.cursors.delete(paneId)
     this.lastSignal.delete(paneId)
+    this.statusSeen.delete(paneId)
     if (file) rmSync(file, { force: true })
     if (file) rmSync(file.replace(/\.log$/, '.status'), { force: true })
   }

@@ -141,6 +141,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
   const row = (task: Task, where: 'attention' | 'need' | 'list') => {
     const status = statusOf(task)
     const active = task.id === state.activeTaskId
+    const issue = issueOf(task)
     const act = activityOf(task)
     const editing = renaming === task.id && where !== 'attention'
     return (
@@ -203,7 +204,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
                       ⇄ {task.host}
                     </span>
                   )}
-                  {issueOf(task) && <span className={`task-issue${issueOf(task)!.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issueOf(task)!.title ?? issueOf(task)!.text}>{issueOf(task)!.text}</span>}
+                  {issue && <span className={`task-issue${issue.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issue.title ?? issue.text}>{issue.text}</span>}
                   <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>

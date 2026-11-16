@@ -48,6 +48,19 @@ __taskminal_agent_wrappable() {
   return 0
 }
 if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}"; then
+  # 52단계 리뷰: 실행 위치(현재 폴더 · git 최상위)의 프로젝트 설정에 statusLine 이 있으면 훅만 든 설정을 고른다 —
+  # --settings 의 statusLine 이 Claude 설정 우선순위에서 프로젝트 statusLine 을 덮지 않게(그곳에선 터미널 한도 값을 받지 않는다)
+  function __taskminal_claude_settings {
+    local d top only=${TASKMINAL_CLAUDE_SETTINGS%.json}-hooks.json
+    top=$(command git rev-parse --show-toplevel 2>/dev/null)
+    for d in $PWD $top; do
+      if [[ -r $only ]] && command grep -qs '"statusLine"' $d/.claude/settings.json $d/.claude/settings.local.json; then
+        builtin print -r -- $only
+        return
+      fi
+    done
+    builtin print -r -- $TASKMINAL_CLAUDE_SETTINGS
+  }
   function claude {
     local a ret
     case ${1-} in
@@ -57,7 +70,7 @@ if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}"; then
     for a in "$@"; do
       [[ $a == --settings || $a == --settings=* ]] && { command claude "$@"; return; }
     done
-    command claude --settings "$TASKMINAL_CLAUDE_SETTINGS" "$@"
+    command claude --settings "$(__taskminal_claude_settings)" "$@"
     ret=$?
     __taskminal_agent_exit claude
     return $ret

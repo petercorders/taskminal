@@ -26,6 +26,8 @@ export interface PaneAgent {
   phase: Exclude<AgentPhase, 'ended'>
   /** 이 상태가 된 시각(ms) */
   at: number
+  /** 에이전트가 붙기 전 셸 명령이 돌고 있었나(133;C) — 끝나면 busy 를 이 값으로 돌린다(셸 통합이 없으면 false) */
+  shellBusy: boolean
 }
 
 export type ActivityEvent =
@@ -59,7 +61,8 @@ function withoutAgent(a: PaneActivity): PaneActivity {
 function applyAgent(a: PaneActivity, ev: Extract<ActivityEvent, { type: 'agent' }>, ctx: ActivityContext): PaneActivity {
   if (ev.phase === 'ended') {
     if (!a.agent) return a
-    return { ...withoutAgent(a), state: a.busy ? 'running' : a.state === 'waiting' ? 'idle' : a.state, attention: false }
+    const shell = a.agent.shellBusy
+    return { ...withoutAgent(a), state: shell ? 'running' : a.state === 'waiting' || a.state === 'running' ? 'idle' : a.state, busy: shell, attention: false }
   }
   const look = ctx.viewed || ev.restore === true
   const state: ActivityState = ev.phase === 'working' ? 'running' : ev.phase === 'done' ? 'done' : ev.phase === 'failed' ? 'failed' : 'waiting'
@@ -67,7 +70,7 @@ function applyAgent(a: PaneActivity, ev: Extract<ActivityEvent, { type: 'agent' 
   const same = a.agent?.agent === ev.agent && a.agent.phase === ev.phase
   const attention = ev.phase === 'working' ? false : look ? (same ? a.attention : false) : true
   if (same && a.state === state && a.attention === attention && a.busy) return a
-  return { ...a, state, busy: true, attention, agent: { agent: ev.agent, phase: ev.phase, at: same ? a.agent!.at : ctx.now } }
+  return { ...a, state, busy: true, attention, agent: { agent: ev.agent, phase: ev.phase, at: same ? a.agent!.at : ctx.now, shellBusy: a.agent ? a.agent.shellBusy : a.busy } }
 }
 
 /** 바뀐 것이 없으면 같은 객체를 돌려준다 — 같은 벨이 여러 번 와도 다시 그리지 않게. */
@@ -83,7 +86,7 @@ export function applyActivity(prev: PaneActivity | undefined, ev: ActivityEvent,
       return a.agent?.agent === 'codex' && a.agent.phase !== 'working' ? applyAgent(a, { type: 'agent', agent: 'codex', phase: 'working' }, ctx) : a
     case 'start': {
       // 에이전트가 도는 중의 시작은 셸 지킴이에 다시 붙을 때 되살린 133;C 다 — 에이전트 상태를 그대로 둔다(끝은 D · 프롬프트가 닫는다)
-      if (a.agent) return a.busy ? a : { ...a, busy: true }
+      if (a.agent) return a.busy && a.agent.shellBusy ? a : { ...a, busy: true, agent: { ...a.agent, shellBusy: true } }
       const { exitCode: _e, endedAt: _t, message: _m, ...rest } = a
       return { ...rest, state: 'running', busy: true, attention: false, startedAt: ctx.now }
     }

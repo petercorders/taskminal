@@ -34,6 +34,22 @@ async function type(line: string) {
   await win.keyboard.press('Enter')
 }
 const bars = () => win.getByTestId('usage-bars')
+/** 페이지의 Notification · main 의 beep 을 가짜로 — 보낸 것을 센다 */
+async function captureNotifications() {
+  await win.evaluate(`(() => {
+    const sent = []
+    window.__sent = sent
+    window.Notification = class { constructor(title, opts = {}) { this.onclick = null; sent.push({ title, body: opts.body ?? '', silent: Boolean(opts.silent) }) } }
+  })()`)
+  await app!.evaluate(({ shell }) => {
+    ;(globalThis as unknown as { beeps: number }).beeps = 0
+    shell.beep = () => {
+      ;(globalThis as unknown as { beeps: number }).beeps++
+    }
+  })
+}
+const sent = () => win.evaluate<Array<{ title: string; body: string; silent: boolean }>>('window.__sent')
+const beeps = () => app!.evaluate(() => (globalThis as unknown as { beeps: number }).beeps)
 
 test.describe.configure({ timeout: 120_000 })
 test.beforeEach(() => {
@@ -50,6 +66,7 @@ test.afterEach(async () => {
 test('대화의 한도 사건 → 사이드바 5시간 · 주간 막대(90% 빨강) · 계정 화면 · 다시 열어도 남는다', async () => {
   await launch()
   await expect(bars()).toHaveCount(0) // 아직 값이 없으면 막대가 없다
+  await captureNotifications()
   await win.keyboard.press('Meta+p')
   await win.keyboard.type('새 대화 (Claude)')
   await win.keyboard.press('Enter')
@@ -62,6 +79,8 @@ test('대화의 한도 사건 → 사이드바 5시간 · 주간 막대(90% 빨�
   await expect(win.getByTestId('usage-sevenDay')).toContainText('92%')
   await expect(win.getByTestId('usage-sevenDay')).toHaveAttribute('data-tone', 'danger')
   await expect(bars()).toHaveAttribute('aria-label', /Claude 한도 · 5시간 25% \(1시간 \d+분 뒤 초기화\) · 주간 92% .* 대화에서 받은 값/)
+  // 90% 를 새로 넘은 창 하나만 알린다('입력 기다림' 알림 설정 — 기본은 배너 · 소리)
+  expect(await sent()).toEqual([expect.objectContaining({ title: 'Claude 주간 한도 92%', silent: false })])
   await win.screenshot({ path: 'test-results/usage-bars.png' })
   // 저장 파일 0600
   const file = join(userData, 'usage.json')
@@ -80,6 +99,24 @@ test('대화의 한도 사건 → 사이드바 5시간 · 주간 막대(90% 빨�
   app = undefined
   await launch()
   await expect(win.getByTestId('usage-sevenDay')).toContainText('92%')
+})
+
+test("90% 알림은 '입력 기다림' 알림 설정을 따른다 — 배너 · 소리를 끄면 띄우지 않는다", async () => {
+  seedState(userData, [{ id: 'task-a', name: 'A 일감', paneId: 'pane-a', cwd: userData }], [], {
+    notify: { wait: { banner: false, sound: false }, long: { banner: true, sound: false }, fail: { banner: true, sound: false }, exit: { banner: false, sound: false } },
+  })
+  await launch()
+  await captureNotifications()
+  await win.keyboard.press('Meta+p')
+  await win.keyboard.type('새 대화 (Claude)')
+  await win.keyboard.press('Enter')
+  const input = win.locator('[data-testid="task-view"][aria-hidden="false"] [data-testid="chat-input"]')
+  await input.fill('usage 25 92')
+  await input.press('Enter')
+  await expect(win.getByTestId('usage-sevenDay')).toContainText('92%', { timeout: 15_000 })
+  await win.waitForTimeout(300)
+  expect(await sent()).toEqual([])
+  expect(await beeps()).toBe(0)
 })
 
 test('터미널의 claude statusLine: 한도를 막대로 보이고, 사용자의 원래 statusLine 을 이어 부른다', async () => {

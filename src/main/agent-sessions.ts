@@ -42,10 +42,12 @@ export function sessionRoots(
   accountsDir: string,
 ): SessionRoot[] {
   const override = env['TASKMINAL_USER_DATA'] ? env['TASKMINAL_AGENT_SESSIONS_HOME'] : undefined
-  const base = override || home
+  // 기본 계정 폴더는 앱 셸 · 대화와 같게 CLAUDE_CONFIG_DIR · CODEX_HOME 을 따른다
+  const claudeDir = override ? join(override, '.claude') : env['CLAUDE_CONFIG_DIR'] || join(home, '.claude')
+  const codexDir = override ? join(override, '.codex') : env['CODEX_HOME'] || join(home, '.codex')
   return [
-    { agent: 'claude', dir: join(base, '.claude', 'projects'), account: 'default-claude' },
-    { agent: 'codex', dir: join(base, '.codex', 'sessions'), account: 'default-codex' },
+    { agent: 'claude', dir: join(claudeDir, 'projects'), account: 'default-claude' },
+    { agent: 'codex', dir: join(codexDir, 'sessions'), account: 'default-codex' },
     ...accounts
       .filter((a) => !a.id.startsWith('default-'))
       .map((a) => ({ agent: a.agent, dir: join(accountsDir, a.agent, a.id, a.agent === 'claude' ? 'projects' : 'sessions'), account: a.id, accountName: a.name })),

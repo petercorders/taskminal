@@ -59,8 +59,10 @@ describe('더 새 값만 · 창별로 합치기', () => {
   it('늦게 도착한 옛 값은 버린다(null)', () => {
     expect(mergeUsage(a, { ...a, fiveHour: { used: 5, resetsAt: NOW + 3_600_000 }, at: NOW - 1 }, NOW)).toBeNull()
   })
-  it('같은 값이면 바뀌지 않음(null) — 화면 전송은 바뀐 값만', () => {
+  it('같은 값이면 1분 안에는 바뀌지 않음(null), 1분이 지나면 받은 시각 · 원천만 새로 — \'n분 전\' 이 낡지 않게', () => {
     expect(mergeUsage(a, { ...a, at: NOW + 5 }, NOW + 5)).toBeNull()
+    expect(mergeUsage(a, { ...a, at: a.at + 59_999 }, NOW)).toBeNull()
+    expect(mergeUsage(a, { ...a, at: a.at + 60_000, source: 'terminal' }, NOW)).toEqual({ ...a, at: a.at + 60_000, source: 'terminal' })
   })
   it('새 값에 없는 창은 초기화 전이면 앞 값을 남기고, 지났으면 버린다', () => {
     const next = { fiveHour: { used: 20, resetsAt: NOW + 3_600_000 }, at: NOW + 10, source: 'terminal' as const }

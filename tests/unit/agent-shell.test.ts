@@ -47,6 +47,27 @@ describe('zsh claude · codex 감싸기', () => {
     expect(out).toEqual(['claude:--settings|/s/claude settings.json|-r|abc', 'claude:mcp|list', 'claude:--settings=mine|x', 'claude:update'])
   })
 
+  it('실행 위치(현재 폴더 · git 최상위)의 프로젝트 설정에 statusLine 이 있으면 훅만 든 설정을 붙인다', () => {
+    const hooks = join(home, 'hooks')
+    mkdirSync(hooks)
+    const full = join(hooks, 'claude-settings.json')
+    const only = join(hooks, 'claude-settings-hooks.json')
+    writeFileSync(full, '{}')
+    writeFileSync(only, '{}')
+    const mk = (d: string, file: string, body: string) => {
+      mkdirSync(join(home, d, '.claude'), { recursive: true })
+      writeFileSync(join(home, d, '.claude', file), body)
+    }
+    mk('local', 'settings.local.json', '{"statusLine":{"type":"command","command":"echo P"}}')
+    mk('plain', 'settings.json', '{"hooks":{}}')
+    mk('repo', 'settings.json', '{"statusLine":{"type":"command","command":"echo R"}}')
+    mkdirSync(join(home, 'repo', 'sub'))
+    spawnSync('git', ['init', '-q'], { cwd: join(home, 'repo') })
+    const out = zsh({ TASKMINAL_CLAUDE_SETTINGS: full }, `cd ${home}/local && claude a; cd ${home}/plain && claude b; cd ${home}/repo/sub && claude c; cd ${home} && claude d`)
+    expect(stderr).toBe('')
+    expect(out).toEqual([`claude:--settings|${only}|a`, `claude:--settings|${full}|b`, `claude:--settings|${only}|c`, `claude:--settings|${full}|d`])
+  })
+
   it('codex 에 턴 끝 알림을 붙이고, 로그인 같은 하위 명령은 그대로', () => {
     const out = zsh(ON, 'codex resume id1; codex; codex login')
     expect(out).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|resume|id1', 'codex:-c|notify=["/x/codex-notify.sh"]', 'codex:login'])

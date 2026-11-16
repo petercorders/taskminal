@@ -157,6 +157,8 @@ describe('루트', () => {
   })
   test('시험용 루트는 TASKMINAL_USER_DATA 가 있을 때만 받는다', () => {
     expect(sessionRoots({ TASKMINAL_AGENT_SESSIONS_HOME: '/fake' }, '/Users/me', [], '/a')[0]!.dir).toBe('/Users/me/.claude/projects')
+    // 기본 계정 폴더는 CLAUDE_CONFIG_DIR · CODEX_HOME 을 따른다(앱 셸 · 대화와 같게)
+    expect(sessionRoots({ CLAUDE_CONFIG_DIR: '/cfg/claude', CODEX_HOME: '/cfg/codex' }, '/Users/me', [], '/a').map((r) => r.dir)).toEqual(['/cfg/claude/projects', '/cfg/codex/sessions'])
     expect(sessionRoots({ TASKMINAL_AGENT_SESSIONS_HOME: '/fake', TASKMINAL_USER_DATA: '/tmp/u' }, '/Users/me', [], '/a').map((r) => r.dir)).toEqual(['/fake/.claude/projects', '/fake/.codex/sessions'])
   })
 })
