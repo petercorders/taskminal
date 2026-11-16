@@ -99,6 +99,13 @@ test('대화의 한도 사건 → 사이드바 5시간 · 주간 막대(90% 빨�
   app = undefined
   await launch()
   await expect(win.getByTestId('usage-sevenDay')).toContainText('92%')
+  // 좁은 창(사이드바 200px)에서도 값 글자가 다음 막대 · 단추 밖으로 넘치지 않는다(막대 상자는 줄어도 글자는 넘칠 수 있어 글자 끝을 잰다)
+  await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(640, 560))
+  const box = (l: ReturnType<Page['locator']>) => l.boundingBox()
+  await expect.poll(async () => {
+    const [b, fv, s, sv] = await Promise.all([box(bars()), box(win.getByTestId('usage-fiveHour').locator('.usage-bar-value')), box(win.getByTestId('usage-sevenDay')), box(win.getByTestId('usage-sevenDay').locator('.usage-bar-value'))])
+    return !!b && !!fv && !!s && !!sv && fv.x + fv.width <= s.x && sv.x + sv.width <= b.x + b.width
+  }, { timeout: 5_000 }).toBe(true)
 })
 
 test("90% 알림은 '입력 기다림' 알림 설정을 따른다 — 배너 · 소리를 끄면 띄우지 않는다", async () => {

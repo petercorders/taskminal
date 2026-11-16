@@ -4709,7 +4709,7 @@ input[type='checkbox'] {
 .ci-feedback-item label { display: flex; align-items: flex-start; gap: var(--space-2); overflow-wrap: anywhere; min-width: 0; }
 .ci-feedback-item label input { margin-top: 2px; flex: none; }
 .ci-feedback-body { margin: 0; padding-left: calc(var(--space-2) + 16px); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 8em; overflow: auto; color: var(--muted); }
-.ci-feedback-log { margin: var(--space-1) 0 0; padding: var(--space-2); max-height: 16em; overflow: auto; background: var(--raised); border-radius: var(--r-sm); font-family: var(--mono, ui-monospace, 'SF Mono', Menlo, monospace); font-size: 11px; white-space: pre; }
+.ci-feedback-log { margin: var(--space-1) 0 0; padding: var(--space-2); max-height: 16em; overflow: auto; background: var(--raised); border-radius: var(--r-sm); font-family: var(--mono, ui-monospace, 'SF Mono', Menlo, monospace); font-size: 12px; line-height: 1.45; white-space: pre; }
 .ci-feedback-log:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 1100px) {
   .work-tool-panel { left: 0; }
@@ -4820,4 +4820,9 @@ input[type='checkbox'] {
 .usage-bar.danger .usage-bar-value {
   color: var(--danger);
   font-weight: 600;
+}
+/* 좁은 창(사이드바 200px): 이름을 빼야 두 막대가 겹치지 않는다 — 이름은 aria-label · title 에 남는다 */
+@media (max-width: 800px) {
+  .usage-bars { gap: var(--space-1); }
+  .usage-bars-name { display: none; }
 }
