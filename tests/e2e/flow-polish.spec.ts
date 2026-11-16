@@ -156,7 +156,9 @@ test('도구 줄: 이 일감 · 앱 두 묶음 한 줄, ⌘P 와 같은 이름, 
   await taskGroup.getByRole('button', { name: '일감 도구 ▾' }).click()
   await expect(menu).toContainText('원격 일감')
   await expect(menu.getByRole('menuitem', { name: '워크트리 관리' })).toBeDisabled()
+  // 고를 항목이 없어도 Esc 로 닫힌다
   await win.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
   await expect(win.locator('.sidebar-tools-menu option[value="files"]')).toBeDisabled()
   // ⌘P 로 불러도 열지 않고 이유를 알린다
   await command('worktrees')

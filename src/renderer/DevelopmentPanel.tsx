@@ -8,6 +8,8 @@ const states:Record<Preparation['state'],string>={running:'실행 중',done:'완
 const FORMAT_EXAMPLE=JSON.stringify({copies:['.env'],commands:[{file:'npm',args:['ci']}]},null,2)
 // 고르기 칸의 '직접 입력…' 값 — 경로는 늘 / 로 시작해 겹치지 않는다
 const TYPE='#type'
+/** 고르기 칸은 앞부분만 보이므로 워크트리를 가르는 폴더 이름을 앞에 */
+const pathLabel=(path:string)=>`${path.split('/').filter(Boolean).pop()??path} — ${path}`
 /** initialTarget: 워크트리 관리의 '환경 준비…' 에서 고른 경로 · onOpenWorktrees: 고를 워크트리가 없을 때 만들러 가기 */
 export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:string;initialTarget?:string;onOpenWorktrees?():void}) {
  const [target,setTarget]=useState(''),[manifestPath,setManifestPath]=useState('')
@@ -73,8 +75,8 @@ export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:stri
   </details>
   {checkouts===null?<p className="dim small" role="status">워크트리 목록을 읽는 중…</p>:<>
    {checkouts.length>0&&<label>준비할 워크트리<select aria-label="준비할 워크트리" value={typing?TYPE:target} disabled={busy} onChange={e=>{const v=e.target.value;setPlan(null);if(v===TYPE)setTyping(true);else{setTyping(false);setTarget(v)}}}>
-    {target&&!typing&&!checkouts.includes(target)&&<option value={target}>{target}</option>}
-    {checkouts.map(path=><option key={path} value={path}>{path}</option>)}
+    {target&&!typing&&!checkouts.includes(target)&&<option value={target} title={target}>{pathLabel(target)}</option>}
+    {checkouts.map(path=><option key={path} value={path} title={path}>{pathLabel(path)}</option>)}
     <option value={TYPE}>직접 입력…</option>
    </select></label>}
    {checkouts.length===0&&checkoutError&&<p className="dim small">워크트리 목록을 읽지 못했어요. 경로를 직접 입력하거나 '준비 기록 다시 확인' 으로 다시 읽어 주세요.</p>}
@@ -85,7 +87,7 @@ export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:stri
   {plan&&<div className="development-preview" data-testid="environment-preview">
    <strong>{plan.target}</strong>
    <ul>{plan.copies.map(copy=><li key={copy.path}>{copy.path} · {copy.size} bytes · {copy.exists?'기존 파일 보존':'독립 복사'}</li>)}</ul>
-   <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. 의존성은 대상 worktree에서 따로 설치하며 node_modules를 공유하지 않습니다.</p>
+   <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. 의존성은 대상 워크트리에서 따로 설치하며 node_modules를 공유하지 않습니다.</p>
    {plan.commands.length?plan.commands.map((command,index)=><pre key={index}>{commandLine(command)}</pre>):<p>실행할 초기화 명령 없음</p>}
    <div className="work-tools-row"><button className="button primary" disabled={busy} onClick={()=>prepare({plan,id:crypto.randomUUID()})}>확인하고 환경 준비</button><button className="button" disabled={busy} onClick={()=>setPlan(null)}>미리보기 취소</button></div>
   </div>}

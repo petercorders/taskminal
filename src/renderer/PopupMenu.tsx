@@ -32,7 +32,8 @@ export function PopupMenu({ label, heading, items, x, y, testId, onClose }: Prop
     const r = box.getBoundingClientRect()
     box.style.left = `${Math.max(4, Math.min(x, window.innerWidth - r.width - 4))}px`
     box.style.top = `${Math.max(4, Math.min(y, window.innerHeight - r.height - 4))}px`
-    box.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus()
+    // 고를 항목이 없으면(모두 꺼짐 — 원격 일감의 일감 도구) 메뉴 자체로 — 포커스가 바깥에 남으면 Esc · Tab 이 메뉴에 닿지 않아 닫히지 않는다
+    ;(box.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])') ?? box).focus()
   }, [x, y])
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -49,7 +50,7 @@ export function PopupMenu({ label, heading, items, x, y, testId, onClose }: Prop
 
   return (
     <div className="menu-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose(false)} onContextMenu={(e) => e.preventDefault()}>
-      <div ref={ref} className="menu" role="menu" aria-label={label} data-testid={testId} style={{ left: x, top: y }} onKeyDown={onKeyDown}>
+      <div ref={ref} className="menu" role="menu" aria-label={label} data-testid={testId} tabIndex={-1} style={{ left: x, top: y }} onKeyDown={onKeyDown}>
         {heading && (
           <div className="menu-heading" role="presentation">
             {heading}

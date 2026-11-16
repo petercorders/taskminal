@@ -993,6 +993,14 @@ select {
 .menu-item.danger {
   color: var(--danger);
 }
+/* 56단계: 꺼진 항목(원격 일감의 일감 도구)은 고를 수 있는 항목과 구별 — 꺼진 .button 과 같게 흐리게, 이유는 메뉴 머리 */
+.menu-item:disabled,
+.menu-item:disabled:hover {
+  background: transparent;
+  color: inherit;
+  opacity: 0.45;
+  cursor: default;
+}
 .menu-item.danger:focus,
 .menu-item.danger:hover {
   background: var(--danger);
