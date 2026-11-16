@@ -17,9 +17,9 @@ plan-check: 서버 없음 — 로컬 기록 파일 읽기와 로컬 프로세스
 | 상태 | `chat/resume-tab`(`src/renderer/store.ts`) → `addResumedChatTab`(`src/shared/model.ts`): 새 탭 대화 pane `{agent, sessionId}`, cwd = 세션 폴더, 탭 제목 = 요약 앞 40자. 터미널은 기존 `tab/add` spec `{cwd, command}`(pendingCommand) |
 | App | `src/renderer/App.tsx` `resumeAgentSession` — 이미 열린 대화면 이동 → 일감을 id 로 다시 찾음 → main open(15초 한도) → 답의 paneId 가 내 것인지 · 그 사이 열렸는지 · 일감이 남았는지 다시 확인 → 탭. 성공 뒤 같은 세션 열쇠를 1초 더 잡아 상태가 그려지기 전 두 번째 요청을 막는다 |
 
-### 실제 형식 (이 Mac, 2026-11-16 — 키 이름 · type 값만 보고 맞춤, 글은 보지 않음)
+### 실제 형식 (개발 환경, 2026-11-16 — 키 이름 · type 값만 보고 맞춤, 글은 보지 않음)
 - Claude: 파일 이름 = session id(UUID). 줄 type 은 `user` · `assistant` · `attachment` · `session-owner` · `last-prompt` · `ai-title` · `custom-title` · `queue-operation` 등 20여 종. `user` 줄에 `cwd` · `timestamp` · `message.content`(문자열 또는 `text` · `image` · `tool_result` 배열) · `isMeta`. 슬래시 명령은 `<command-message>` · `<command-name>` · `<command-args>` 태그 글.
-- Codex: 첫 줄 `session_meta.payload.{id, cwd, timestamp, source}`. 사용자 글은 `response_item` `message` role `user` 의 `input_text`. 앞쪽 사용자 글은 `<environment_context>` · `# AGENTS.md instructions` 주입. **한 파일에 `session_meta` 가 여럿**(하위 에이전트) 있고, 파일 85개 중 62개는 첫 `session_meta.source` 가 `{subagent: …}` 인 하위 에이전트 기록이다.
+- Codex: 첫 줄 `session_meta.payload.{id, cwd, timestamp, source}`. 사용자 글은 `response_item` `message` role `user` 의 `input_text`. 앞쪽 사용자 글은 `<environment_context>` · `# AGENTS.md instructions` 주입. **한 파일에 `session_meta` 가 여럿**(하위 에이전트) 있고, 파일의 약 3/4 은 첫 `session_meta.source` 가 `{subagent: …}` 인 하위 에이전트 기록이다.
 - 해석 규칙: 주입 블록(`<tag>…</tag>`)은 걷어 낸 나머지, 인자가 있는 슬래시 명령은 '이름 인자', 첫 사용자 글이 앞 256KB 에 없으면 사용자 제목 > 자동 제목 > 마지막 프롬프트 > 인자 없는 명령. cwd 가 없으면 세션이 아님(건너뜀 수에 셈). Codex 하위 에이전트는 목록에서 빼고 따로 셈.
 
 ## 공통 계약 → 시험
@@ -68,19 +68,21 @@ plan-check: 서버 없음 — 로컬 기록 파일 읽기와 로컬 프로세스
 
 모두 원복 확인(변이 원문 5줄 그대로 · 변이 글 0).
 
-## 실제 파일 해석 수치 (이 Mac, 2026-11-16 · 읽기 전용 · 글은 출력 안 함 · 스크립트 scratchpad `s53/measure.ts`)
+## 실제 파일 해석 결과 (개발 환경, 2026-11-16 · 읽기 전용 · 글은 출력 안 함 · 스크립트 scratchpad `s53/measure.ts`)
 
-| | 파일 | 세션 | 하위 에이전트(뺌) | 실패(세션 아님 · 읽기 오류) | 손상 줄 | 앞 256KB 로 잘림 | 빈 요약 | 해석 시간 |
-|---|---|---|---|---|---|---|---|---|
-| Claude | 38 | 37 | 0 | 1 (2.6%) | 0 | 27 | 2 (5.4%) — 고치기 전 8 (21.6%) | 42ms |
-| Codex | 85 | 23 | 62 | 0 (0%) | 0 | 73 | 0 | 90ms |
+공개 저장소라 기록 개수는 적지 않고 비율 · 범위로만 남긴다(기록 백여 개 규모).
 
-`AgentSessions.list()`(기본 계정 루트): 처음 116ms(파일 124번 읽음) · 캐시 뒤 4ms. Claude 실패 1개는 앞 256KB 에 cwd 가 있는 줄이 없는 기록이다.
+| | 하위 에이전트(뺌) | 실패(세션 아님 · 읽기 오류) | 손상 줄 | 앞 256KB 로 잘림 | 빈 요약 | 해석 시간 |
+|---|---|---|---|---|---|---|
+| Claude | 없음 | 몇 % | 0 | 대부분 | 약 5% — 고치기 전 약 20% | 수십 ms |
+| Codex | 약 3/4 | 0 | 0 | 대부분 | 0 | 100ms 안 |
+
+`AgentSessions.list()`(기본 계정 루트): 처음 0.1초 남짓 · 캐시 뒤 수 ms. Claude 실패는 앞 256KB 에 cwd 가 있는 줄이 없는 기록이다.
 
 ## 계획과 다르게 한 것
 
-- Codex 하위 에이전트 기록(첫 `session_meta.source` 가 `{subagent}`)은 목록에서 빼고 수만 센다 — 계획엔 없음. 실제 85개 중 62개라 목록이 하위 작업으로 덮였다.
-- 첫 사용자 글이 없을 때 제목(`custom-title` · `ai-title`) · `last-prompt` · 인자 없는 명령으로 대신한다 — 계획은 '첫 사용자 글'. 실제 빈 요약이 21.6% 였다.
+- Codex 하위 에이전트 기록(첫 `session_meta.source` 가 `{subagent}`)은 목록에서 빼고 수만 센다 — 계획엔 없음. 실제 기록의 약 3/4 이라 목록이 하위 작업으로 덮였다.
+- 첫 사용자 글이 없을 때 제목(`custom-title` · `ai-title`) · `last-prompt` · 인자 없는 명령으로 대신한다 — 계획은 '첫 사용자 글'. 실제 빈 요약이 약 20% 였다.
 - '연결하는 중 15초' 는 패널의 이어 하기 요청(main 이 id 로 다시 찾고 폴더 확인)에 걸었다. 대화 pane 의 실제 resume 은 첫 보내기 때 일어나 기존 대화 띠의 상태 · 오류를 그대로 쓴다(대화 pane 자체의 15초 한도는 새로 넣지 않음).
 - 15초 한도 · 옛 응답 · 안 보일 때 멈춤은 e2e 가 아니라 단위 시험으로 본다(main 을 멈추게 하는 시험용 훅을 넣지 않으려고).
 - 이 패널은 `closeDialogs` 로 닫지 않는다 — 기존 일감 지우기 · 보관이 `closeDialogs` 를 불러 패널이 사라지면 '연 뒤 일감이 사라지면 막고 안내' 를 할 수 없어서.
@@ -91,5 +93,5 @@ plan-check: 서버 없음 — 로컬 기록 파일 읽기와 로컬 프로세스
 
 - 실제 claude · codex 로 resume 해 보지 않음(가짜 claude · 가짜 TUI 만). 특히 추가 계정 세션의 `env -i … resume` 과 Codex 대화 pane 의 `thread/resume` 은 실제 대조 안 함.
 - VoiceOver · IME · 라이트 테마 대비는 직접 보지 않음(대비 셈은 어두운 테마 기본값에서만).
-- 매우 많은 기록(수천 개)에서의 시간은 재지 않음 — 이 Mac 은 123개.
+- 매우 많은 기록(수천 개)에서의 시간은 재지 않음 — 개발 환경은 백여 개.
 - 전체 검사 `full-check.sh` 는 돌리지 않음(지시된 명령만) — 부모가 합친 뒤 돌린다.

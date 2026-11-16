@@ -46,7 +46,7 @@ plan-check: 서버 없음 — Jira 는 읽기만 하고 나머지는 로컬 파�
 
 ## 변이 확인
 
-목록 `/private/tmp/claude-501/-Users-gimgibong-orca-projects-taskminal/06252206-0b51-4025-89bb-07b618299261/scratchpad/jira-mutations.tsv`, `mutation-check.sh --batch … npx vitest run`: **5개 모두 잡음**(못 잡음 0 · 판정 불가 0), 22초, 모두 원복(원문 줄 수로 확인).
+목록 scratchpad `jira-mutations.tsv`, `mutation-check.sh --batch … npx vitest run`: **5개 모두 잡음**(못 잡음 0 · 판정 불가 0), 22초, 모두 원복(원문 줄 수로 확인).
 
 1. 토큰이 status(렌더러)로 감 — `jira.test.ts`
 2. https 검사 풀림(`loopback = url.protocol === 'http:'`) — `jira.test.ts`

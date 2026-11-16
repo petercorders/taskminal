@@ -4,11 +4,11 @@
 자율 진행 지시(메모리)대로 계획 승인을 묻지 않고 이 문서와 plan-check 로 대신한다. 지키는 것: 사용자 Claude · Codex 전역 설정 쓰기 0 · 실제 데이터 폴더 안 씀(e2e 는 `TASKMINAL_USER_DATA` 임시 폴더) · 공개 릴리스 보류 · Jira · GitHub 에 쓰는 요청 없음(읽기만).
 
 ## 스파이크 결과 (2026-11-16, 실제 claude 2.1.325 `-p` 1턴, 스크립트 · 로그는 scratchpad `spike1/`)
-- `--settings` 로 더한 훅은 사용자 훅과 **합쳐진다** — SessionStart 훅 5개 시작(사용자 4 + 더한 1). 더한 SessionStart · UserPromptSubmit · Stop 이 모두 불렸다.
+- `--settings` 로 더한 훅은 사용자 훅과 **합쳐진다** — SessionStart 훅이 사용자 훅 수 + 1 만큼 시작. 더한 SessionStart · UserPromptSubmit · Stop 이 모두 불렸다.
 - 훅 프로세스는 제어 터미널이 없어 `/dev/tty` 쓰기가 3번 모두 실패했다 → OSC 로 pane 출력에 싣는 길은 쓸 수 없다 → **pane 별 기록 파일**로 보낸다.
 - stream-json `rate_limit_event.rate_limit_info.unifiedWindows.{five_hour,seven_day}.{utilization,resetsAt,status}` 가 실제로 온다(utilization 0~1, resetsAt 초).
 - `~/.claude/settings.json` 수정 시각 변화 없음.
-- TUI 는 이 Mac 에서 신뢰 · 새 MCP 승인 화면이 먼저 떠서(고르면 사용자 설정에 기록된다) 자동 대조를 멈췄다. TUI statusLine 입력의 `rate_limits` 는 출처 기반(Orca 소스 주석 · design-gaps 5절)이며 **실제 대조 안 함**.
+- TUI 는 개발 환경에서 신뢰 · 새 MCP 승인 화면이 먼저 떠서(고르면 사용자 설정에 기록된다) 자동 대조를 멈췄다. TUI statusLine 입력의 `rate_limits` 는 출처 기반(Orca 소스 주석 · design-gaps 5절)이며 **실제 대조 안 함**.
 
 ## 51 터미널 에이전트 상태 훅
 
@@ -85,3 +85,58 @@
 5. 변이 확인(핵심 줄만, batch) → full-check → `/code-review` → 고친 것 별도 커밋 → UI/UX 검토(실제 화면 · 키보드 · 좁은 창) → full-check → 문서 · 메모리 → push · PR → 병합(본인 작업 관리자 예외) → 회고.
 
 plan-check: 서버 없음 — Jira · GitHub 는 읽기만 하고, 나머지는 로컬 파일 · 로컬 프로세스다.
+
+## 결과 (2026-11-16)
+
+커밋: 51 84655de · 52 5450fd5 · 53 ed92d79(합침 6ac86bf) · 55 0372424(합침 307dee0) · 합친 뒤 preload 키 2675b17 · 54 4941cff · 변이 보강 f50236a · 리뷰 고침 6b5f1ed · UI/UX 고침 328fcae · 합친 뒤 메뉴 시험 4d37957.
+53 · 55 의 상세(실제 기록 해석 수치 · 계획과 다르게 한 것 · 미검증)는 `docs/stages/53-agent-sessions.md` · `docs/stages/55-jira.md`.
+
+### 시험
+- 전체 검사(full-check, 마지막 판): typecheck · 경계 통과, vitest 117 파일 · 1,387개 통과, e2e 379개 중 375 통과 · 2 건너뜀(패키지 앱) · 2 실패 → 다시 돌려 2 통과, 종료 3(불안정).
+  - `keys.spec:295` 는 **진짜 실패**였다: 53단계가 단축키 없는 메뉴 '에이전트 세션' 을 더했는데 키 없는 메뉴 명령 목록 시험에 없었다(worker 는 관련 e2e 만 돌림). 시험 목록을 고친 뒤(4d37957) 다시 돌린 판이 고친 파일로 돌아 통과했다.
+  - `remote-terminal-depth.spec:75` 는 흔들림: 친 명령이 5초 안에 다 찍히지 않았다(전체 실행 부하). 이 브랜치는 원격 터미널 코드를 건드리지 않았고 다시 돌리니 통과.
+- 새 시험(부모 몫): 51 단위 agent-hooks · agent-events · agent-activity · agent-shell + e2e `agent-hooks.spec`(가짜 claude 가 받은 `--settings` 훅을 실제 sh 로 부름) · 52 단위 usage · usage-main + e2e `usage.spec` 3 · 54 단위 ci-feedback 12 · ci-feedback-main 7 + e2e `ci-feedback.spec` 3(가짜 gh).
+- 변이 확인: 부모 batch 25개 중 24개 잡음 → 못 잡은 1개(끝 쪽만 읽을 때 잘린 첫 줄 버림)는 시험을 더해(f50236a) 잡음 · 리뷰 고침 7개 모두 잡음 · UI 고침 1개(좁은 창에서 이름을 숨기지 않는 옛 구조) 잡음. worker A 5개 · worker B 5개 모두 잡음.
+  - UI 겹침 검사는 처음엔 막대 상자끼리 비교해 변이를 못 잡았다 — 상자는 줄어도 값 글자가 넘쳐 겹친 것이라, 값 글자 끝과 다음 막대 시작을 재도록 바꾼 뒤 잡았다.
+
+### 코드 리뷰 (/code-review high, 10건 → 9건 고침 · 1건 남김, 6b5f1ed)
+| 무엇 | 처리 |
+|---|---|
+| 셸 통합이 없어 셸이 바쁘지 않던 pane 의 SessionEnd 가 '실행 중' 에 묶임 | 붙기 전 셸 상태(`shellBusy`)를 기억해 돌린다 · 단위 시험 |
+| `.status` 파일을 fs.watch 로만 봐서 부하 때 놓침(전체 검사 실패 원인) | 주기 읽기가 (inode · 수정 시각 · 크기) 변화를 본다 · 단위 시험 |
+| 에이전트 턴 실패 알림 본문이 'exit ?' | 'Claude · 실패' 글 · e2e(StopFailure) |
+| 90% 한도 알림이 알림 설정을 무시 | '입력 기다림' 설정(배너 · 소리)을 따른다 · e2e |
+| 같은 한도 값이면 받은 시각이 낡음 | 1분 지나면 시각만 새로 · 단위 시험 |
+| 세션 목록이 `CLAUDE_CONFIG_DIR` · `CODEX_HOME` 을 무시 | 앱 프로세스 환경을 따른다 · 단위 시험 |
+| 실행 위치의 프로젝트 statusLine 을 앱 statusLine 이 덮음 | zsh 감싸기가 프로젝트 statusLine 이 있으면 훅만 든 설정(`claude-settings-hooks.json`) · 단위 시험 |
+| 피드백을 보낸 뒤 다시 읽어도 다시 보낼 수 없음 | 새로 읽은 값이면 다시 보낼 수 있게 · 자동 시험 없음 |
+| 세션 패널: 일감이 없으면 이미 열린 대화로도 못 감 | 열린 대화는 일감 없이도 그 pane 으로 · 자동 시험 없음 |
+| 추가 계정 터미널(`accounts.tuiCommand`)은 전체 설정을 붙여 프로젝트 statusLine 을 덮고, 사용자 statusLine 도 기본 계정 것을 잇는다 | **남김** — `env -i` 경로는 셸 함수를 거치지 않아 프로젝트 판정을 옮기려면 tuiCommand 를 셸 스크립트로 바꿔야 한다. 추가 계정 + 프로젝트 statusLine 을 함께 쓰는 경우만 해당 |
+
+같은 커밋의 정리: 사이드바 줄마다 `issueOf` 한 번 · 세션 해석이 `guards.isObj` 공용.
+
+### UI/UX 리뷰 (실제 앱 화면, 다크 · 라이트, 1280 · 640px 창)
+범위: pane 머리 · 사이드바 · 전체 보기의 에이전트 상태 글, 사이드바 한도 막대 · 계정 화면, PR 카드의 체크·리뷰 · 대화로 보내기, 에이전트 세션 패널(빈 상태 포함). 임시 측정 시험(가독성 측정 + 스크린샷)으로 보고 지웠다.
+
+| 관찰 | 심각도 | 조치 |
+|---|---|---|
+| 640px 창(사이드바 200px)에서 5시간 값 '75%' 가 '주간' 글자 위로 넘침 | MEDIUM | ≤800px 에서 'Claude' 이름을 숨기고(aria-label · title 에 남음) 간격을 줄임 → 두 테마 스크린샷에서 겹침 없음 · e2e 로 글자 끝을 잼 |
+| 체크 로그 `pre` 11px · 줄 간격 1.2 | LOW | 12px · 1.45(26단계 기준: 12px 이상 · 여러 줄 1.4 이상) → 측정 통과 |
+| 세션 패널 안내 13px(대화상자 본문 14px 기준 미달) | LOW | 14px → 측정 통과 |
+| 빠른 명령 빈 칸 줄 간격 1.2 | — | 이번 변경 전부터 있던 것, 범위 밖이라 남김 |
+
+- 대비: 새 글 · 상태 색(노랑 · 빨강 막대 값 포함)은 두 테마에서 측정 기준(4.5:1, 큰 글 3:1) 통과.
+- 키보드: 체크·리뷰 묶음은 Tab 순서가 화면 순서(다시 읽기 → 체크 → 열기 → 로그 → 리뷰 → 보내기)이고 초점 테두리가 보인다. Space 로 체크를 끄면 '대화로 보내기 (4)' → '(3)'. 로그 `pre` 는 tabIndex 0 + aria-label 로 스크롤 가능.
+- 상태 알림: 읽는 중은 `role=status`, 오류 · 응답 없음은 `role=alert`, 마지막 값과 받은 시각(·이전 커밋 표시)은 남는다.
+- 미검증: VoiceOver 로 실제 읽기 · 화면 확대 200%.
+
+### 계획과 다르게 한 것
+- 51: 훅에 PostToolUse · PostToolUseFailure 를 더했다(도구 허락 뒤 '허락 기다림' 이 남지 않게 — 계획 목록에 없음). Codex 는 턴 시작 훅이 없어 Enter 를 '작업 중' 으로 본다(추정). 셸 명령 시작(133;C)은 에이전트 상태를 지우지 않는다. 감시는 폴더 감시만이 아니라 + 3초 주기 읽기(FSEvents 가 부하 때 늦음).
+- 52: 사이드바 막대는 가장 최근 값을 받은 계정 하나만 보인다(계정별 값은 계정 화면). 90% 알림은 '입력 기다림' 알림 설정을 따른다(계획엔 설정 언급 없음). 값이 없을 때 글은 '아직 한도 값 없음'(계획 문구보다 짧게). 사용자 원래 statusLine 은 `CLAUDE_CONFIG_DIR`(없으면 `~/.claude`)의 설정에서만 읽는다(프로젝트 설정의 statusLine 은 잇지 않고, 대신 그런 곳에선 훅만 붙임 — zsh 감싸기만, 추가 계정 터미널은 리뷰 표의 남긴 항목).
+- 54: `gh pr checks` 대신 `gh pr view --json statusCheckRollup`(pr checks 는 실패 · 대기에 종료 코드 1 · 8 을 내고 33단계 parsePr 와 기준을 맞추려고). 로그는 처음 3개 Actions 체크만 받는다(한 번 읽기의 양 · 시간 상한, 나머지는 '처음 3개만' 글). `gh run` 출력 상한 16MB(나머지 2MB). 대화 pane 이 없으면 계획의 '새 탭' 이 아니라 23단계 `askChat` 그대로(탭이 있으면 오른쪽 분할). 초안 넣기 실패 · 복사 안내는 만들지 않았다(`askChat` 은 화면 상태를 바꿀 뿐 실패하는 길이 없다). 시험 한도는 `TASKMINAL_GH_FEEDBACK_TIMEOUT_MS`(시험 모드만).
+- 53 · 55: 각 단계 문서의 '계획과 다르게 한 것'.
+
+### 미검증
+- 실제 Claude TUI 에서 훅 순서 · statusLine 입력의 `rate_limits` · 빈 statusLine 출력 모양(스파이크는 `-p` 1턴만). 실제 codex notify.
+- 실제 GitHub PR 에 대한 읽기(gh 2.86 출력 모양은 공개 PR 1건으로 실측, 앱에서 실제 저장소로는 안 함) · 실제 Jira · 실제 safeStorage(키체인).
+- 추가 계정 터미널의 statusLine(리뷰 남긴 항목) · VoiceOver.
