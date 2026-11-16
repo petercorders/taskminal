@@ -1335,13 +1335,15 @@ export function App() {
     return () => observer.disconnect()
   }, [workTool, state.activeTaskId])
   // 56단계: 옆 패널 Esc — 패널을 열거나 종류가 바뀌면 포커스를 패널로(도구 단추를 누른 직후의 Esc 가 닿게).
-  // 안쪽 칸이 스스로 가져간 포커스는 둔다(자식 effect 가 먼저 돈다).
+  // 안쪽 칸이 스스로 가져간 포커스는 둔다(자식 effect 가 먼저 돈다). 일감을 오가 다시 보이게 된 것은 열기가 아니다 —
+  // workTool 이 그대로라 돌지 않고, 일감 전환이 터미널로 옮긴 포커스를 뺏지 않는다.
   const workToolPanel = useRef<HTMLElement>(null)
   const workToolShown = !!workTool && (workTool.kind === 'accounts' || workTool.kind === 'remote' || workTool.taskId === activeTask?.id)
   useEffect(() => {
     const el = workToolPanel.current
     if (workToolShown && el && !el.contains(document.activeElement)) el.focus({ preventScroll: true })
-  }, [workToolShown, workTool?.kind, workTool?.taskId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workTool])
   /** 입력칸 · 편집기 안의 Esc 는 쓰던 것을 두고 패널로 포커스만(한 번 먹는다), 아니면 닫기 단추와 같다.
    *  안쪽 대화상자 · 메뉴는 Esc 에 preventDefault 하고, 터미널(xterm)은 Esc 를 스스로 먹는다 */
   const onWorkToolKey = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -2101,7 +2103,7 @@ export function App() {
           }}
         />
         </CompactSidebar>
-        <main ref={workspaceElement} className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.kind==='remote'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
+        <main ref={workspaceElement} className={`workspace${workToolShown?' work-tools-open':''}`}>
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
             <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>pickTool(e.target.value)}><WorkToolOptions task={activeTask}/></select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>

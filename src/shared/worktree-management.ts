@@ -40,6 +40,17 @@ export interface WorktreeView {
   entries: ManagedWorktree[]
 }
 
+/** 56단계: 환경 준비 대상 고르기용 — 워크트리마다 상태를 조사하지 않고 등록 목록만 */
+export interface WorktreeTargets {
+  root: string
+  entries: Array<Pick<ManagedWorktree, 'path' | 'commonDir' | 'primary' | 'bare' | 'prunable'>>
+}
+
+/** 환경 준비로 채울 수 있는 워크트리 — 일감 폴더 자신 · bare · 등록 복구 필요 · 따로 둔 git 폴더(separate-git-dir 의 기본 항목)는 뺀다.
+ *  일감이 링크된 워크트리에 있으면 기본 워크트리도 대상이다. */
+export const prepareTarget = (entry: Pick<ManagedWorktree, 'path' | 'commonDir' | 'bare' | 'prunable'>, root: string): boolean =>
+  entry.path !== root && entry.path !== entry.commonDir && !entry.bare && !entry.prunable
+
 export interface CreateWorktree {
   requestId: string
   branch: string
@@ -73,6 +84,7 @@ export interface WorktreeRemoveResult {
 
 export interface WorktreeApi {
   list(root: string): Promise<WorktreeView>
+  targets(root: string): Promise<WorktreeTargets>
   create(root: string, input: CreateWorktree): Promise<WorktreeCreateResult>
   open(root: string, target: WorktreeSnapshot): Promise<{ path: string; taskId?: string; cwd?: string }>
   remove(root: string, target: WorktreeSnapshot): Promise<WorktreeRemoveResult>

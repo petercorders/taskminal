@@ -68,8 +68,11 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // 56단계: 찾을 곳을 바꿔 들어오면 이미 열려 있던 패널도 가져온 검색어로(새 신호마다 한 번 — 그냥 ⌘Y 는 검색어를 그대로 둔다)
+    if (initialQuery !== undefined) setQuery(initialQuery)
     inputRef.current?.focus()
     inputRef.current?.select()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signal])
 
   const taskOf = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])

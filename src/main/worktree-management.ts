@@ -6,7 +6,7 @@ import {
   isWorktreeOid, parseWorktrees, validWorktreeJournal,
   type CreateWorktree, type ManagedWorktree, type WorktreeCreateReceipt,
   type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
-  type WorktreeSnapshot, type WorktreeView,
+  type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
 } from '../shared/worktree-management'
 
 export interface WorktreeJournal {
@@ -248,6 +248,12 @@ export class WorktreeManagement {
       if (entry.unsafeIndex) entry.reasons.push('sparse·skip-worktree·assume-unchanged 상태라 정리하지 않아요')
       entry.removable = entry.reasons.length === 0 && !statusText
     } catch { entry.reasons.push('상태 미확인 — 정리할 수 없어요'); entry.removable = false }
+  }
+
+  /** 56단계: 환경 준비 대상 고르기용 — list() 는 워크트리마다 git status(무시한 파일까지)를 돌려 느릴 수 있어 등록 목록만 준다 */
+  async targets(root: string): Promise<WorktreeTargets> {
+    const registry = await this.registry(root)
+    return { root: registry.root, entries: registry.entries.map(({ path, commonDir, primary, bare, prunable }) => ({ path, commonDir, primary, bare, prunable })) }
   }
 
   async list(root: string, usedCwds: readonly string[] = []): Promise<WorktreeView> {

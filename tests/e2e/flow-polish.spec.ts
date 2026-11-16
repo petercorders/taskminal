@@ -227,3 +227,49 @@ test('이슈 연결: 저장소 답이 오기 전에 직접 쓴 값은 덮지 않
   await win.waitForTimeout(300)
   await expect(field).toHaveValue('mine/typed')
 })
+
+test('일감을 오가 다시 보이게 된 옆 패널은 터미널 포커스를 뺏지 않는다', async () => {
+  await win.getByRole('button', { name: '파일 탐색', exact: true }).click()
+  await expect(panel()).toBeVisible()
+  await command('next-task')
+  await expect(panel()).toHaveCount(0)
+  await command('prev-task')
+  await expect(panel()).toBeVisible()
+  await expect.poll(() => win.evaluate(() => !!document.activeElement?.closest('.xterm'))).toBe(true)
+  await win.waitForTimeout(200)
+  expect(await win.evaluate(() => !!document.activeElement?.closest('.work-tool-panel'))).toBe(false)
+})
+
+test('열려 있는 명령 기록으로 찾는 곳을 바꿔도 검색어를 가져간다', async () => {
+  await command('history')
+  const hist = win.getByTestId('history-panel')
+  await hist.getByRole('textbox', { name: '기록에서 찾기' }).fill('먼저말')
+  await command('global-find')
+  const out = win.getByTestId('global-find')
+  await out.getByRole('textbox', { name: '모든 출력에서 찾을 말' }).fill('나중말')
+  await out.getByRole('navigation', { name: '찾을 곳' }).getByRole('button', { name: '명령 기록' }).click()
+  await expect(out).toHaveCount(0)
+  await expect(hist.getByRole('textbox', { name: '기록에서 찾기' })).toHaveValue('나중말')
+})
+
+test('이슈 연결: 다른 서비스로 갔다가 GitHub 로 돌아오면 저장소 칸을 다시 채운다', async () => {
+  const field = await openIssues()
+  await expect(field).toHaveValue('acme/widgets')
+  const service = win.getByTestId('issues-panel').getByRole('combobox', { name: '이슈 서비스' })
+  await service.selectOption('linear')
+  await service.selectOption('github')
+  await expect(field).toHaveValue('acme/widgets')
+})
+
+test('환경 준비: 워크트리 목록을 읽지 못하면 없다고 하지 않고 그렇게 알린다', async () => {
+  await app.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('worktrees:targets')
+    ipcMain.handle('worktrees:targets', async () => { throw new Error('읽기 실패') })
+  })
+  await bar().getByRole('button', { name: '일감 도구 ▾' }).click()
+  await win.getByRole('menuitem', { name: '환경 준비·확장' }).click()
+  const dev = win.getByTestId('development-panel')
+  await expect(dev).toContainText('워크트리 목록을 읽지 못했어요')
+  await expect(dev).not.toContainText('다른 워크트리가 없어요')
+  await expect(dev.getByRole('textbox', { name: '준비할 워크트리 경로' })).toBeVisible()
+})

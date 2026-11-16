@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { isAbsolutePath } from '../shared/platform'
-import type {
-  CreateWorktree, ManagedWorktree, WorktreeApi, WorktreeSnapshot, WorktreeView,
+import {
+  prepareTarget,
+  type CreateWorktree, type ManagedWorktree, type WorktreeApi, type WorktreeSnapshot, type WorktreeView,
 } from '../shared/worktree-management'
 import { ConfirmDialog } from './ConfirmDialog'
 import './worktree-panel.css'
@@ -208,7 +209,7 @@ export function WorktreePanel({ root, onOpen, onPrepare, api = window.taskminal.
         {!!entry.reasons.length && <ul className="worktree-reasons">{entry.reasons.map((reason, i) => <li key={i}>{reason}</li>)}</ul>}
         <div className="worktree-actions">
           <button type="button" className="button" disabled={disabled || !entry.canOpen} onClick={() => open(entry)}>일감으로 열기</button>
-          {onPrepare && !entry.primary && !entry.bare && !entry.prunable && <button type="button" className="button" disabled={disabled} onClick={() => onPrepare(entry.path)}>환경 준비…</button>}
+          {onPrepare && prepareTarget(entry, view.root) && <button type="button" className="button" disabled={disabled} onClick={() => onPrepare(entry.path)}>환경 준비…</button>}
           <button type="button" className="button danger" disabled={disabled || !entry.removable} onClick={(event) => { deleteTrigger.current = event.currentTarget; setDeleting({ root, target: snapshot(entry), label: label(entry) }) }}>정리…</button>
         </div>
       </article>)}</div>

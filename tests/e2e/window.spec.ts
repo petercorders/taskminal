@@ -47,11 +47,13 @@ test('보안 기본값: renderer 에 node 가 없고 preload API 는 좁다', as
     jira: Object.keys(window.taskminal.jira),
     remote: Object.keys(window.taskminal.remote),
     development: Object.keys(window.taskminal.development),
+    worktrees: Object.keys(window.taskminal.worktrees),
   }))
   expect(inPage).toEqual({
     remote: ['connect','disconnect','workspaces','open','files','read','save','git','terminal','stream','resize','tail','write','stop','chat','send','history','answer','interrupt'],
     development: ['preview','prepare','preparations','cancel','inspect','install','extensions','enable','uninstall'],
-    issues: ['list','configure','links','prepare','linkPr','close'],
+    issues: ['list','configure','links','prepare','linkPr','close','repo'],
+    worktrees: ['list','targets','create','open','remove'],
     jira: ['status','save','clear','attach'],
     require: 'undefined', process: 'undefined',
     apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'agentSessions', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'usage', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],

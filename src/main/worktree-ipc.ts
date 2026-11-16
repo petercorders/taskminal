@@ -28,6 +28,7 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
     return {...result,entries:result.entries.map(entry=>({...entry,tasks:tasks.filter(t=>t.paths.some(path=>inside(entry.path,path))).map(({id,name})=>({id,name})),...(warning?{removable:false,reasons:[...entry.reasons,warning]}:{})}))}
   })
   ipcMain.handle(IPC.worktreesCreate,(event,dir,input)=>service.create(root(event,dir),input))
+  ipcMain.handle(IPC.worktreesTargets,(event,dir)=>service.targets(root(event,dir)))
   ipcMain.handle(IPC.worktreesOpen,async(event,dir,target)=>{
     const result=await service.open(root(event,dir),target)
     for(const t of d.state()?.tasks??[])if(!t.host&&t.archivedAt===undefined&&(await realpath(expand(t.cwd)).catch(()=>''))===result.path){const current=d.state()?.tasks.find(item=>item.id===t.id&&!item.host&&item.archivedAt===undefined);if(current?.cwd===t.cwd)return {...result,taskId:t.id,cwd:t.cwd}}
