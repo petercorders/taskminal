@@ -61,6 +61,9 @@ import { openTextEditor } from './text-editor'
 import { isAppPage } from './page-origin'
 import { AgentEvents, writeHookFiles, type HookFiles } from './agent-events'
 import { codexHasNotify, codexNotifyArg } from '../shared/agent-hooks'
+import { parseStatusFile, usageFromRateLimitInfo, usageFromStatusLine } from '../shared/usage'
+import { UsageStore, claudeAccountId } from './usage-store'
+import { syncUserStatusLine } from './agent-events'
 
 // e2e 는 임시 폴더를 넘긴다 — 실제 ~/Library/Application Support/Taskminal 을 건드리지 않게. ready 전에 정해야 한다.
 const userDataOverride = process.env['TASKMINAL_USER_DATA']
@@ -110,10 +113,22 @@ const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () =
 // 51단계: 터미널에서 띄운 claude · codex 의 훅 — ready 뒤 만든다(userData)
 let agentEvents: AgentEvents | null = null
 let hookFiles: HookFiles | null = null
+// 52단계: 계정별 Claude 한도 — ready 뒤 만든다(userData)
+let usageStore: UsageStore | null = null
+const accountsRoot = () => join(app.getPath('userData'), 'accounts')
+function putUsage(configDir: string | undefined, snap: ReturnType<typeof usageFromStatusLine>): void {
+  if (snap) usageStore?.put(claudeAccountId(configDir, accountsRoot()), snap)
+}
 /** 새 셸에 넣는 에이전트 훅 변수. 설정이 켜져 있고 훅 파일이 있을 때만. 새 셸마다 지금 설정 · 사용자 codex notify 를 본다(처음 한 번만 읽지 않는다) */
 function agentEnv(paneId: string): Record<string, string> {
   const file = agentEvents?.fileFor(paneId)
   if (!hookFiles || !file || lastState?.settings.agentHooks === false) return {}
+  // 52단계: 사용자 statusLine 을 지금 값으로(바뀌었으면) — 앱 statusLine 스크립트가 잇는다
+  try {
+    syncUserStatusLine(dirname(hookFiles.claudeSettings), process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude'))
+  } catch (e) {
+    report('error', 'agent-statusline', '사용자 statusLine 을 읽지 못했어요', e)
+  }
   const env: Record<string, string> = { TASKMINAL_AGENT_EVENTS: file, TASKMINAL_CLAUDE_SETTINGS: hookFiles.claudeSettings }
   let toml = ''
   try {
@@ -291,6 +306,7 @@ const chats = () =>
     // 대화 에이전트(claude -p · codex)도 taskminal 을 쓴다 — PATH 는 에이전트를 찾은 PATH 끝에 덧붙인다
     extraEnv: (paneId, path) => ({ ...cliEnv(paneId), PATH: `${path || process.env['PATH'] || process.env['Path'] || ''}${delimiter}${cliBinDir}` }),
     sessionEnv: (env,paneId,chat) => agentAccounts?.sessionEnvironment(paneId,chat.agent,!!chat.sessionId,env) ?? env,
+    onUsage: (_paneId, env, info) => putUsage(env['CLAUDE_CONFIG_DIR'], usageFromRateLimitInfo(info, Date.now())),
     store: new ChatStore(join(app.getPath('userData'), 'chat'), () => secretOpts),
     redactOptions: () => secretOpts,
     spawn: chatSpawn,
@@ -884,6 +900,10 @@ if (!app.requestSingleInstanceLock()) {
     }
     return addWorktree(dir, branch, homedir())
   })
+  ipcMain.handle(IPC.usageGet, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return usageStore?.get() ?? {}
+  })
   ipcMain.handle(IPC.ptyAgents, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     return agentEvents?.last() ?? {}
@@ -1205,6 +1225,11 @@ if (!app.requestSingleInstanceLock()) {
       agentEvents?.forget(paneId) // 앞 셸의 claude 기록이 새 셸에 남지 않게
       return { ...cliEnv(paneId), ...agentEnv(paneId) }
     }
+    usageStore = new UsageStore(join(app.getPath('userData'), 'usage.json'), (map, crossed) => {
+      const w = mainWindow
+      if (w && !w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(IPC.usageChanged, map, crossed)
+    })
+    agentAccounts?.setUsageSource((id) => usageStore?.get()[id])
     try {
       hookFiles = writeHookFiles(join(app.getPath('userData'), 'agent-hooks'))
       agentEvents = new AgentEvents({
@@ -1212,6 +1237,10 @@ if (!app.requestSingleInstanceLock()) {
         onSignal: (paneId, signal) => {
           const w = mainWindow
           if (w && !w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send(IPC.ptyAgent, paneId, signal)
+        },
+        onStatus: (_paneId, text) => {
+          const st = parseStatusFile(text)
+          if (st) putUsage(st.configDir, usageFromStatusLine(st.rateLimits, Date.now()))
         },
       })
       agentEvents.start()

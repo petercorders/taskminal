@@ -2,6 +2,7 @@
 import type { BackupInfo } from '../shared/backup'
 import type { AppInfo, BackupMark, HostAction, HostView, LoadedState, PtyAttachResult, PtyExit, PtySpawnOptions, RedactStatus, ScrollbackEntry, ScrollbackSave } from '../shared/ipc'
 import type { AgentSignal } from '../shared/agent-hooks'
+import type { UsageMap, UsageWindowKey } from '../shared/usage'
 import type { SessionInfo } from '../shared/ptyhost'
 import type { AppState } from '../shared/types'
 
@@ -25,6 +26,13 @@ export interface PtyApi {
   onAgent(listener: (paneId: string, signal: AgentSignal) => void): () => void
   /** pane 별 마지막 에이전트 사건 — 다시 열 때 지금 상태를 맞춘다 */
   agents(): Promise<Record<string, AgentSignal>>
+}
+
+/** 52단계: Claude 한도(5시간 · 주간) 실수치 — 대화 · 터미널이 받은 마지막 값 */
+export interface UsageApi {
+  get(): Promise<UsageMap>
+  /** crossed: 이번에 90% 를 새로 넘은 창 */
+  onChange(listener: (map: UsageMap, crossed: Array<{ account: string; key: UsageWindowKey; used: number; resetsAt: number }>) => void): () => void
 }
 
 export interface ScrollbackApi {
@@ -177,6 +185,7 @@ export interface TaskminalApi {
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
   pty: PtyApi
+  usage: UsageApi
   /** ~/.ssh/config 의 Host 이름들 — 와일드카드 빼고(25단계, main 이 읽기만) */
   sshHosts(): Promise<string[]>
   scrollback: ScrollbackApi

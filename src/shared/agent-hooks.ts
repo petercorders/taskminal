@@ -108,7 +108,28 @@ exit 0
 `
 }
 
-/** `claude --settings <파일>` 내용. statusLine 은 52단계(사용량)에서 건다. */
+/** 52단계 statusLine — 입력 JSON 의 rate_limits 만 pane 상태 파일(`<기록 파일>.status` 대신 `.log` 를 `.status` 로)에 원자적으로 쓰고,
+ * 사용자의 원래 statusLine 명령(옆의 user-statusline.cmd)을 같은 입력으로 이어 부른다. 원래 명령이 없으면 아무것도 출력하지 않는다.
+ * rate_limits 는 숫자만 든 두 겹 객체라 `{…{…}…}` 로 끝까지 잡는다. 폴더 · 모델 · 비용은 쓰지 않는다. */
+export function claudeStatusLineScript(): string {
+  return `#!/bin/sh
+# Taskminal statusLine — Claude 한도(rate_limits)만 pane 상태 파일에 쓰고, 사용자의 원래 statusLine 을 잇는다. 늘 0.
+in=$(cat)
+f=\${TASKMINAL_AGENT_EVENTS-}
+if [ -n "$f" ]; then
+  rl=$(printf '%s\\n' "$in" | awk 'match($0, /"rate_limits" *: *\\{([^{}]*\\{[^{}]*\\})*[^{}]*\\}/) { s = substr($0, RSTART, RLENGTH); sub(/^"rate_limits" *: */, "", s); print s; exit }')
+  if [ -n "$rl" ]; then
+    s=\${f%.log}.status
+    { printf 'v1\\t%s\\t%s\\n' "\${CLAUDE_CONFIG_DIR-}" "$rl" > "$s.$$" && mv -f "$s.$$" "$s"; } 2>/dev/null
+  fi
+fi
+cmd=\${0%/*}/user-statusline.cmd
+if [ -s "$cmd" ]; then printf '%s' "$in" | /bin/sh -c "$(cat "$cmd")"; fi
+exit 0
+`
+}
+
+/** `claude --settings <파일>` 내용. statusLine 은 52단계(사용량) 스크립트 — 사용자 statusLine 은 그 스크립트가 잇는다. */
 export function claudeHookSettings(hookPath: string, statusLinePath?: string): string {
   const command = { type: 'command', command: shQuote(hookPath), timeout: 10 }
   const settings: Record<string, unknown> = {

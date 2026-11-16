@@ -4746,3 +4746,65 @@ input[type='checkbox'] {
   .sidebar-tools-menu { display: block; }
   .work-tool-panel { top: 0; }
 }
+
+/* ─── 52단계: Claude 한도 막대 (사이드바 아래) ─── */
+.usage-bars {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 26px;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.usage-bars:hover {
+  color: var(--fg);
+  background: var(--raised);
+}
+.usage-bars-name {
+  flex: none;
+}
+.usage-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+.usage-bar-label,
+.usage-bar-value {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.usage-bar-track {
+  flex: 1;
+  min-width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.usage-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--running);
+}
+.usage-bar.warn .usage-bar-fill {
+  background: var(--waiting);
+}
+.usage-bar.warn .usage-bar-value {
+  color: var(--waiting);
+}
+.usage-bar.danger .usage-bar-fill {
+  background: var(--danger);
+}
+.usage-bar.danger .usage-bar-value {
+  color: var(--danger);
+  font-weight: 600;
+}

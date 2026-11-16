@@ -5,6 +5,7 @@ import { isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand 
 import { commandForKey } from './keyboard'
 import { notifyKind } from '../shared/notify'
 import { agentLabel } from '../shared/agent-hooks'
+import { USAGE_LABEL, formatResetIn, type UsageMap } from '../shared/usage'
 import type { PaletteItem } from '../shared/palette'
 import { cleanExit } from '../shared/pty'
 import { cwdLike } from '../shared/cwd'
@@ -469,6 +470,24 @@ export function App() {
       clearTimeout(t)
     }
   }, [loadedOnce])
+
+  // 52단계: Claude 한도 — 처음 값 · 바뀔 때마다. 90% 를 새로 넘은 창(초기화 시각마다 한 번)은 알린다
+  const [usage, setUsage] = useState<UsageMap>({})
+  useEffect(() => {
+    let alive = true
+    void window.taskminal.usage.get().then(
+      (m) => alive && setUsage(m),
+      () => {},
+    )
+    const off = window.taskminal.usage.onChange((m, crossed) => {
+      setUsage(m)
+      for (const c of crossed) new Notification(`Claude ${USAGE_LABEL[c.key]} 한도 ${Math.round(c.used)}%`, { body: formatResetIn(c.resetsAt, Date.now()) })
+    })
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
 
   // 51단계: 터미널에서 띄운 claude · codex 의 훅 사건
   useEffect(() => window.taskminal.pty.onAgent((paneId, sig) => updateActivityRef.current(paneId, { type: 'agent', agent: sig.agent, phase: sig.phase })), [])
@@ -1910,6 +1929,8 @@ export function App() {
             return r ? (r.state.kind === 'up' ? 'up' : r.state.kind === 'down' ? 'down' : 'retry') : null
           }}
           onOpenArchive={() => sidebarAction(() => runCommandRef.current('archive-open'))}
+          usage={usage}
+          onUsage={() => sidebarAction(() => runCommandRef.current('accounts'))}
           onWeekly={() => sidebarAction(() => runCommandRef.current('weekly'))}
           suggestArchive={suggestions}
           onArchiveMany={(ids) => sidebarAction(() => archive(ids))}

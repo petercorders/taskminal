@@ -59,6 +59,8 @@ export const IPC = {
   ptyAttach: 'pty:attach', // invoke(paneId) → PtyAttachResult — 셸 지킴이에 남은 셸에 다시 붙기 (16단계)
   ptyAgent: 'pty:agent', // main → renderer (paneId, AgentSignal) — 터미널에서 띄운 claude · codex 의 훅 사건 (51단계)
   ptyAgents: 'pty:agents', // invoke → { paneId: AgentSignal } — 창 새로 고침 · 앱 재시작 뒤 기록 파일의 마지막 사건
+  usageGet: 'usage:get', // invoke → UsageMap — 계정별 Claude 한도 마지막 값 (52단계)
+  usageChanged: 'usage:changed', // main → renderer (UsageMap, UsageCrossed[]) — 보이는 값이 바뀔 때만
   sshHosts: 'ssh:hosts', // invoke → ~/.ssh/config 의 Host 이름들 (25단계, 읽기만)
   hostView: 'host:view', // invoke → HostView / main → renderer: 바뀔 때마다
   hostSessions: 'host:sessions', // invoke(clearUnseen) → SessionInfo[]

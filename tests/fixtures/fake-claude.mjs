@@ -7,6 +7,11 @@ import { createInterface } from 'node:readline'
 const args = process.argv.slice(2)
 const log = (o) => process.env.FAKE_CLAUDE_LOG && appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify(o) + '\n')
 log({ argv: args, cwd: process.cwd() })
+// 52단계: 계정 화면의 `claude auth status --json` — 로그인됨으로 답하고 끝난다
+if (args[0] === 'auth' && args[1] === 'status') {
+  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }) + '\n')
+  process.exit(0)
+}
 
 const resumeAt = args.indexOf('--resume')
 // 22단계: --fork-session 이면 갈라진 새 세션 id (스파이크 tests/fixtures/claude/fork.jsonl)
@@ -62,6 +67,25 @@ function turn(text, images = 0) {
   }
   if (trigger.includes('secret')) {
     assistant([{ type: 'text', text: '키는 sk-ant-api03-FAKEFAKEFAKEFAKEFAKEFAKEFAKE0123456789 이에요' }])
+    result()
+    return
+  }
+  // 52단계: 한도 사건 — 'usage 25 92' 면 5시간 25% · 주간 92% (스파이크로 받은 모양, 허용 상태)
+  if (trigger.includes('usage')) {
+    const [five, week] = (text.match(/usage (\d+) (\d+)/) ?? []).slice(1).map(Number)
+    const now = Math.floor(Date.now() / 1000)
+    out({
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        unifiedWindows: {
+          five_hour: { utilization: (five ?? 10) / 100, resetsAt: now + 2 * 3600, status: 'allowed' },
+          seven_day: { utilization: (week ?? 20) / 100, resetsAt: now + 3 * 86400, status: 'allowed_warning' },
+        },
+      },
+      session_id: sessionId,
+    })
+    assistant([{ type: 'text', text: '한도 알림 보냄' }])
     result()
     return
   }
