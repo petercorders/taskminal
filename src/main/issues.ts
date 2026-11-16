@@ -3,7 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import type { IssueRecord, IssueProvider, IssuePage, IssueLink, IssuePrepare } from '../shared/issues'
+import type { IssueRecord, IssueProvider, IssuePage, IssueLink, IssuePrepare, IssueAttach } from '../shared/issues'
 import { ISSUE_TASK_DELETED } from '../shared/issues'
 import { redact } from '../shared/redact'
 import { AtomicJournal } from './atomic-journal'
@@ -17,14 +17,18 @@ interface Deps {
   exists(taskId: string): boolean
   gh?(args: string[]): Promise<unknown>
   linear?(query: string, variables: Record<string, unknown>): Promise<any>
+  /** 기존 일감에 연결할 때 링크에 남길 일감 폴더 (55단계) */
+  cwd?(taskId: string): string | undefined
+  /** Jira 읽기 (55단계) — 목록 · 이슈 하나 */
+  jira?: { list(jql: string): Promise<IssuePage>; issue(id: string): Promise<IssueRecord> }
 }
 const key = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
 const validInput = (v: unknown): v is IssuePrepare => {
   if (!v || typeof v !== 'object') return false
   const i = v as IssuePrepare
-  return key(i.requestId) && ['github', 'linear'].includes(i.provider) && typeof i.id === 'string' && i.id.length <= 100 && typeof i.source === 'string' && i.source.length <= 256 && typeof i.root === 'string' && i.root.length > 0 && i.root.length <= 4096 && !i.root.includes('\0') && typeof i.worktree === 'boolean' && typeof i.base === 'string' && i.base.length <= 256 && !i.base.includes('\0')
+  return key(i.requestId) && ['github', 'linear', 'jira'].includes(i.provider) && typeof i.id === 'string' && i.id.length <= 100 && typeof i.source === 'string' && i.source.length <= 256 && typeof i.root === 'string' && i.root.length > 0 && i.root.length <= 4096 && !i.root.includes('\0') && typeof i.worktree === 'boolean' && typeof i.base === 'string' && i.base.length <= 256 && !i.base.includes('\0')
 }
-const record = (v: unknown): v is IssueRecord => !!v && typeof v === 'object' && ['github', 'linear'].includes((v as IssueRecord).provider) && ['id', 'key', 'title', 'body', 'url', 'state'].every(k => typeof (v as unknown as Record<string, unknown>)[k] === 'string')
+const record = (v: unknown): v is IssueRecord => !!v && typeof v === 'object' && ['github', 'linear', 'jira'].includes((v as IssueRecord).provider) && ['id', 'key', 'title', 'body', 'url', 'state'].every(k => typeof (v as unknown as Record<string, unknown>)[k] === 'string') && ((v as IssueRecord).due === undefined || typeof (v as IssueRecord).due === 'string')
 const valid = (v: unknown): v is Journal => !!v && typeof v === 'object' && Array.isArray((v as Journal).links) && Array.isArray((v as Journal).receipts) && (v as Journal).links.length <= 1000 && (v as Journal).receipts.length <= 1000 && (v as Journal).links.every(l => l && key(l.taskId) && typeof l.root === 'string' && record(l.issue) && (l.prUrl === undefined || typeof l.prUrl === 'string')) && (v as Journal).receipts.every(r => r && key(r.taskId) && validInput(r.input) && record(r.issue) && typeof r.root === 'string' && typeof r.done === 'boolean')
 const source = (v: string) => {
   if (typeof v !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(v) || v.split('/').some(p => p === '.' || p === '..')) throw new Error('GitHub 저장소를 owner/repo 형식으로 적어 주세요')
@@ -110,12 +114,23 @@ export class Issues {
       if (!Array.isArray(rows) || rows.length > 100) throw new Error('이슈 목록 형식')
       return { items: rows.filter(r => !r.pull_request).map(r => this.githubIssue(repo, r)), ...(rows.length === 50 ? { cursor: String(Number(page) + 1) } : {}) }
     }
+    if (provider === 'jira') {
+      // Jira 는 한 번에 상한까지 읽는다 — 커서를 받지 않는다
+      if (!this.d.jira || cursor !== undefined) throw new Error('Jira 목록 요청을 확인해 주세요')
+      return this.d.jira.list(from)
+    }
     if (provider !== 'linear' || typeof from !== 'string' || !/^[-\w]{0,50}$/.test(from) || cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 512)) throw new Error('제공자와 팀을 확인해 주세요')
     const data = await this.linear('query Issues($after:String,$filter:IssueFilter){issues(first:50,after:$after,filter:$filter){nodes{id identifier title description url state{name type}}pageInfo{hasNextPage endCursor}}}', { after: cursor ?? null, filter: from ? { team: { key: { eq: from } } } : {} })
     if (!Array.isArray(data?.issues?.nodes) || data.issues.nodes.length > 100 || typeof data.issues.pageInfo?.hasNextPage !== 'boolean') throw new Error('Linear 목록 형식')
     return { items: data.issues.nodes.map((r: any) => this.linearIssue(r)), ...(data.issues.pageInfo.hasNextPage ? { cursor: data.issues.pageInfo.endCursor } : {}) }
   }
   private async get(provider: IssueProvider, from: string, id: string): Promise<IssueRecord> {
+    if (provider === 'jira') {
+      if (!this.d.jira || !/^\d{1,20}$/.test(id)) throw new Error('Jira 이슈 번호를 확인해 주세요')
+      const result = await this.d.jira.issue(id)
+      if (result.provider !== 'jira' || result.id !== id) throw new Error('요청한 이슈와 응답 번호가 다릅니다')
+      return result
+    }
     if (provider === 'github') {
       if (!/^[1-9]\d{0,9}$/.test(id)) throw new Error('이슈 번호를 확인해 주세요')
       const result = this.githubIssue(source(from), await this.gh([`repos/${source(from)}/issues/${id}`]))
@@ -171,6 +186,23 @@ export class Issues {
     this.persist({ links: this.data.links.filter(l => l.taskId !== receipt!.taskId).concat(link), receipts: this.data.receipts.map(r => r.input.requestId === input.requestId ? { ...r, done: true } : r) })
     return structuredClone(link)
   }
+  /** 기존 일감에 이슈 연결 — 같은 일감 · 같은 이슈는 한 번만, 다시 읽는 사이 일감이 사라지면 막는다 (55단계) */
+  attach(input: IssueAttach): Promise<IssueLink> {
+    this.ready()
+    if (!input || typeof input !== 'object' || !key(input.requestId) || !['github', 'linear', 'jira'].includes(input.provider) || typeof input.id !== 'string' || input.id.length > 100 || typeof input.source !== 'string' || input.source.length > 256 || !key(input.taskId)) return Promise.reject(new Error('연결할 이슈와 일감을 확인해 주세요'))
+    const target = { provider: input.provider, id: input.id, source: input.source, taskId: input.taskId }
+    const gone = () => new Error(ISSUE_TASK_DELETED + ' 연결할 일감이 사라졌어요. 다른 일감을 골라 주세요')
+    return this.enqueue(async () => {
+      if (!this.d.exists(target.taskId)) throw gone()
+      const same = this.data.links.find(l => l.taskId === target.taskId && l.issue.provider === target.provider && l.issue.id === target.id)
+      if (same) return structuredClone(same)
+      const issue = await this.get(target.provider, target.source, target.id)
+      if (!this.d.exists(target.taskId)) throw gone()
+      const link: IssueLink = { taskId: target.taskId, root: this.d.cwd?.(target.taskId) ?? '', issue }
+      this.persist({ ...this.data, links: this.data.links.filter(l => l.taskId !== target.taskId).concat(link) })
+      return structuredClone(link)
+    })
+  }
   linkPr(taskId: string, url: string): Promise<void> {
     return this.enqueue(() => {
       const link = this.data.links.find(l => l.taskId === taskId)
@@ -185,6 +217,8 @@ export class Issues {
     return this.enqueue(async () => {
       const link = this.data.links.find(l => l.taskId === taskId)
       if (!link || !this.d.exists(taskId)) throw new Error('연결 일감이 사라졌어요')
+      // 55단계 Jira 는 읽기만 — 상태 전환은 Jira 에서
+      if (link.issue.provider === 'jira') throw new Error('[jira] Jira 이슈 상태는 Jira 에서 바꿔 주세요')
       let issue: IssueRecord
       if (link.issue.provider === 'github') {
         const path = new URL(link.issue.url).pathname.slice(1), repo = path.toLowerCase().split('/issues/')[0]!

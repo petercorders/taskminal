@@ -205,6 +205,8 @@ export interface TaskminalApi {
   review: ReviewApi
   /** taskminal 명령 (24단계) — main 이 묻는 화면 쪽 일 */
   cli: CliApi
+  /** 55단계 Jira 읽기 연동 */
+  jira: import('../shared/jira').JiraApi
 }
 
 export interface CliApi {
