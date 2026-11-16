@@ -780,7 +780,8 @@ select {
   align-items: flex-start;
   padding-top: 10vh;
   background: #00000066;
-  z-index: 10;
+  /* 56단계: 옆 패널(.work-tool-panel 12) · 설정(30) 위, 대화상자(40) · 메뉴(50) 아래 — 팔레트가 패널 밑에 깔렸다 */
+  z-index: 35;
 }
 .palette {
   width: 620px;
@@ -3164,6 +3165,12 @@ input[type='checkbox'] {
   border-radius: var(--r-md);
   padding: var(--space-1) 0;
   font: inherit;
+  /* 56단계: 넣은 초안이 2줄 칸에 갇히지 않게 내용만큼 자란다 — 16줄 · 창 높이 40% 까지, 넘으면 칸 안에서 스크롤 */
+  field-sizing: content;
+  line-height: 1.45;
+  min-height: calc(2lh + 2 * var(--space-1));
+  max-height: min(40vh, calc(16lh + 2 * var(--space-1)));
+  overflow-y: auto;
 }
 .chat-input:focus {
   outline: none;

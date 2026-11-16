@@ -727,16 +727,25 @@ export function ChatPane(p: Props) {
         {loaded && events.length === 0 && !p.workflowRunId && (
           <div className="chat-empty" data-testid="chat-empty">
             <div className="chat-empty-title">{name} 와 대화를 시작해요</div>
-            <div className="dim" title={p.cwd}>
-              이 일감 폴더(<code>{shortPath(p.cwd)}</code>)에서 일해요. 예시를 눌러도 돼요.
-            </div>
-            <div className="chat-examples">
-              {EXAMPLES.map((x, i) => (
-                <button key={x} type="button" onClick={() => send(x)}>
-                  <span className="chat-ask-key">{i + 1}</span> {x}
-                </button>
-              ))}
-            </div>
+            {/* 56단계: 넣어 둔 초안이 있으면 예시를 숨긴다 — 예시를 누르면 초안이 아닌 다른 글이 나갔다 */}
+            {text.trim() || images.length > 0 ? (
+              <div className="dim" data-testid="chat-draft-note">
+                입력칸의 글({text.split('\n').length}줄{images.length > 0 ? ` · 그림 ${images.length}` : ''})을 확인하고 고친 뒤 ↩ 로 보내요.
+              </div>
+            ) : (
+              <>
+                <div className="dim" title={p.cwd}>
+                  이 일감 폴더(<code>{shortPath(p.cwd)}</code>)에서 일해요. 예시를 눌러도 돼요.
+                </div>
+                <div className="chat-examples">
+                  {EXAMPLES.map((x, i) => (
+                    <button key={x} type="button" onClick={() => send(x)}>
+                      <span className="chat-ask-key">{i + 1}</span> {x}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="dim small">⌘J 셸 · ⌘V 로 그림 붙이기 · ‘TUI 로’ 단추로 같은 대화를 터미널 화면에서</div>
           </div>
         )}

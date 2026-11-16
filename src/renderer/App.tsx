@@ -1328,6 +1328,28 @@ export function App() {
     measure()
     return () => observer.disconnect()
   }, [workTool, state.activeTaskId])
+  // 56단계: 옆 패널 Esc — 패널을 열거나 종류가 바뀌면 포커스를 패널로(도구 단추를 누른 직후의 Esc 가 닿게).
+  // 안쪽 칸이 스스로 가져간 포커스는 둔다(자식 effect 가 먼저 돈다).
+  const workToolPanel = useRef<HTMLElement>(null)
+  const workToolShown = !!workTool && (workTool.kind === 'accounts' || workTool.kind === 'remote' || workTool.taskId === activeTask?.id)
+  useEffect(() => {
+    const el = workToolPanel.current
+    if (workToolShown && el && !el.contains(document.activeElement)) el.focus({ preventScroll: true })
+  }, [workToolShown, workTool?.kind, workTool?.taskId])
+  /** 입력칸 · 편집기 안의 Esc 는 쓰던 것을 두고 패널로 포커스만(한 번 먹는다), 아니면 닫기 단추와 같다.
+   *  안쪽 대화상자 · 메뉴는 Esc 에 preventDefault 하고, 터미널(xterm)은 Esc 를 스스로 먹는다 */
+  const onWorkToolKey = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.nativeEvent.isComposing) return
+    const target = e.target as HTMLElement
+    if (target.closest('.xterm')) return
+    e.preventDefault()
+    if (target !== e.currentTarget && target.closest('textarea, select, [contenteditable="true"], .cm-editor, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])')) {
+      e.currentTarget.focus({ preventScroll: true })
+      return
+    }
+    setWorkTool(null)
+    refocus()
+  }
   const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null || agentSessionsFor !== null
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
@@ -2062,7 +2084,7 @@ export function App() {
             {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'issues'})}}>이슈 연결</button>}
           </nav>
           {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
-          {workTool && (workTool.kind==='accounts'||workTool.kind==='remote'||activeTask?.id===workTool.taskId) && <aside className="work-tool-panel" aria-label="작업 보조 화면">
+          {workTool && workToolShown && <aside ref={workToolPanel} tabIndex={-1} className="work-tool-panel" aria-label="작업 보조 화면" onKeyDown={onWorkToolKey}>
             <header className="work-tools-row"><strong>{workTool.kind==='development'?'환경·확장':workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':workTool.kind==='issues'?'이슈 연결':workTool.kind==='remote'?'원격 작업 공간':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
               {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd}/>}
