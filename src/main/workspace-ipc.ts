@@ -14,6 +14,8 @@ import { GitWorkflowService } from './git-workflow'
 import { validGitTarget, validWorkflowOptions } from '../shared/git-workflow'
 import { Accounts } from './accounts'
 import { ConversationSearch } from './conversation-search'
+import { AgentSessions, sessionRoots } from './agent-sessions'
+import { resumeCommand, type AgentSessionOpen } from '../shared/agent-sessions'
 import { openTextEditor } from './text-editor'
 import { WorkspaceEditor } from './workspace-editor'
 
@@ -63,6 +65,21 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   }
   ipcMain.handle(IPC.conversationsSearch,(e,q)=>{win(e);return conversations.search(q)})
   ipcMain.handle(IPC.conversationsVerify,(e,hit)=>{win(e);return conversations.verify(hit)})
+  // 53단계: 밖에서 시작한 세션 — 읽기 전용. 계정 목록 · 가리기 설정은 읽을 때마다 지금 값으로.
+  const agentSessions = new AgentSessions(() => {
+    let list: ReturnType<Accounts['list']> = []
+    try { list = accounts.list() } catch { /* 손상된 계정 기록 — 기본 계정 폴더만 */ }
+    return sessionRoots(process.env, homedir(), list, join(app.getPath('userData'), 'accounts'))
+  }, secretOptions)
+  ipcMain.handle(IPC.agentSessionsList, (e) => { win(e); return agentSessions.list() })
+  ipcMain.handle(IPC.agentSessionsOpen, async (e, request): Promise<AgentSessionOpen> => {
+    win(e)
+    const t = await agentSessions.target(request)
+    accounts.bindTo(t.paneId, t.agent, t.account)
+    if (t.how === 'chat') return t
+    const bin = t.agent === 'codex' ? process.env['TASKMINAL_CODEX_TUI'] || 'codex' : process.env['TASKMINAL_CLAUDE_TUI'] || 'claude'
+    return { ...t, command: resumeCommand(t.agent, t.sessionId, accounts.tuiCommand(t.paneId, t.agent, true, bin)) }
+  })
   ipcMain.handle(IPC.accountsList, (e) => {
     win(e)
     return accounts.list()

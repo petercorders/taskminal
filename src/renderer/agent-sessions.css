@@ -1,0 +1,19 @@
+/* 53단계 에이전트 세션 패널 — 간격은 --space-* 척도, 글자 12px 이상 */
+.dialog.agent-sessions { width: min(720px, calc(100vw - var(--space-8))); }
+.agent-sessions-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); }
+.agent-sessions-head-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.agent-sessions-hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.agent-sessions-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
+.agent-sessions-blocked { color: var(--fg); font-size: 13px; line-height: 1.5; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised); }
+.agent-sessions-status, .agent-session-meta { color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-sessions-error { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-sessions-list { display: flex; flex-direction: column; gap: var(--space-2); list-style: none; padding: 0; margin: 0; min-width: 0; }
+.agent-session { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); min-width: 0; }
+.agent-session-text { display: flex; flex-direction: column; gap: var(--space-1); flex: 1 1 240px; min-width: 0; }
+.agent-session-summary { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-session-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.agent-session-actions .button, .agent-sessions-head-actions .button { display: inline-flex; align-items: center; gap: var(--space-1); }
+.agent-session-actions .button:disabled, .agent-sessions-head-actions .button:disabled { cursor: wait; }
+.agent-session-actions .button:focus-visible, .agent-sessions-head-actions .button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--space-half); }
+.agent-session-connecting { flex-basis: 100%; color: var(--fg); font-size: 13px; }
+.agent-session > .agent-sessions-error { flex-basis: 100%; }

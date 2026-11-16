@@ -12,6 +12,9 @@ export const IPC = {
   workflowsAppend:'workflows:append',workflowsMessage:'workflows:message',workflowsAnswer:'workflows:answer',workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
   conversationsSearch: 'conversations:search',
   conversationsVerify: 'conversations:verify',
+  /** 53단계 밖에서 시작한 에이전트 세션 — 목록 · 이어 하기 대상(경로 없이 id) */
+  agentSessionsList: 'agent-sessions:list',
+  agentSessionsOpen: 'agent-sessions:open',
   accountsList: 'accounts:list',
   accountsTui: 'accounts:tui',
   accountsAdd: 'accounts:add',

@@ -381,6 +381,14 @@ export function addChatTab(task: Task, newId: NewId, agent: ChatAgent = 'claude'
   return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: chatPane(paneId, activePaneCwd(task), agent) } }
 }
 
+/** 53단계 '대화로 이어 하기' — 새 탭에 밖에서 시작한 세션을 이어 할 대화 pane (세션 폴더에서, 첫 보내기가 resume) */
+export function addResumedChatTab(task: Task, newId: NewId, agent: ChatAgent, sessionId: string, cwd: string, title?: string): Task {
+  const tabId = newId()
+  const paneId = newId()
+  const tab: Tab = { id: tabId, ...(title ? { title } : {}), layout: { type: 'pane', paneId }, activePaneId: paneId }
+  return { ...task, tabs: [...task.tabs, tab], activeTabId: tabId, panes: { ...task.panes, [paneId]: { id: paneId, cwd, kind: 'chat', chat: { agent, sessionId } } } }
+}
+
 /**
  * 셸 꺼내기 ⌘J (26단계) — 대화 중심 일감에서 셸은 숨겨 두고 필요할 때 꺼낸다.
  * 활성 탭에 터미널 pane 이 없으면 활성 pane 아래로 나눠 셸(일감 폴더) · 있으면 그 셸로 · 이미 셸에 있으면 대화 pane 으로 돌아간다.

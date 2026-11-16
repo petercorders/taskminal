@@ -162,6 +162,8 @@ export interface TaskminalApi {
   development: import('../shared/development-tools').DevelopmentApi
   workflows: import('../shared/workflows').WorkflowApi
   conversations: import('../shared/conversation-search').ConversationApi
+  /** 53단계 밖에서 시작한 에이전트 세션 */
+  agentSessions: import('../shared/agent-sessions').AgentSessionsApi
   accounts: import('../shared/accounts').AccountsApi
   workspace: import('../shared/workspace').WorkspaceApi
   gitWorkflow: import('../shared/git-workflow').GitWorkflowApi
