@@ -301,6 +301,13 @@ export class Accounts {
       l.output += '\n로그인을 중단했어요. 이미 완료된 인증은 유지될 수 있어요.'
     }
   }
+  /** 53단계: 밖에서 시작한 세션을 이어 할 새 pane 을 그 세션의 계정에 묶는다(이어 하기는 같은 계정 폴더에서만 세션을 찾는다) */
+  bindTo(pane: string, agent: ChatAgent, accountId: string) {
+    const a = this.account(accountId)
+    if (a.agent !== agent) throw new Error('계정과 에이전트가 맞지 않아요')
+    this.data.bindings[`${agent}:${pane}`] = accountId
+    this.save()
+  }
   dispose() {
     for (const l of this.logins.values()) if (l.running) l.child?.kill()
     for (const child of this.queries) child.kill()

@@ -103,6 +103,7 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         item('history'),
         item('resume-show'),
         item('notes'),
+        item('agent-sessions'),
         { type: 'separator' },
         item('shell-toggle'),
         item('chat-terminal'),

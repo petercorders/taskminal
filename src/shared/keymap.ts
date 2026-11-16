@@ -22,6 +22,8 @@ export const SHORTCUTS = [
   { command: 'prev-task', accel: 'Alt+Command+Up', label: '이전 일감' },
   { command: 'next-attention', accel: 'Shift+Command+A', label: '다음 확인 필요' },
   { command: 'conversation-search', accel: '', label: '대화 기록 찾기' },
+  // 53단계: 밖에서 시작한 Claude · Codex 세션 기록 · 이어 하기
+  { command: 'agent-sessions', accel: '', label: '에이전트 세션' },
   { command: 'workflows', accel: '', label: '작업 흐름' },
   { command: 'schedules', accel: '', label: '예약과 결과함' },
   { command: 'worktrees', accel: '', label: '워크트리 관리' },
