@@ -73,6 +73,17 @@ describe('AgentEvents', () => {
     expect(got.at(-1)).toEqual(['p1', { agent: 'claude', phase: 'permission', at: 200000 }])
   })
 
+  it('끝 쪽만 읽을 때 잘린 첫 줄은 사건으로 세지 않는다 — 잘린 자리가 우연히 사건 줄 모양이어도', () => {
+    make(512)
+    const f = ev.fileFor('p1')!
+    // 줄 전체는 'garbage-v1⇥…' 라 사건이 아니지만, 끝 512바이트가 'v1' 에서 시작하면 잘린 조각은 사건 줄처럼 보인다
+    const looksLike = line(7, 'PermissionRequest')
+    appendFileSync(f, 'garbage-' + looksLike + 'n'.repeat(512 - looksLike.length - 1) + '\n')
+    ev.poll('p1')
+    expect(got).toEqual([])
+    expect(ev.last()).toEqual({})
+  })
+
   it('pane 을 잊으면 파일 · 기억을 지우고, 상태에 없는 pane 의 파일도 지운다', () => {
     make()
     for (const p of ['p1', 'p2', 'p3']) appendFileSync(ev.fileFor(p)!, line(1, 'Stop'))
