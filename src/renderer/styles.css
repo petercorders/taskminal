@@ -4657,6 +4657,18 @@ input[type='checkbox'] {
 .workspace { position: relative; flex-direction: column; min-height: 0; }
 .workspace-toolbar, .work-tools-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
 .workspace-toolbar { min-height: var(--head-h); padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+/* 56단계: 이 일감 도구 · 앱 도구 두 묶음 — 앱 묶음은 오른쪽 끝 */
+.toolbar-group { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.toolbar-group-app { margin-left: auto; }
+/* 영문만 든 단추(GitHub PR·push)는 한글 대체 글꼴의 줄 상자가 없어 1px 낮았다 — 줄 높이에 맞춘다 */
+.toolbar-group > .button { min-height: var(--row-h); }
+/* 56단계: 찾기 네 화면 머리의 '찾을 곳' 줄 */
+.find-switch { display: flex; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; flex-shrink: 0; }
+.find-switch .seg { flex: 1; border: 0; background: none; color: var(--muted); padding: var(--space-1) var(--space-2); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.find-switch .seg + .seg { border-left: 1px solid var(--line); }
+.find-switch .seg:hover { color: var(--fg); }
+.find-switch .seg.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.global-find > .find-switch { margin: 0 var(--space-3) var(--space-2); }
 .sidebar-overview { margin: var(--space-2) var(--space-4); text-align: left; }
 .overview { flex: 1; overflow: auto; padding: var(--space-5); min-height: 0; }
 .overview-header, .overview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
@@ -4742,7 +4754,7 @@ input[type='checkbox'] {
 .compact-tools-select { display: none; }
 @media (max-width: 520px) {
   .workspace-toolbar { display: flex; flex-wrap: nowrap; padding: var(--space-1) var(--space-2); }
-  .workspace-toolbar > .button:not(.compact-sidebar-toggle):not(.compact-overview) { display: none; }
+  .workspace-toolbar > .button:not(.compact-sidebar-toggle):not(.compact-overview), .workspace-toolbar > .toolbar-group { display: none; }
   .compact-tools-select { display: block; min-width: 0; max-width: 40%; }
   .work-tool-panel { top: calc(var(--head-h) + var(--space-2)); }
 }

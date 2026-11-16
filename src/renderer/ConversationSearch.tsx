@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { Task } from '../shared/types'
 import type { ConversationHit, ConversationQuery, ConversationResult } from '../shared/conversation-search'
 import { Modal } from './Modal'
+import { FindSwitch } from './work-tools-ui'
+import type { FindKind } from '../shared/work-tools'
 import './conversation-search.css'
 
 interface Props {
@@ -9,9 +11,12 @@ interface Props {
   activeTaskId: string | null
   onOpen(hit: ConversationHit, signal: AbortSignal): Promise<void> | void
   onClose(): void
+  /** 56단계: 다른 찾기 화면에서 가져온 검색어 · 찾는 곳 바꾸기 */
+  initialQuery?: string
+  onSwitch?(kind: FindKind, query: string): void
 }
 
-export function ConversationSearch({ tasks, activeTaskId, onOpen, onClose }: Props) {
+export function ConversationSearch({ tasks, activeTaskId, onOpen, onClose, initialQuery, onSwitch }: Props) {
   const titleId = useId()
   const input = useRef<HTMLInputElement>(null)
   const generation = useRef(0)
@@ -19,7 +24,7 @@ export function ConversationSearch({ tasks, activeTaskId, onOpen, onClose }: Pro
   const opening = useRef(false)
   const pendingOpen=useRef<AbortController|null>(null)
   const cancel=()=>{pendingOpen.current?.abort();onClose()}
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialQuery ?? '')
   const [taskId, setTaskId] = useState('')
   const [agent, setAgent] = useState<ConversationQuery['agent']>()
   const [archived, setArchived] = useState(false)
@@ -83,7 +88,8 @@ export function ConversationSearch({ tasks, activeTaskId, onOpen, onClose }: Pro
   }
 
   return <Modal role="dialog" labelledBy={titleId} className="conversation-search" onCancel={cancel}>
-    <div className="conversation-search-head"><h1 id={titleId}>대화 찾기</h1><button type="button" className="button" onClick={cancel}>닫기</button></div>
+    <div className="conversation-search-head"><h1 id={titleId}>대화 기록 찾기</h1><button type="button" className="button" onClick={cancel}>닫기</button></div>
+    <FindSwitch current="conversation" query={text} {...(onSwitch ? { onSwitch } : {})} />
     <label className="field"><span>검색어</span><input ref={input} type="search" value={text} maxLength={500} placeholder="대화 내용 검색" onChange={(e) => { invalidate(); setText(e.target.value) }} /></label>
     <div className="conversation-search-filters">
       <label className="field"><span>일감</span><select value={taskId} onChange={(e) => { invalidate(); setTaskId(e.target.value) }}>

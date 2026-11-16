@@ -69,7 +69,7 @@ test('확인 중 파일이 바뀌면 자동 첨부하지 않고 다시 확인하
   await expect(win.getByRole('alert')).toContainText('파일이 바뀌었어요')
 })
 test('내장 웹은 앱 API가 없고 금지 주소·모달 가림·페이지 닫기를 지킨다', async () => {
-  await win.getByRole('button', { name: '브라우저', exact: true }).click()
+  await win.getByRole('button', { name: '내장 브라우저', exact: true }).click()
   await win.getByRole('textbox', { name: '브라우저 주소' }).fill(url)
   await win.getByRole('button', { name: '열기', exact: true }).click()
   await expect.poll(() => win.evaluate(() => window.taskminal.workspace.browserState('t'))).toMatchObject({ title: 'Local Preview', loading: false })
@@ -209,7 +209,7 @@ test('PDF는 로컬 worker에서 페이지를 그리고 파일 참조 첨부임�
   await expect(win.getByTestId('chat-input')).toHaveValue(/파일 참조 \(내용 미전달\)/)
 })
 test('요소 선택은 입력값을 제외한 자료로 확인되며 모달과 확대에서 네이티브 뷰가 가리지 않는다', async () => {
-  await win.getByRole('button', { name: '브라우저', exact: true }).click()
+  await win.getByRole('button', { name: '내장 브라우저', exact: true }).click()
   await win.getByRole('textbox', { name: '브라우저 주소' }).fill(url)
   await win.getByRole('button', { name: '열기', exact: true }).click()
   await expect.poll(() => win.evaluate(() => window.taskminal.workspace.browserState('t'))).toMatchObject({ title: 'Local Preview' })
@@ -303,7 +303,7 @@ test('GitHub PR 입력을 보존하며 병합 전에 대상 PR·브랜치·커�
     })
     ipcMain.handle('git-workflow:merge', () => ({ state: 'changed', message: 'PR 커밋이 바뀌었어요. 다시 확인해 주세요.' }))
   }, dir)
-  await win.getByRole('button', { name: 'GitHub', exact: true }).click()
+  await win.getByRole('button', { name: 'GitHub PR·push', exact: true }).click()
   await win.getByRole('textbox', { name: 'PR 제목', exact: true }).fill('기능 개선')
   await win.getByRole('textbox', { name: 'PR 본문', exact: true }).fill('검증한 변경')
   await win.getByRole('button', { name: 'PR 만들기', exact: true }).click()

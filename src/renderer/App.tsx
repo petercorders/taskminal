@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { applyActivity, formatDuration, taskActivity, type ActivityEvent, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
-import { isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand } from '../shared/keymap'
+import { accelLabel, isAppCommand, repeatable, shortcutTable, stepFontSize, type AppCommand } from '../shared/keymap'
+import { FIND_TOOLS, WORK_TOOLS, commandLabel, toolBlocked, toolByCommand, toolByKind, type FindKind, type WorkToolKind } from '../shared/work-tools'
+import { WorkToolOptions } from './work-tools-ui'
 import { commandForKey } from './keyboard'
 import { notifyKind } from '../shared/notify'
 import { agentLabel } from '../shared/agent-hooks'
@@ -217,7 +219,11 @@ export function App() {
   // 55단계: 사이드바 · 일감 머리의 Jira 키 · 마감 — 앱을 열 때 한 번, 이슈 패널이 읽을 때마다 갱신
   const issueLinks = useIssueLinks()
   useEffect(() => { loadIssueLinks(window.taskminal.issues) }, [])
-  const [workTool,setWorkTool] = useState<{taskId:string;kind:'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';url?:string;runId?:string}|null>(null)
+  const [workTool,setWorkTool] = useState<{taskId:string;kind:WorkToolKind;url?:string;runId?:string}|null>(null)
+  // 56단계: 위 도구 줄의 '일감 도구 ▾' · '찾기 ▾' 메뉴와, 찾는 곳을 바꿀 때 가져가는 검색어
+  const [toolMenu,setToolMenu] = useState<{kind:'task'|'find';x:number;y:number}|null>(null)
+  const toolMenuTrigger = useRef<HTMLButtonElement|null>(null)
+  const [findSeed,setFindSeed] = useState<{kind:FindKind;query:string}|null>(null)
   const workToolRef=useRef(workTool)
   workToolRef.current=workTool
   // 설정을 열 때 보일 칸 (⌘P '셸 지킴이 보기' 등) — 닫으면 지운다
@@ -1008,7 +1014,7 @@ export function App() {
       case 'notes':
         return setNotesOpen({ taskId, signal: Date.now() })
       case 'history':
-        return setHistoryOpen({ signal: Date.now() })
+        return openFind('history')
     }
   }
   const resumeReopen = (taskId: string) => {
@@ -1622,6 +1628,44 @@ export function App() {
     return best
   }
 
+  /** 56단계: 찾기 네 곳을 여는 한 길. query 가 있으면(찾는 곳 바꾸기) 다른 찾기 화면을 닫고 그 검색어로 연다 —
+   *  없으면 각 화면의 기본(모든 출력은 지난 검색어). 여는 길이 모두 여기를 지나 가져갈 검색어가 남지 않는다 */
+  const openFind = (kind: FindKind, query?: string) => {
+    if (query !== undefined) {
+      setConversationOpen(false)
+      setAgentSessionsFor(null)
+      setHistoryOpen(null)
+      setGlobalFind(false)
+    }
+    setFindSeed(query === undefined ? null : { kind, query })
+    if (kind === 'conversation') return setConversationOpen(true)
+    if (kind === 'sessions') return setAgentSessionsFor({ taskId: stateRef.current.activeTaskId })
+    if (kind === 'history') return setHistoryOpen({ signal: Date.now() })
+    if (query !== undefined) findMemo.current = { ...findMemo.current, query, selected: null }
+    setGlobalFind(true)
+  }
+  const seedFor = (kind: FindKind) => (findSeed?.kind === kind ? findSeed.query : undefined)
+  /** 좁은 창 · 사이드바 고르기 칸의 값(도구 kind · find-<kind>) */
+  const pickTool = (value: string) => {
+    const find = FIND_TOOLS.find((f) => `find-${f.kind}` === value)
+    if (find) return openFind(find.kind)
+    const tool = toolByKind(value)
+    if (tool) runCommand(tool.command)
+  }
+  const pickToolRef = useRef(pickTool)
+  pickToolRef.current = pickTool
+  const openToolMenu = (kind: 'task' | 'find', button: HTMLButtonElement) => {
+    toolMenuTrigger.current = button
+    const r = button.getBoundingClientRect()
+    setToolMenu({ kind, x: r.left, y: r.bottom + 2 })
+  }
+  const toolMenuItems = (kind: 'task' | 'find'): PopupItem[] =>
+    kind === 'task'
+      ? WORK_TOOLS.filter((t) => t.group === 'task' && !t.direct).map((t) => ({ label: commandLabel(t.command), disabled: toolBlocked(t, activeTask) !== null, run: () => runCommand(t.command) }))
+      : FIND_TOOLS.map((f) => {
+          const accel = shortcuts.find((s) => s.command === f.command)?.accel
+          return { label: commandLabel(f.command), ...(accel ? { key: accelLabel(accel) } : {}), run: () => openFind(f.kind) }
+        })
   const runCommand = (command: AppCommand, fromPalette = false) => {
     // 대화상자가 열려 있으면 뒤의 화면을 바꾸지 않는다 (⌘T 가 대화상자 뒤에서 탭을 만들지 않게)
     // 읽기가 끝나기 전에는 상태가 비어 있어 받지 않는다. 읽기에 실패한 실행(저장만 안 함)에서는 된다.
@@ -1632,40 +1676,29 @@ export function App() {
       dispatch({ type: 'settings/font', size: stepFontSize(state.settings.fontSize, how) })
     switch (command) {
       case 'conversation-search':
-        return setConversationOpen(true)
+        return openFind('conversation')
       case 'agent-sessions':
-        return setAgentSessionsFor({ taskId: state.activeTaskId })
+        return openFind('sessions')
       case 'overview':
         setWorkTool(null)
         return setOverviewOpen(true)
+      // 56단계: 옆 패널 도구는 한 목록(work-tools)의 막힘 규칙 — 막혔으면 열지 않고 이유를 알린다(전에는 조용히 무시하거나 빈 패널)
       case 'remote-workspace':
-        setOverviewOpen(false)
-        return setWorkTool({taskId:'',kind:'remote'})
       case 'accounts':
-        setOverviewOpen(false)
-        return setWorkTool({taskId:task?.id??'',kind:'accounts'})
       case 'issues':
-        if(!task||task.host)return
-        setOverviewOpen(false)
-        return setWorkTool({taskId:task.id,kind:'issues'})
       case 'worktrees':
-        if(!task||task.host)return
-        setOverviewOpen(false)
-        return setWorkTool({taskId:task.id,kind:'worktree'})
       case 'schedules':
-        if(!task||task.host)return
-        setOverviewOpen(false)
-        return setWorkTool({taskId:task.id,kind:'schedule'})
       case 'workflows':
-        if (!task || task.host) return
-        setOverviewOpen(false)
-        return setWorkTool({taskId:task.id,kind:'workflow'})
+      case 'development':
       case 'workspace-files':
       case 'workspace-browser':
-      case 'git-workflow':
-        if(!task)return
+      case 'git-workflow': {
+        const tool = toolByCommand(command)!
+        const blocked = toolBlocked(tool, task)
+        if (blocked) return showToast({ text: blocked })
         setOverviewOpen(false)
-        return setWorkTool({taskId:task.id,kind:command==='workspace-files'?'files':command==='workspace-browser'?'browser':'git'})
+        return setWorkTool({ taskId: tool.kind === 'remote' ? '' : task?.id ?? '', kind: tool.kind })
+      }
       case 'new-task':
         return setCreating({})
       case 'palette':
@@ -1697,9 +1730,9 @@ export function App() {
           setHistoryOpen(null)
           return refocus()
         }
-        return setHistoryOpen({ signal: Date.now() })
+        return openFind('history')
       case 'global-find':
-        return setGlobalFind(true)
+        return openFind('output')
       case 'history-clear':
         return setClearingHistory(true)
       case 'mask-toggle': {
@@ -2026,7 +2059,7 @@ export function App() {
         <Sidebar
           issueOf={(t) => jiraSidebarText(issueLinks.find((link) => link.taskId === t.id && link.issue.provider === 'jira'), new Date())}
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
-          onWorkTool={kind=>sidebarAction(() => runCommandRef.current(({files:'workspace-files',browser:'workspace-browser',git:'git-workflow',accounts:'accounts',workflow:'workflows',schedule:'schedules',worktree:'worktrees',issues:'issues'} as const)[kind]))}
+          onWorkTool={value=>sidebarAction(() => pickToolRef.current(value))}
           state={viewState}
           onArchive={(t) => sidebarAction(() => archive([t.id]))}
           archivedCount={state.tasks.length - viewState.tasks.length}
@@ -2070,22 +2103,23 @@ export function App() {
         </CompactSidebar>
         <main ref={workspaceElement} className={`workspace${workTool&&(workTool.kind==='accounts'||workTool.kind==='remote'||workTool.taskId===activeTask?.id)?' work-tools-open':''}`}>
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
-            <button className="button" disabled={!activeTask||!!activeTask.host} onClick={()=>{if(activeTask){setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'development'})}}}>환경·확장</button>
-            <button className="button" onClick={()=>setConversationOpen(true)}>대화 기록 찾기</button>
-            <button className="button" onClick={()=>setAgentSessionsFor({taskId:state.activeTaskId})}>에이전트 세션</button>
-            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>{const kind=e.target.value as 'files'|'browser'|'git'|'accounts'|'workflow'|'schedule'|'worktree'|'issues'|'remote'|'development';if(e.target.value==='conversation-search'){setConversationOpen(true);return}if(e.target.value==='agent-sessions'){setAgentSessionsFor({taskId:state.activeTaskId});return}if(kind!=='accounts'&&kind!=='remote'&&!activeTask)return;if((kind==='workflow'||kind==='schedule'||kind==='worktree'||kind==='issues')&&activeTask?.host)return;setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind})}}><option value="" disabled>작업 도구</option><option value="conversation-search">대화 기록 찾기</option><option value="agent-sessions">에이전트 세션</option><option value="accounts">사용량·계정</option><option value="remote">원격 작업 공간</option>{activeTask&&<><option value="files">파일 탐색</option><option value="browser">브라우저</option><option value="git">GitHub</option>{!activeTask.host&&<><option value="workflow">작업 흐름</option><option value="schedule">예약과 결과함</option><option value="worktree">워크트리 관리</option><option value="issues">이슈 연결</option><option value="development">환경·확장</option></>}</>}</select>
+            <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>pickTool(e.target.value)}><WorkToolOptions task={activeTask}/></select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
             <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
-            <button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask?.id??'',kind:'accounts'})}}>사용량·계정</button><button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:'',kind:'remote'})}}>원격 작업 공간</button>
-            {activeTask && <>{(['files','browser','git'] as const).map((kind)=><button type="button" className="button" key={kind} onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind})}}>{kind==='files'?'파일 탐색':kind==='browser'?'브라우저':'GitHub'}</button>)}</>}
-            {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'workflow'})}}>작업 흐름</button>}
-            {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'schedule'})}}>예약과 결과함</button>}
-            {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'worktree'})}}>워크트리 관리</button>}
-            {activeTask&&!activeTask.host&&<button type="button" className="button" onClick={()=>{setOverviewOpen(false);setWorkTool({taskId:activeTask.id,kind:'issues'})}}>이슈 연결</button>}
+            {/* 56단계: 이 일감 도구 · 앱 도구 두 묶음 — 이름은 ⌘P 와 같고, 막힌 일감 도구는 숨기지 않고 꺼서 이유를 보인다 */}
+            <div className="toolbar-group" role="group" aria-label="이 일감">
+              {WORK_TOOLS.filter(t=>t.group==='task'&&t.direct).map(t=>{const why=toolBlocked(t,activeTask);return <button type="button" className="button" key={t.kind} disabled={why!==null} title={why??undefined} onClick={()=>runCommand(t.command)}>{commandLabel(t.command)}</button>})}
+              <button type="button" className="button" aria-haspopup="menu" aria-expanded={toolMenu?.kind==='task'} onClick={e=>openToolMenu('task',e.currentTarget)}>일감 도구 ▾</button>
+            </div>
+            <div className="toolbar-group toolbar-group-app" role="group" aria-label="앱">
+              <button type="button" className="button" aria-haspopup="menu" aria-expanded={toolMenu?.kind==='find'} onClick={e=>openToolMenu('find',e.currentTarget)}>찾기 ▾</button>
+              {WORK_TOOLS.filter(t=>t.group==='app').map(t=><button type="button" className="button" key={t.kind} onClick={()=>runCommand(t.command)}>{commandLabel(t.command)}</button>)}
+            </div>
           </nav>
+          {toolMenu&&<PopupMenu label={toolMenu.kind==='task'?'일감 도구':'찾기'} heading={toolMenu.kind==='task'?toolBlocked(WORK_TOOLS[0]!,activeTask)??undefined:undefined} items={toolMenuItems(toolMenu.kind)} x={toolMenu.x} y={toolMenu.y} onClose={picked=>{setToolMenu(null);if(!picked)toolMenuTrigger.current?.focus()}}/>}
           {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
           {workTool && workToolShown && <aside ref={workToolPanel} tabIndex={-1} className="work-tool-panel" aria-label="작업 보조 화면" onKeyDown={onWorkToolKey}>
-            <header className="work-tools-row"><strong>{workTool.kind==='development'?'환경·확장':workTool.kind==='files'?'파일 탐색':workTool.kind==='browser'?'브라우저':workTool.kind==='git'?'GitHub':workTool.kind==='workflow'?'작업 흐름':workTool.kind==='schedule'?'예약과 결과함':workTool.kind==='worktree'?'워크트리 관리':workTool.kind==='issues'?'이슈 연결':workTool.kind==='remote'?'원격 작업 공간':'사용량·계정'}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
+            <header className="work-tools-row"><strong>{commandLabel(toolByKind(workTool.kind)!.command)}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
               {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd}/>}
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
@@ -2313,6 +2347,8 @@ export function App() {
             activePaneId={activePaneNow}
             activity={historyActivity}
             signal={historyOpen.signal}
+            initialQuery={seedFor('history')}
+            onSwitch={openFind}
             onInsert={historyInsert}
             onRunSplit={historySplit}
             onGoto={historyGoto}
@@ -2436,11 +2472,12 @@ export function App() {
           memo={findMemo.current}
           onMemo={(m) => (findMemo.current = m)}
           onJump={findJump}
+          onSwitch={openFind}
           onClose={closeDialogs}
         />
       )}
-      {agentSessionsFor&&<AgentSessionsPanel taskId={agentSessionsFor.taskId} tasks={state.tasks} openKeys={openSessionKeys} onResume={resumeAgentSession} onClose={()=>{setAgentSessionsFor(null);refocus()}}/>}
-      {conversationOpen&&<ConversationSearch tasks={state.tasks} activeTaskId={state.activeTaskId} onOpen={openConversation} onClose={()=>{setConversationOpen(false);refocus()}}/>}
+      {agentSessionsFor&&<AgentSessionsPanel taskId={agentSessionsFor.taskId} initialQuery={seedFor('sessions')} onSwitch={openFind} tasks={state.tasks} openKeys={openSessionKeys} onResume={resumeAgentSession} onClose={()=>{setAgentSessionsFor(null);refocus()}}/>}
+      {conversationOpen&&<ConversationSearch initialQuery={seedFor('conversation')} onSwitch={openFind} tasks={state.tasks} activeTaskId={state.activeTaskId} onOpen={openConversation} onClose={()=>{setConversationOpen(false);refocus()}}/>}
       {conversationRestore&&<ConfirmDialog title="보관한 일감을 되살릴까요?" message="일감을 되살린 뒤 검색 결과를 다시 눌러 주세요. 메시지는 보내지 않아요." confirmLabel="되살리기" onConfirm={()=>{unarchive([conversationRestore.taskId]);setConversationRestore(null)}} onCancel={()=>setConversationRestore(null)}/>}
       {archiveOpen && (
         <ArchivePanel state={state} onRestore={unarchive} onRemove={(t) => (setArchiveOpen(false), setRemoving(t))} onRestoreDeleted={(d) => void restoreDeleted(d)} onClose={closeDialogs} />

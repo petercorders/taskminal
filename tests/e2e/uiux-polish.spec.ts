@@ -73,7 +73,7 @@ test('모든 출력 찾기: Tab은 옵션 순회, 버튼 Enter는 해당 옵션�
   await win.keyboard.press('Shift+Tab')
   await expect(input).toBeFocused()
   await input.press('Control+Tab')
-  await expect(find.getByTestId('global-find-scope')).toHaveText('지금 일감')
+  await expect(find.getByTestId('global-find-scope')).toHaveText('이 일감')
   await expect(input).toBeFocused()
   await input.press('Control+Shift+Tab')
   await expect(find.getByTestId('global-find-scope')).toHaveText('모든 일감')

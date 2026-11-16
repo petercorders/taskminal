@@ -194,7 +194,7 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
         ))}
         <button type="button" className={`tab-action history${historyOpen ? ' on' : ''}`} aria-label="명령 기록" aria-pressed={historyOpen} title="명령 기록 (⌘Y)" data-testid="history-button" onClick={onHistory}>
           <Icon name="history" size={14} />
-          <span className="tab-action-label">기록</span>
+          <span className="tab-action-label">명령 기록</span>
         </button>
         {notes?.onResume && (
           <button type="button" className="tab-action resume" aria-label="이어받기 요약 다시 보기" title="이어받기 요약 다시 보기 (⌥⌘R)" data-testid="resume-button" onClick={notes.onResume}>

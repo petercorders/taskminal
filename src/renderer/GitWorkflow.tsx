@@ -109,7 +109,8 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
   return (
     <section ref={rootRef} tabIndex={-1} className="git-workflow" data-testid="git-workflow" aria-labelledby="git-workflow-title" aria-busy={reading || busy}>
       <header className="git-workflow-head">
-        <h2 id="git-workflow-title">GitHub · 원격</h2>
+        {/* 56단계: '원격' 은 원격 작업 공간(SSH) 에만 — 여기는 Git remote */}
+        <h2 id="git-workflow-title">GitHub PR·push</h2>
         <button type="button" className="button small" disabled={disabled} onClick={() => void load()}>
           다시 읽기
         </button>
@@ -131,13 +132,13 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
             {view.upstream ? `${view.upstream} · 앞섬 ${view.ahead} · 뒤처짐 ${view.behind}` : '연결된 upstream 없음'} · 마지막 로컬 조회 기준
           </div>
           {view.remotes.length === 0 ? (
-            <p>원격 저장소가 없어요. 터미널에서 git remote add로 연결해 주세요.</p>
+            <p>Git remote 가 없어요. 터미널에서 git remote add 로 연결해 주세요.</p>
           ) : (
             <label className="git-workflow-field">
-              원격
-              <select aria-label="Git 원격" value={remote || target?.remote || ''} disabled={busy} onChange={(e) => selectRemote(e.target.value)}>
+              push 할 remote
+              <select aria-label="push 할 remote" value={remote || target?.remote || ''} disabled={busy} onChange={(e) => selectRemote(e.target.value)}>
                 <option value="" disabled>
-                  원격 선택
+                  remote 고르기
                 </option>
                 {view.remotes.map((r) => (
                   <option key={r} value={r}>
@@ -229,7 +230,7 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat }: Props) {
           )}
         </>
       )}
-      {busy && <div role="status">원격 작업 중… 화면을 닫아도 이미 시작한 작업은 끝날 수 있어요.</div>}
+      {busy && <div role="status">GitHub 작업 중… 화면을 닫아도 이미 시작한 작업은 끝날 수 있어요.</div>}
       {message && (
         <div role={message.state === 'ok' ? 'status' : 'alert'}>
           {message.message}

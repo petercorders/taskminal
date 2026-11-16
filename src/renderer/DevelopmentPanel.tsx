@@ -48,7 +48,7 @@ export function DevelopmentPanel({root}:{root:string}) {
    await refresh(snapshot)
   })
  }
- return <section className="development-panel" aria-label="환경·확장" data-testid="development-panel">
+ return <section className="development-panel" aria-label="환경 준비·확장" data-testid="development-panel">
   <h3>환경 준비</h3>
   <p className="dim small">저장소의 <code>.taskminal/environment.json</code>을 직접 작성하세요. <code>copies: string[]</code>, <code>commands: {'{file, args[]}[]'}</code> 형식이며 같은 저장소의 별도 worktree에 준비합니다. 복사 원본은 Git에서 무시되고 추적되지 않는 파일이어야 합니다. 파일 내용은 미리보기에 표시하지 않습니다.</p>
   <label>준비할 worktree 경로<input aria-label="준비할 worktree 경로" value={target} onChange={e=>{setTarget(e.target.value);setPlan(null)}} placeholder="/절대/경로/worktree" disabled={busy}/></label>
@@ -62,7 +62,7 @@ export function DevelopmentPanel({root}:{root:string}) {
   </div>}
   {pending&&<div className="development-preview"><p>환경 준비 요청 번호: <code>{pending.id}</code>. 결과를 확인하는 동안 새 요청을 보내지 마세요.</p><button className="button" disabled={busy} onClick={()=>prepare(pending)}>같은 요청 번호로 결과 확인</button></div>}
   <p className="dim small">패널을 닫아도 준비는 계속됩니다. 실패·중단 후 새로 실행하려면 설정을 확인하고 다시 미리 보세요.</p>
-  <button className="button" disabled={busy} onClick={()=>void action(refresh)}>작업 기록 다시 확인</button>
+  <button className="button" disabled={busy} onClick={()=>void action(refresh)}>준비 기록 다시 확인</button>
   <div className="development-records">{[...records].reverse().map(record=><article className="development-preview" data-testid="preparation-record" key={record.id}>
    <strong>{states[record.state]}</strong><p>{record.target}</p><p className="dim small">요청 번호: {record.id}</p><pre aria-label="환경 준비 출력">{record.log||'아직 출력 없음'}</pre>
    {record.state==='unknown'&&<p>앱이 재시작되어 실행 결과를 확정할 수 없어요. 대상 파일·출력을 확인하고 새 미리보기로 다시 준비하세요.</p>}

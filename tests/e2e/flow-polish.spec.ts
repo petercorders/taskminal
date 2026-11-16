@@ -1,5 +1,6 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { firstWindow, seedState, waitLoaded } from './helpers'
@@ -14,11 +15,25 @@ const panel = () => win.getByRole('complementary', { name: '작업 보조 화면
 
 test.beforeEach(async () => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'tm-flow-')))
-  writeFileSync(join(dir, 'long.txt'), Array.from({ length: 40 }, (_, i) => `줄 ${i + 1}`).join('\n'))
-  seedState(dir, [{ id: 't', name: '흐름 일감', paneId: 'p', cwd: dir }])
+  // 일감 폴더: GitHub 꼴 origin 만 있고 커밋은 없는 로컬 저장소 — GitHub 패널이 gh(네트워크)를 부르지 않는다
+  const work = join(dir, 'work')
+  mkdirSync(work)
+  execFileSync('git', ['init', '-q', work])
+  execFileSync('git', ['-C', work, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git'])
+  writeFileSync(join(work, 'long.txt'), Array.from({ length: 40 }, (_, i) => `줄 ${i + 1}`).join('\n'))
+  seedState(dir, [{ id: 't', name: '흐름 일감', paneId: 'p', cwd: work }, { id: 'r', name: '원격 일감', paneId: 'rp', cwd: '/srv/app' }])
+  // 둘째 일감은 원격(ssh) 일감 — 고르기 전에는 pane 을 띄우지 않는다, 호스트는 풀리지 않는 .invalid
+  const statePath = join(dir, 'state.json')
+  const state = JSON.parse(readFileSync(statePath, 'utf8'))
+  state.tasks[1].host = 'tm-e2e.invalid'
+  writeFileSync(statePath, JSON.stringify(state))
   mkdirSync(join(dir, 'workflows'))
   writeFileSync(join(dir, 'workflows/journal.json'), JSON.stringify({ templates: [workflow], runs: [] }))
-  app = await electron.launch({ args: ['.'], env: { ...process.env, TASKMINAL_USER_DATA: dir, TASKMINAL_CLAUDE_BIN: resolve('tests/fixtures/fake-claude.mjs') } })
+  mkdirSync(join(dir, 'agent-home'))
+  app = await electron.launch({
+    args: ['.'],
+    env: { ...process.env, TASKMINAL_USER_DATA: dir, TASKMINAL_CLAUDE_BIN: resolve('tests/fixtures/fake-claude.mjs'), TASKMINAL_AGENT_SESSIONS_HOME: join(dir, 'agent-home') },
+  })
   win = await firstWindow(app)
   await waitLoaded(win)
 })
@@ -107,4 +122,79 @@ test('대화 입력칸에 초안이 있으면 빈 화면 예시를 숨기고, �
   // 초안을 비우면 예시가 돌아온다
   await input.fill('')
   await expect(empty.getByRole('button')).toHaveCount(3)
+})
+
+const bar = () => win.getByRole('navigation', { name: '작업 도구' })
+
+test('도구 줄: 이 일감 · 앱 두 묶음 한 줄, ⌘P 와 같은 이름, 원격 일감에서는 일감 도구를 끄고 이유를 보인다', async () => {
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1280, 800))
+  const taskGroup = bar().getByRole('group', { name: '이 일감' }), appGroup = bar().getByRole('group', { name: '앱' })
+  await expect(taskGroup.getByRole('button')).toHaveText(['파일 탐색', '내장 브라우저', 'GitHub PR·push', '일감 도구 ▾'])
+  await expect(appGroup.getByRole('button')).toHaveText(['찾기 ▾', '사용량·계정', '원격 작업 공간'])
+  // 1280 폭에서 한 줄 (12개 단추가 두 줄로 감기던 것)
+  // 모든 단추가 세로로 겹치면 한 줄 (두 줄이면 윗줄 bottom < 아랫줄 top)
+  await expect.poll(() => bar().locator('.toolbar-group > .button').evaluateAll((els) => {
+    const r = els.map((e) => e.getBoundingClientRect())
+    return Math.max(...r.map((x) => x.top)) < Math.min(...r.map((x) => x.bottom))
+  })).toBe(true)
+  // 나머지 일감 도구는 메뉴로 — 이름은 ⌘P 와 같다
+  await taskGroup.getByRole('button', { name: '일감 도구 ▾' }).click()
+  const menu = win.getByRole('menu', { name: '일감 도구' })
+  await expect(menu.getByRole('menuitem')).toHaveText(['워크트리 관리', '환경 준비·확장', '이슈 연결', '작업 흐름', '예약과 결과함'])
+  await menu.getByRole('menuitem', { name: '워크트리 관리' }).click()
+  await expect(panel().locator('header strong')).toHaveText('워크트리 관리')
+  await panel().getByRole('button', { name: '작업 보조 화면 닫기' }).click()
+  // 좁은 창 · 사이드바 고르기 칸도 같은 두 묶음
+  await expect(bar().locator('.compact-tools-select optgroup')).toHaveCount(2)
+  await expect(win.locator('.sidebar-tools-menu optgroup')).toHaveCount(2)
+  // 원격 일감: 일감 도구는 꺼지고(숨기지 않음) 이유를 보인다 · 앱 도구는 그대로
+  await command('next-task')
+  await expect(win.locator('.sidebar .task-item.active, .sidebar [aria-current="true"]').first()).toContainText('원격 일감')
+  for (const name of ['파일 탐색', '내장 브라우저', 'GitHub PR·push']) await expect(taskGroup.getByRole('button', { name, exact: true })).toBeDisabled()
+  await expect(taskGroup.getByRole('button', { name: '파일 탐색', exact: true })).toHaveAttribute('title', /원격 일감/)
+  await expect(appGroup.getByRole('button', { name: '사용량·계정', exact: true })).toBeEnabled()
+  await taskGroup.getByRole('button', { name: '일감 도구 ▾' }).click()
+  await expect(menu).toContainText('원격 일감')
+  await expect(menu.getByRole('menuitem', { name: '워크트리 관리' })).toBeDisabled()
+  await win.keyboard.press('Escape')
+  await expect(win.locator('.sidebar-tools-menu option[value="files"]')).toBeDisabled()
+  // ⌘P 로 불러도 열지 않고 이유를 알린다
+  await command('worktrees')
+  await expect(win.getByTestId('toast')).toContainText('원격 일감')
+  await expect(panel()).toHaveCount(0)
+})
+
+test('찾기 네 곳을 한 메뉴로 들어가고, 찾는 곳을 바꾸면 검색어를 가져간다', async () => {
+  await bar().getByRole('button', { name: '찾기 ▾' }).click()
+  const menu = win.getByRole('menu', { name: '찾기' })
+  await expect(menu.getByRole('menuitem')).toHaveText([/^대화 기록 찾기/, /^에이전트 세션/, /^명령 기록.*⌘Y/, /^모든 출력에서 찾기.*⇧⌘F/])
+  await menu.getByRole('menuitem', { name: /대화 기록 찾기/ }).click()
+  const switcher = (root: ReturnType<Page['getByTestId']>) => root.getByRole('navigation', { name: '찾을 곳' })
+  const conv = win.getByRole('dialog', { name: '대화 기록 찾기' })
+  await conv.getByRole('searchbox').fill('찾을말')
+  await expect(switcher(conv).getByRole('button', { name: '대화 기록' })).toHaveAttribute('aria-current', 'page')
+  await switcher(conv).getByRole('button', { name: '모든 출력' }).click()
+  await expect(conv).toHaveCount(0)
+  const out = win.getByTestId('global-find')
+  await expect(out.getByRole('textbox', { name: '모든 출력에서 찾을 말' })).toHaveValue('찾을말')
+  await switcher(out).getByRole('button', { name: '명령 기록' }).click()
+  await expect(out).toHaveCount(0)
+  const hist = win.getByTestId('history-panel')
+  await expect(hist.getByRole('textbox', { name: '기록에서 찾기' })).toHaveValue('찾을말')
+  await switcher(hist).getByRole('button', { name: '에이전트 세션' }).click()
+  await expect(hist).toHaveCount(0)
+  const ses = win.getByRole('dialog', { name: '에이전트 세션' })
+  await expect(ses.getByRole('searchbox')).toHaveValue('찾을말')
+  await switcher(ses).getByRole('button', { name: '대화 기록' }).click()
+  await expect(win.getByRole('dialog', { name: '대화 기록 찾기' }).getByRole('searchbox')).toHaveValue('찾을말')
+})
+
+test('두 뜻 낱말: 원격은 원격 작업 공간에만 · 사이드바 보기는 상태별 · 탭 줄은 명령 기록', async () => {
+  await expect(win.getByRole('radiogroup', { name: '사이드바 보기' }).getByRole('radio')).toHaveText(['상태별', '묶음별'])
+  await expect(win.locator('[data-testid="task-view"][aria-hidden="false"] .tab-action.history .tab-action-label')).toHaveText('명령 기록')
+  await bar().getByRole('button', { name: 'GitHub PR·push', exact: true }).click()
+  const git = win.getByTestId('git-workflow')
+  await expect(git.getByRole('heading', { level: 2 })).toHaveText('GitHub PR·push')
+  await expect(git.getByRole('combobox', { name: 'push 할 remote' }).locator('option[value="origin"]')).toHaveCount(1)
+  await expect(git).not.toContainText('원격')
 })

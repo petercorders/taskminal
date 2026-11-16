@@ -31,7 +31,7 @@ const commandsOf = (shortcuts: readonly Shortcut[]) =>
 const OUTPUT_BUDGET = 20
 export const ARCHIVED_PREFIX = 'archived:'
 
-const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
+const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '명령 기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
 export function Palette({ state, shortcuts, history = [], ports = [], onRun, onClose, archived = [] }: Props) {
