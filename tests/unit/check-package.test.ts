@@ -30,7 +30,7 @@ beforeEach(async () => {
   writeFileSync(join(res, 'app-update.yml'), 'owner: petercorders\nrepo: taskminal\nprovider: github\nupdaterCacheDirName: taskminal-updater\n')
   // asar: out/ 세 진입점
   const src = join(root, 'asar-src')
-  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'node_modules/@xterm/headless/package.json']) {
+  for (const f of ['out/main/index.js', 'out/main/host.js', 'out/main/cli.js', 'out/main/server.js', 'out/preload/index.js', 'out/renderer/index.html', 'package.json', 'THIRD_PARTY_NOTICES.md', 'node_modules/@xterm/headless/package.json']) {
     mkdirSync(join(src, f, '..'), { recursive: true })
     writeFileSync(join(src, f), '')
   }
@@ -103,6 +103,8 @@ describe('check-package (14단계)', () => {
     // 16단계: 셸 지킴이 입구 · 그것이 쓰는 headless — 빠지면 셸이 하나도 안 뜬다
     expect(problems).toContain('out/main/host.js')
     expect(problems).toContain('node_modules/@xterm/headless/package.json')
+    // 59단계: 앱에 든 다른 사람 저작물(Codex 로고 = MIT)의 고지 — 배포물에 같이 있어야 한다
+    expect(problems).toContain('THIRD_PARTY_NOTICES.md')
   })
 
   it('node-pty 가 asar 밖에 없으면 · 아이콘 · 번들 id · arm64 가 아니면', async () => {
