@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Task } from '../shared/types'
+import { expandHome } from '../shared/cwd'
 import {
   DEADLINE_MS,
   SessionFeed,
@@ -38,8 +39,6 @@ interface Props {
   initialQuery?: string
   onSwitch?(kind: FindKind, query: string): void
 }
-
-const expand = (path: string, home: string) => (path === '~' ? home : path.startsWith('~/') ? `${home}${path.slice(1)}` : path)
 
 /** 53단계 '에이전트 세션' — 밖에서 시작한 Claude · Codex 세션을 찾아 대화 · 터미널로 이어 한다 */
 export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose, initialQuery, onSwitch }: Props) {
@@ -100,7 +99,7 @@ export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose,
 
   const task = taskId ? tasks.find((t) => t.id === taskId && t.archivedAt === undefined) : undefined
   const blocked = !taskId ? '일감을 먼저 고르면 이어 할 수 있어요.' : !task ? '연 일감이 사라졌어요. 다른 일감에서 다시 열어 주세요.' : task.host ? '원격 일감에서는 이 Mac 의 세션을 이어 할 수 없어요.' : ''
-  const folder = task && list ? expand(task.cwd, list.home) : null
+  const folder = task && list ? expandHome(task.cwd, list.home) : null
   const all = list ? filterSessions(list.sessions, { query, agent, scope, folder }) : []
   const shown = all.slice(0, SHOWN_MAX)
 

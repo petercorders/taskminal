@@ -1,13 +1,14 @@
 import { app,ipcMain,type IpcMainInvokeEvent } from 'electron'
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { join,resolve } from 'node:path'
 import type { AppState } from '../shared/types'
 import { IPC } from '../shared/ipc'
 import { redact } from '../shared/redact'
 import { DevelopmentTools } from './development-tools'
 export function installDevelopmentIpc(trusted:(e:IpcMainInvokeEvent)=>boolean,state:()=>AppState|null){
- const expand=(p:string)=>resolve(p==='~'?homedir():p.startsWith('~/')?join(homedir(),p.slice(2)):p)
+ const expand=(p:string)=>resolve(expandHome(p,homedir()))
  const valid=(root:string)=>!!state()?.tasks.some(t=>!t.host&&t.archivedAt===undefined&&[t.cwd,...Object.values(t.panes).map(p=>p.cwd)].some(p=>{try{return realpathSync(expand(p))===root}catch{return false}}))
  let service:DevelopmentTools|undefined
  try{service=new DevelopmentTools(join(app.getPath('userData'),'development'),valid,text=>redact(text,{custom:state()?.settings.secretCustom??[],allow:new Set(state()?.settings.secretAllow.map(a=>a.hash)??[])}))}catch{/* Isolate corrupt records from app startup; every operation fails closed. */}

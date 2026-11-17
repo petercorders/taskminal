@@ -1,6 +1,7 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { join, resolve, relative, isAbsolute, sep } from 'node:path'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { realpath } from 'node:fs/promises'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
@@ -8,7 +9,7 @@ import { validWorktreeJournal, type WorktreeJournalState } from '../shared/workt
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
 interface Dependencies { state():AppState|null; revision():number; pendingPaths():string[]; liveCwds():Promise<string[]> }
-const expand=(value:string)=>resolve(value==='~'?homedir():value.startsWith('~/')?join(homedir(),value.slice(2)):value)
+const expand=(value:string)=>resolve(expandHome(value,homedir()))
 const inside=(parent:string,child:string)=>{const path=relative(parent,child);return path===''||(!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep))}
 export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d:Dependencies){
   const taskPaths=()=>d.state()?.tasks.filter(t=>!t.host).flatMap(t=>[t.cwd,...Object.values(t.panes).map(p=>p.cwd)]).map(expand)??[]

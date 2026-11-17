@@ -1,5 +1,6 @@
 import { app, ipcMain, safeStorage, type IpcMainInvokeEvent } from 'electron'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { isAbsolute, join } from 'node:path'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
@@ -51,7 +52,7 @@ export function installIssuesIpc(trusted: (event: IpcMainInvokeEvent) => boolean
     check(event)
     if (typeof root !== 'string' || root.length > 4096 || root.includes('\0')) return null
     if (!d.state()?.tasks.some(task => !task.host && task.archivedAt === undefined && task.cwd === root)) return null
-    const dir = root === '~' ? homedir() : root.startsWith('~/') ? join(homedir(), root.slice(2)) : root
+    const dir = expandHome(root, homedir())
     return isAbsolute(dir) ? localGithubRepo(gitRun, dir) : null
   })
   ipcMain.handle(IPC.jiraStatus, event => { check(event); return jira.status() })

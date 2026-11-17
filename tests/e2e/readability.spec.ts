@@ -149,7 +149,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('가독성: 사이드바 · 터미널 · 대화 · 팔레트 · 설정 · 새 일감 — 대비 · 크기 · 줄 간격 기준', async () => {

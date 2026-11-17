@@ -24,7 +24,7 @@ test.beforeEach(async () => {
 })
 test.afterEach(async () => {
   await app.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const opened = () => app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened)

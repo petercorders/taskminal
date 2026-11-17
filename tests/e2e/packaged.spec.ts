@@ -31,6 +31,6 @@ test('패키지 앱: 지킴이가 뜨고 셸이 응답한다 · 한글 · 로그
     expect((await win.evaluate(()=>window.taskminal.appInfo())).version).toBe(EXPECTED_VERSION)
   } finally {
     await app.close()
-    rmSync(userData, { recursive: true, force: true })
+    rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
   }
 })

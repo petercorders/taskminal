@@ -275,3 +275,37 @@ test('환경 준비: 워크트리 목록을 읽지 못하면 없다고 하지 �
   await expect(dev).not.toContainText('다른 워크트리가 없어요')
   await expect(dev.getByRole('textbox', { name: '준비할 워크트리 경로' })).toBeVisible()
 })
+
+test('이슈 연결: 저장소 답이 비었거나 실패했으면 패널을 다시 열 때 다시 묻는다', async () => {
+  await app.evaluate(({ ipcMain }) => {
+    const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: unknown[]) => Promise<unknown>> })._invokeHandlers
+    const original = handlers.get('issues:repo')!
+    const g = globalThis as unknown as { repoCalls: number }
+    g.repoCalls = 0
+    ipcMain.removeHandler('issues:repo')
+    ipcMain.handle('issues:repo', async (...args) => {
+      g.repoCalls++
+      if (g.repoCalls === 1) return null
+      if (g.repoCalls === 2) throw new Error('읽기 실패')
+      return original(...args)
+    })
+  })
+  const calls = () => app.evaluate(() => (globalThis as unknown as { repoCalls: number }).repoCalls)
+  const reopen = async () => {
+    await panel().getByRole('button', { name: '작업 보조 화면 닫기' }).click()
+    await expect(panel()).toHaveCount(0)
+    return openIssues()
+  }
+  await openIssues()
+  await expect.poll(calls).toBe(1)
+  // 앞 답이 패널에 닿기 전(묻는 중)에 다시 열면 건너뛰는 것이 맞다 — 다시 묻을 때까지 닫았다 열기를 되풀이한다.
+  // 한 번 물은 뒤 다시 묻지 않는 회귀면 끝까지 1 이라 실패한다.
+  await expect(async () => {
+    await reopen()
+    expect(await calls()).toBeGreaterThanOrEqual(2)
+  }).toPass({ timeout: 5000 })
+  await expect(async () => {
+    const field = await reopen()
+    await expect(field).toHaveValue('acme/widgets', { timeout: 500 })
+  }).toPass({ timeout: 5000 })
+})

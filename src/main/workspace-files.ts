@@ -2,6 +2,7 @@ import { realpath, readdir, lstat } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { resolve, relative, isAbsolute, extname, sep } from 'node:path'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { createHash } from 'node:crypto'
 import { redact, type SecretOptions } from '../shared/redact'
 import type { WorkspaceEntry, WorkspaceFile } from '../shared/workspace'
@@ -15,7 +16,7 @@ export class WorkspaceFiles {
   async path(root: string, path: string): Promise<string> {
     if (typeof root !== 'string' || typeof path !== 'string' || root.length > 4096 || path.length > 4096 || path.includes('\0') || sensitive(path))
       throw new Error('이 파일은 열 수 없어요')
-    const r = await realpath(root === '~' ? homedir() : root.startsWith('~/') ? resolve(homedir(), root.slice(2)) : root)
+    const r = await realpath(expandHome(root, homedir()))
     const p = await realpath(resolve(r, path))
     const rel = relative(r, p)
     if (rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel) || sensitive(rel)) throw new Error('일감 폴더 밖의 파일은 열 수 없어요')

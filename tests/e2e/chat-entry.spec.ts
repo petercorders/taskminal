@@ -27,7 +27,7 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('메뉴 막대 파일 › 새 대화 (Claude) · (Codex) 가 새 대화 탭을 연다', async () => {

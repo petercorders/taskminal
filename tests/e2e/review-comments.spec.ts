@@ -48,7 +48,7 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('정확한 파일과 선택한 줄 범위 의견을 한 번에 대화 초안에 넣고 자동 전송하지 않는다', async () => {

@@ -3,6 +3,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import type { IssueRecord, IssueProvider, IssuePage, IssueLink, IssuePrepare, IssueAttach } from '../shared/issues'
 import { ISSUE_TASK_DELETED } from '../shared/issues'
 import { redact } from '../shared/redact'
@@ -162,7 +163,7 @@ export class Issues {
     let receipt = prior
     if (!receipt) {
       if (this.data.receipts.length >= 1000) throw new Error('연결 기록 한도에 도달했어요')
-      const root = await realpath(input.root === '~' ? homedir() : input.root.startsWith('~/') ? resolve(homedir(), input.root.slice(2)) : resolve(input.root))
+      const root = await realpath(resolve(expandHome(input.root, homedir())))
       const issue = await this.get(input.provider, input.source, input.id)
       if (closed(issue)) throw new Error('이미 닫힌 이슈예요. 현재 상태를 다시 확인해 주세요')
       receipt = { input, taskId: randomUUID(), root, issue, done: false }

@@ -69,7 +69,8 @@ export function cwdLike(path: string, taskCwd: string, home: string): string {
   return path.startsWith(home + '/') ? '~' + path.slice(home.length) : path
 }
 
-/** `~` · `~/…` 를 home 으로 푼다 — 셸을 여는 폴더(pty-manager)와 브랜치를 읽는 폴더(git-branch)가 같은 규칙을 쓴다 */
+/** `~` · `~/…` 를 home 으로 푼다 — 셸을 여는 폴더(pty-manager) · 브랜치(git-branch) · main 의 일감 폴더 확인(파일 · 편집기 · 워크트리 · 환경 준비 · 이슈 · 대화)
+ *  · 에이전트 세션 패널이 같은 규칙을 쓴다(57단계에서 손으로 쓴 펼치기를 모음). `~//x` 도 홈 아래로 푼다 */
 export function expandHome(path: string, home: string): string {
   return path === '~' ? home : path.startsWith('~/') ? home + '/' + path.slice(2) : path
 }

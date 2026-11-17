@@ -50,7 +50,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('새 대화 → 처음 화면 → 보내기: 글 · 도구 묶음 줄 · 끝남', async () => {

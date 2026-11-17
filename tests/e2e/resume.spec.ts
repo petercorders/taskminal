@@ -39,7 +39,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test("verify: 31분 안 본 일감 + 그 사이 확인 필요 → 고르면 카드 맨 위 '확인 필요' · Esc → 다시 보기 · ⌥⌘R(메뉴)", async () => {

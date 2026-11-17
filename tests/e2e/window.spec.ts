@@ -26,7 +26,7 @@ const launch = () => electron.launch({ args: ['.'], env: { ...process.env, TASKM
 test.afterEach(async () => {
   // launch 가 실패했으면 launched 가 비어 있어 앞 시험의 닫힌 app 을 다시 닫지 않는다.
   await launched?.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('창이 뜨고 preload → main 왕복으로 앱 정보를 받는다', async () => {
