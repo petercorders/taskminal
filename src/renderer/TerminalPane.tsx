@@ -15,6 +15,7 @@ import { cleanExit, isTerminalReply, splitForWrite } from '../shared/pty'
 import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, UP_CONFIRM_MS, type RemoteState, type SshSignal } from '../shared/remote'
 import { webglBlock } from '../shared/renderer'
 import { restoreBanner, saveLines } from '../shared/scrollback'
+import { shellQuotePaths } from '../shared/shell-quote'
 import { safeToInsert, tailLines } from '../shared/history'
 import { fontStack, xtermTheme, type TermSettings } from './term-settings'
 import { dirtyPanes, findingPanes, integratedPanes, osc7Panes, remotePanes, restoredPanes, restoredWithText, runtime, webgl } from './runtime'
@@ -460,6 +461,26 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       early.push(data)
       earlyLen += data.length
     })
+    // 58c: Finder 에서 끌어 놓은 파일 — 경로를 셸 따옴표로 묶어 입력줄에 넣기만 한다(↩ 를 보내지 않는다).
+    // 붙여넣기 길(term.paste → 위 onData)로 보내 셸이 괄호 붙여넣기를 켰으면 붙여넣기로 받게 한다.
+    // 끝난 셸에는 넣지 않는다 — 넣으면 '아무 키' 로 읽혀 pane 이 닫힌다
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files') === true
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      e.dataTransfer!.dropEffect = 'copy'
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (ended) return
+      const text = shellQuotePaths([...e.dataTransfer!.files].map((f) => window.taskminal.filePath(f)))
+      if (!text) return
+      term.paste(text)
+      term.focus() // 놓은 pane 이 활성이 되어 이어서 칠 수 있게
+    }
+    host.addEventListener('dragover', onDragOver)
+    host.addEventListener('drop', onDrop)
 
     // 실제 크기로 맞춘 뒤에 셸을 띄운다 — 첫 프롬프트가 80×24 로 그려졌다 줄바뀜하지 않게.
     fitNow()
@@ -623,6 +644,8 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
       clearTimeout(scanTimer)
       for (const d of masking) d.dispose()
       host.removeEventListener('copy', onCopy, true)
+      host.removeEventListener('dragover', onDragOver)
+      host.removeEventListener('drop', onDrop)
       masker.dispose()
       maskerRef.current = null
       observer.disconnect()

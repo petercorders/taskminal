@@ -4,7 +4,7 @@
  * preload 에 키를 더하거나 빼면 여기 한 곳을 고친다.
  */
 export const PRELOAD_SURFACE = {
-  apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'agentSessions', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'pty', 'usage', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],
+  apiKeys: ['remote', 'issues', 'worktrees', 'schedules', 'development', 'workflows', 'conversations', 'agentSessions', 'accounts', 'workspace', 'gitWorkflow', 'appInfo', 'pickFolder', 'onCommand', 'setQuitGuard', 'setBadge', 'beep', 'gitWorktreeAdd', 'gitBranches', 'openLink', 'setMenuKeys', 'filePath', 'pty', 'usage', 'sshHosts', 'scrollback', 'state', 'backup', 'redact', 'host', 'update', 'errlog', 'firstRunDone', 'history', 'chat', 'cli', 'review', 'ports', 'jira'],
   remote: ['connect','disconnect','workspaces','open','files','read','save','git','terminal','stream','resize','tail','write','stop','chat','send','history','answer','interrupt'],
   development: ['preview','prepare','preparations','cancel','inspect','install','extensions','enable','uninstall'],
   issues: ['list','configure','links','prepare','linkPr','close','repo'],

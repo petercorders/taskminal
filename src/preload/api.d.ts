@@ -186,6 +186,8 @@ export interface TaskminalApi {
   openLink(url: string): void
   /** 바꾼 단축키 — 앱 메뉴의 표시를 맞춘다 */
   setMenuKeys(keys: Record<string, string>): void
+  /** 끌어 놓은 파일의 디스크 경로 (58c) — 디스크에 없는 파일(브라우저에서 끈 그림 등)은 '' */
+  filePath(file: File): string
   pty: PtyApi
   usage: UsageApi
   /** ~/.ssh/config 의 Host 이름들 — 와일드카드 빼고(25단계, main 이 읽기만) */

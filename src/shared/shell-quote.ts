@@ -1,0 +1,21 @@
+// 터미널 pane 에 끌어 놓은 파일 경로를 셸 입력으로 (58c). 순수 함수.
+// development-tools 의 commandLine 은 보여 주기용(안 보이는 글자를 \u{…} 로 바꾼다)이라 쓰지 않는다 — 이 값은 실제 셸에 들어간다.
+
+/** 따옴표 없이 넣어도 셸이 글자 그대로 한 낱말로 읽는 글자 — ASCII 만. 그 밖(공백 · 한글 · $ · ~ · = …)은 모두 따옴표로 감싼다 */
+const SAFE = /^[A-Za-z0-9_@%+:,./-]+$/
+/** 줄바꿈 · ESC · ^C 같은 제어 글자 — 따옴표 안에 있어도 셸이 읽기 전에 줄 편집기 · tty 가 '누른 키' 로 받는다 */
+const CONTROL = /[\x00-\x1f\x7f]/
+
+/** 작은따옴표로 감싸고 안의 ' 는 '\'' 로(닫고 · 글자 ' · 다시 연다) */
+const quoteWord = (path: string): string => (SAFE.test(path) ? path : `'${path.replace(/'/g, `'\\''`)}'`)
+
+/**
+ * 경로들을 셸 낱말로 묶어 공백으로 잇는다. 끝에 공백 하나 — 줄바꿈은 붙이지 않는다(넣기만 하고 실행하지 않는다).
+ * 제어 글자가 든 경로는 넣지 않고 건너뛴다: 줄바꿈은 따옴표가 열려 있어도 줄 편집기에는 Enter 라, 셸이 아닌 프로그램(REPL · read)이나
+ * 입력줄에 이미 열린 따옴표가 있으면 그 자리에서 실행되고, ^C · ESC · ⌫ 는 입력줄을 지우거나 다른 키로 읽힌다 — 따옴표로는 막을 수 없다.
+ * 빈 경로(디스크에 없는 파일)도 건너뛴다. 넣을 것이 없으면 ''.
+ */
+export function shellQuotePaths(paths: readonly string[]): string {
+  const words = paths.filter((p) => p !== '' && !CONTROL.test(p)).map(quoteWord)
+  return words.length > 0 ? `${words.join(' ')} ` : ''
+}
