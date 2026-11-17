@@ -1034,6 +1034,11 @@ select {
   width: 14px;
   text-align: center;
 }
+/* 강조색 바탕(메뉴에서 고른 항목) 위에서는 Claude 주황이 묻힌다 — 그때만 글자색을 따른다(리뷰) */
+.menu-item:hover .agent-icon,
+.menu-item:focus .agent-icon {
+  fill: currentColor;
+}
 /* 59단계: 새 대화 항목은 체크 칸(14px)에 로고를 둔다 — 글자 줄에 얹히지 않게 block(칸 높이 = 로고 높이, 항목이 가운데로 맞춘다) */
 .menu-check .agent-icon {
   display: block;

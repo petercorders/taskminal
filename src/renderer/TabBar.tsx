@@ -77,8 +77,9 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
       <div ref={listRef} className="tab-list" role="tablist" aria-label={`${task.name} 탭`}>
         {task.tabs.map((tab, index) => {
           const label = labels[index]!
-          // 59단계: 대화가 있는 탭은 이름 앞에 그 도구의 로고 — 이름을 바꾼 탭 · 이어 받은 세션 탭도 어느 도구인지 보이게
-          const agent = tabAgent(task, tab)
+          // 59단계: 대화가 있는 탭은 이름 앞에 그 도구의 로고 — 이름을 바꾼 탭도 어느 도구인지 보이게.
+          // 대화가 없으면 활성 pane 의 터미널에서 도는 claude · codex(터미널로 이어 받은 세션 포함) — 사이드바 · pane 머리와 같은 근거(리뷰)
+          const agent = tabAgent(task, tab) ?? activity[tab.activePaneId]?.agent?.agent ?? null
           const active = tab.id === task.activeTabId
           const act = taskActivity(paneIds(tab.layout).map((id) => activity[id]))
           return (
