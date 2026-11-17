@@ -139,6 +139,30 @@ select {
 .icon {
   flex: none;
 }
+/* 59단계: 에이전트 로고(AgentIcon) — 이름 앞에 붙는다. 줄지 않고(좁으면 이름 쪽이 말줄임) 놓인 줄의 세로 가운데 */
+.agent-icon {
+  flex: none;
+  align-self: center;
+}
+/* 로고 + 이름 한 덩어리. 글 가운데 · 단추 안에 놓여도 이름 글자의 기준선이 옆 글자와 같게 baseline 으로 두고 로고만 가운데로 —
+   align-items: center 면 덩어리의 기준선이 로고 아래 끝이 되어, 이름이 옆 글자보다 올라가고 줄 · 단추 높이가 는다 */
+.agent-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+/* 말줄임하는 한 줄(탭 · 사이드바 둘째 줄) — 로고는 그대로 두고 글자 쪽만 줄인다 */
+.agent-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.agent-line-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .icon-button {
   display: inline-grid;
   place-items: center;
@@ -1009,6 +1033,10 @@ select {
 .menu-check {
   width: 14px;
   text-align: center;
+}
+/* 59단계: 새 대화 항목은 체크 칸(14px)에 로고를 둔다 — 글자 줄에 얹히지 않게 block(칸 높이 = 로고 높이, 항목이 가운데로 맞춘다) */
+.menu-check .agent-icon {
+  display: block;
 }
 .menu-swatch {
   width: 12px;
@@ -2868,6 +2896,7 @@ input[type='checkbox'] {
   height: 18px;
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1); /* 로고와 이름 사이(59단계) */
   padding: 0 var(--space-2);
   border-radius: 9px;
   font-size: 12px;

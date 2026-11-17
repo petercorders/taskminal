@@ -10,6 +10,7 @@ import { TaskMenu } from './TaskMenu'
 import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
 import { SidebarPorts } from './ports-ui'
 import { Icon } from './icons'
+import { AgentIcon } from './AgentIcon'
 import { UsageBars } from './UsageBars'
 import type { UsageMap } from '../shared/usage'
 
@@ -145,6 +146,7 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
     const active = task.id === state.activeTaskId
     const issue = issueOf(task)
     const act = activityOf(task)
+    const last = lastOf(task)
     const editing = renaming === task.id && where !== 'attention'
     return (
       <li
@@ -193,9 +195,17 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
                 {unread.has(task.id) && <span className="task-unread" aria-label="새 출력" data-testid="task-unread" />}
                 {!compact && agoOf(task) && <span className="task-ago">{agoOf(task)}</span>}
               </span>
-              {!compact && lastOf(task) && (
-                <span className={`task-last ${lastOf(task)!.tone}`} data-testid="task-last">
-                  {lastOf(task)!.text}
+              {!compact && last && (
+                // 59단계: 에이전트 상태 줄(Claude · 허락 기다림)은 앞에 그 도구의 로고 — 로고는 그대로 두고 글자만 말줄임
+                <span className={`task-last ${last.tone}${last.agent ? ' agent-line' : ''}`} data-testid="task-last">
+                  {last.agent ? (
+                    <>
+                      <AgentIcon agent={last.agent} size={12} />
+                      <span className="agent-line-text">{last.text}</span>
+                    </>
+                  ) : (
+                    last.text
+                  )}
                 </span>
               )}
               {!compact && (

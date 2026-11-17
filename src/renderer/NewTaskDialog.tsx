@@ -5,12 +5,15 @@ import { cwdLike } from '../shared/cwd'
 import { checkBranchName } from '../shared/worktree'
 import { isRemotePath, isSshHost } from '../shared/remote'
 import { runtime } from './runtime'
+import { AgentIcon } from './AgentIcon'
+import type { ChatAgent } from '../shared/chat'
 import type { AppState, NewTaskInput, NewTaskStart } from '../shared/types'
 
-const START_CHOICES: readonly (readonly [NewTaskStart, string])[] = [
-  ['chat-claude', 'Claude 대화'],
-  ['chat-codex', 'Codex 대화'],
-  ['terminal', '터미널'],
+// 셋째 값: 그 시작이 여는 대화의 에이전트 — 이름 앞에 로고를 그린다(59단계)
+const START_CHOICES: readonly (readonly [NewTaskStart, string, ChatAgent | null])[] = [
+  ['chat-claude', 'Claude 대화', 'claude'],
+  ['chat-codex', 'Codex 대화', 'codex'],
+  ['terminal', '터미널', null],
 ]
 
 export const TASK_COLORS = ['#5b9cf5', '#7ccf8a', '#e5b567', '#e07a7a', '#b48ef0', '#5ec4c4']
@@ -242,9 +245,16 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
             <div className="field">
               <span>시작</span>
               <div className="new-task-start" role="group" aria-label="시작">
-                {START_CHOICES.map(([value, label]) => (
+                {START_CHOICES.map(([value, label, agent]) => (
                   <button key={value} type="button" className="button" aria-pressed={start === value} onClick={() => setStart(value)} data-testid={`start-${value}`}>
-                    {label}
+                    {agent ? (
+                      <span className="agent-label">
+                        <AgentIcon agent={agent} />
+                        {label}
+                      </span>
+                    ) : (
+                      label
+                    )}
                   </button>
                 ))}
               </div>

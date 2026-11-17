@@ -277,14 +277,20 @@ export function renameTab(task: Task, tabId: Id, title: string): Task {
   }
 }
 
+/** 탭의 대화 에이전트 — 활성 pane 이 대화면 그것, 아니면 그 탭의 첫 대화. 대화가 없는 탭은 null. 탭 이름과 탭 줄 로고(59단계)가 같은 답을 쓴다 */
+export function tabAgent(task: Task, tab: Tab): ChatAgent | null {
+  const active = task.panes[tab.activePaneId]
+  // 27단계: 대화가 있는 탭은 셸 · 변경 칸으로 포커스가 가도 대화 이름 그대로 — ⌘J 로 셸을 꺼낼 때마다 탭 이름이 폴더로 바뀌지 않게
+  const chat = active?.kind === 'chat' ? active : paneIds(tab.layout).map((id) => task.panes[id]).find((p) => p?.kind === 'chat')
+  return chat ? (chat.chat?.agent ?? 'claude') : null
+}
+
 /** 탭에 보일 이름: 정한 이름, 없으면 활성 pane 폴더의 끝 이름 (`~` · `/` 는 그대로). */
 export function tabLabel(task: Task, tab: Tab): string {
   if (tab.title) return tab.title
+  const agent = tabAgent(task, tab)
+  if (agent) return `${AGENT_NAME[agent]} 대화`
   const active = task.panes[tab.activePaneId]
-  if (active?.kind === 'chat') return `${AGENT_NAME[active.chat?.agent ?? 'claude']} 대화`
-  // 27단계: 대화가 있는 탭은 셸 · 변경 칸으로 포커스가 가도 대화 이름 그대로 — ⌘J 로 셸을 꺼낼 때마다 탭 이름이 폴더로 바뀌지 않게
-  const chat = paneIds(tab.layout).map((id) => task.panes[id]).find((p) => p?.kind === 'chat')
-  if (chat) return `${AGENT_NAME[chat.chat?.agent ?? 'claude']} 대화`
   if (active?.kind === 'review') return '변경'
   const cwd = normalizePath(task.panes[tab.activePaneId]?.cwd ?? task.cwd)
   if (cwd === '~' || cwd === '/') return cwd

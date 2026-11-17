@@ -3,6 +3,7 @@ import type { PaneActivity } from '../shared/activity'
 import type { Branches } from '../shared/git'
 import type { AppState, Id } from '../shared/types'
 import { ActivityIcon, activityText } from './activity-ui'
+import { AgentIcon } from './AgentIcon'
 import { overviewSections, overviewTarget } from './overview-model'
 import { shortPath, timeAgo, type PaneTarget } from './sidebar-model'
 
@@ -64,11 +65,14 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose }:
               {card.task.name}{card.unread && <span className="overview-unread" aria-label="안 읽음"> · 안 읽음</span>}
             </button></h3>
             <div className="dim small overview-meta" title={card.task.cwd}>{card.group && `${card.group} · `}{shortPath(card.task.cwd)}{card.branch && ` · ${card.branch}`}</div>
-            <p className={`overview-last ${card.line?.tone ?? 'dim'}`}>{card.line?.text ?? '최근 활동이 없습니다.'}</p>
+            <p className={`overview-last ${card.line?.tone ?? 'dim'}`}>{card.line?.agent ? <span className="agent-label"><AgentIcon agent={card.line.agent} />{card.line.text}</span> : (card.line?.text ?? '최근 활동이 없습니다.')}</p>
             {card.lastAt !== null && <div className="dim small">최근 활동 {timeAgo(card.lastAt, Date.now())} 전</div>}
             <ul className="overview-panes" aria-label={`${card.task.name} 화면`}>
               {card.panes.map((pane) => <li key={`${pane.tabId}:${pane.paneId}`}><button type="button" className="button overview-pane" onClick={() => open(pane)}>
-                <ActivityIcon state={pane.activity?.state ?? 'idle'} /><span>{pane.label}</span><span className="dim small">{activityText(pane.activity)}</span>
+                <ActivityIcon state={pane.activity?.state ?? 'idle'} />
+                {/* 59단계: 대화 pane 은 이름 앞에, 터미널에서 띄운 에이전트는 상태 글자(Claude · 허락 기다림) 앞에 로고 */}
+                <span className={pane.agent ? 'agent-label' : undefined}>{pane.agent && <AgentIcon agent={pane.agent} />}{pane.label}</span>
+                <span className={`dim small${pane.activity?.agent ? ' agent-label' : ''}`}>{pane.activity?.agent && <AgentIcon agent={pane.activity.agent.agent} />}{activityText(pane.activity)}</span>
               </button></li>)}
             </ul>
           </article>)}

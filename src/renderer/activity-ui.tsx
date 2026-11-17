@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatDuration, type ActivityState, type PaneActivity } from '../shared/activity'
 import { agentLabel } from '../shared/agent-hooks'
+import { AgentIcon } from './AgentIcon'
 
 export const ACTIVITY_LABEL: Record<ActivityState, string> = {
   idle: '쉬는 중',
@@ -59,6 +60,7 @@ export function PaneHead({ activity, folder, focused }: { activity: PaneActivity
       {status && (
         <span className={`pane-head-status ${a!.state}`} data-testid="pane-status" title={a?.message}>
           {a && <ActivityIcon state={a.state} size={10} />}
+          {a?.agent && <AgentIcon agent={a.agent.agent} size={12} />}
           {status}
         </span>
       )}

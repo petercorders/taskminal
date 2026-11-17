@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { Task } from '../shared/types'
 import type { ConversationHit, ConversationQuery, ConversationResult } from '../shared/conversation-search'
 import { Modal } from './Modal'
+import { AgentIcon } from './AgentIcon'
 import { FindSwitch } from './work-tools-ui'
 import type { FindKind } from '../shared/work-tools'
 import './conversation-search.css'
@@ -107,7 +108,7 @@ export function ConversationSearch({ tasks, activeTaskId, onOpen, onClose, initi
     <div role="status" className="conversation-search-status">{loading ? '검색 중…' : !text.trim() ? '찾을 내용을 입력하세요.' : result ? result.hits.length ? `${result.hits.length}개 결과${result.more ? ' · 결과가 더 있습니다. 검색 범위를 좁혀 주세요.' : ''}` : result.errors.length ? '일부 기록을 읽지 못했습니다. 검색 범위를 바꾸어 다시 시도하세요.' : '검색 결과가 없습니다.' : error ? '검색하지 못했습니다. 검색어를 바꾸어 다시 시도하세요.' : ''}</div>
     <ul className="conversation-search-results" aria-label="대화 검색 결과" aria-busy={loading || busy}>
       {result?.hits.map((hit, index) => <li key={`${hit.paneId}:${hit.fingerprint}:${index}`}><button type="button" disabled={busy} onClick={() => { void open(hit) }}>
-        <span className="conversation-search-meta">{hit.taskName} · {hit.agent === 'claude' ? 'Claude' : 'Codex'} · {hit.role === 'user' ? '나' : '응답'}{hit.archived ? ' · 보관됨' : ''} · {new Date(hit.at).toLocaleString()}</span>
+        <span className="conversation-search-meta">{hit.taskName} · <span className="agent-label"><AgentIcon agent={hit.agent} size={12} />{hit.agent === 'claude' ? 'Claude' : 'Codex'}</span> · {hit.role === 'user' ? '나' : '응답'}{hit.archived ? ' · 보관됨' : ''} · {new Date(hit.at).toLocaleString()}</span>
         <span className="conversation-search-snippet">{hit.snippet}</span>
       </button></li>)}
     </ul>

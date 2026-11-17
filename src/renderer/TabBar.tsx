@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { taskActivity, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
-import { tabLabels } from '../shared/model'
+import { tabAgent, tabLabels } from '../shared/model'
 import type { Id, SplitDir, Task, Template } from '../shared/types'
 import { TemplateMenu } from './TemplateMenu'
 import type { PortChip } from '../shared/ports'
 import { PortChips } from './ports-ui'
 import { Icon } from './icons'
+import { AgentIcon } from './AgentIcon'
 
 interface Props {
   task: Task
@@ -76,6 +77,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
       <div ref={listRef} className="tab-list" role="tablist" aria-label={`${task.name} 탭`}>
         {task.tabs.map((tab, index) => {
           const label = labels[index]!
+          // 59단계: 대화가 있는 탭은 이름 앞에 그 도구의 로고 — 이름을 바꾼 탭 · 이어 받은 세션 탭도 어느 도구인지 보이게
+          const agent = tabAgent(task, tab)
           const active = tab.id === task.activeTabId
           const act = taskActivity(paneIds(tab.layout).map((id) => activity[id]))
           return (
@@ -133,7 +136,7 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
                   type="button"
                   role="tab"
                   id={tabElementId(tab.id)}
-                  className="tab-main"
+                  className={`tab-main${agent ? ' agent-line' : ''}`}
                   aria-selected={active}
                   aria-controls={tabPanelId(tab.id)}
                   title="더블클릭 또는 F2 로 이름 바꾸기"
@@ -146,7 +149,14 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
                     } else moveFocus(e, index)
                   }}
                 >
-                  {label}
+                  {agent ? (
+                    <>
+                      <AgentIcon agent={agent} />
+                      <span className="agent-line-text">{label}</span>
+                    </>
+                  ) : (
+                    label
+                  )}
                 </button>
               )}
               {ports && <PortChips chips={ports.of(tab.id)} failed={ports.failed && active && visible} onOpen={ports.onOpen} onMenu={ports.onMenu} />}

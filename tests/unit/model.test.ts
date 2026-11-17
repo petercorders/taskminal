@@ -25,6 +25,7 @@ import {
   setTabRatio,
   splitActivePane,
   setPaneCwd,
+  tabAgent,
   tabLabel,
   tabLabels,
   tabShownLabel,
@@ -303,6 +304,46 @@ describe('탭 이름 (27단계)', () => {
     expect(tabLabel(withReview, withReview.tabs[0]!)).toBe('Claude 대화')
     const reviewOnly = { ...withReview, tabs: [{ ...tab, layout: { type: 'pane' as const, paneId: 'rv' }, activePaneId: 'rv' }] }
     expect(tabLabel(reviewOnly, reviewOnly.tabs[0]!)).toBe('변경')
+  })
+})
+
+describe('탭의 대화 에이전트 — 탭 줄 로고 (59단계)', () => {
+  test('대화 탭은 그 대화의 에이전트, 대화가 없는 탭은 null', () => {
+    const claude = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    expect(tabAgent(claude, claude.tabs[0]!)).toBe('claude')
+    const codex = createTask(input({ start: 'chat-codex' }), defaultSettings(), ids(), 0)
+    expect(tabAgent(codex, codex.tabs[0]!)).toBe('codex')
+    const shell = createTask(input(), defaultSettings(), ids(), 0)
+    expect(tabAgent(shell, shell.tabs[0]!)).toBeNull()
+  })
+  test('셸 · 변경 칸으로 포커스가 가도 그 탭의 대화 에이전트 그대로(탭 이름과 같은 차례) · 변경 칸만 있으면 null', () => {
+    const chat = createTask(input({ start: 'chat-codex' }), defaultSettings(), ids(), 0)
+    const opened = shellToggle(chat, () => 'sh')
+    expect(opened.tabs[0]!.activePaneId).toBe('sh')
+    expect(tabAgent(opened, opened.tabs[0]!)).toBe('codex')
+    const tab = chat.tabs[0]!
+    const reviewOnly = { ...chat, panes: { ...chat.panes, rv: { id: 'rv', cwd: chat.cwd, kind: 'review' as const } }, tabs: [{ ...tab, layout: { type: 'pane' as const, paneId: 'rv' }, activePaneId: 'rv' }] }
+    expect(tabAgent(reviewOnly, reviewOnly.tabs[0]!)).toBeNull()
+  })
+  test('대화가 둘이면 포커스가 있는 대화의 에이전트 — 탭 이름과 어긋나지 않는다', () => {
+    const chat = createTask(input({ start: 'chat-claude' }), defaultSettings(), ids(), 0)
+    const both = splitActivePaneChat(chat, 'right', () => 'cx', 'codex')
+    expect(both.tabs[0]!.activePaneId).toBe('cx')
+    expect(tabAgent(both, both.tabs[0]!)).toBe('codex')
+    expect(tabLabel(both, both.tabs[0]!)).toBe('Codex 대화')
+    const back = focusPane(both, chat.tabs[0]!.activePaneId)
+    expect(tabAgent(back, back.tabs[0]!)).toBe('claude')
+    expect(tabLabel(back, back.tabs[0]!)).toBe('Claude 대화')
+  })
+  test('이름을 정한 탭도 에이전트는 그대로 · chat 값이 빠진 대화 pane 은 claude', () => {
+    const chat = createTask(input({ start: 'chat-codex' }), defaultSettings(), ids(), 0)
+    const named = renameTab(chat, chat.tabs[0]!.id, '버그 고치기')
+    expect(tabLabel(named, named.tabs[0]!)).toBe('버그 고치기')
+    expect(tabAgent(named, named.tabs[0]!)).toBe('codex')
+    const paneId = chat.tabs[0]!.activePaneId
+    const bare = { ...chat, panes: { ...chat.panes, [paneId]: { id: paneId, cwd: chat.cwd, kind: 'chat' as const } } }
+    expect(tabAgent(bare, bare.tabs[0]!)).toBe('claude')
+    expect(tabLabel(bare, bare.tabs[0]!)).toBe('Claude 대화')
   })
 })
 

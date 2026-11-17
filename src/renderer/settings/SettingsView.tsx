@@ -12,6 +12,7 @@ import { PrivacySection } from './PrivacySection'
 import { AboutSection } from './AboutSection'
 import { Choices, Group, QueryContext, Row, RowCountProvider, Section, Switch, TextField, useRowCount } from './parts'
 import { Icon, type IconName } from '../icons'
+import { AgentIcon } from '../AgentIcon'
 import type { UpdateView } from '../../shared/update'
 import type { Restored } from '../../shared/backup'
 import type { BackupMark } from '../../shared/ipc'
@@ -193,8 +194,8 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
             value={s.newTaskStart}
             onChange={(v) => patch({ newTaskStart: v })}
             options={[
-              { value: 'chat-claude', title: 'Claude 대화', desc: '대화로 시작, 셸은 ⌘J' },
-              { value: 'chat-codex', title: 'Codex 대화', desc: '대화로 시작, 셸은 ⌘J' },
+              { value: 'chat-claude', title: <span className="agent-label"><AgentIcon agent="claude" />Claude 대화</span>, desc: '대화로 시작, 셸은 ⌘J' },
+              { value: 'chat-codex', title: <span className="agent-label"><AgentIcon agent="codex" />Codex 대화</span>, desc: '대화로 시작, 셸은 ⌘J' },
               { value: 'terminal', title: '터미널', desc: '셸 하나로 시작' },
             ]}
           />

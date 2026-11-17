@@ -1,6 +1,6 @@
 // 전체 보기는 사이드바와 같은 흐름을 쓰되, 실제 탭에 속한 pane만 대상으로 삼는다.
 import type { PaneActivity } from '../shared/activity'
-import { AGENT_NAME } from '../shared/chat'
+import { AGENT_NAME, type ChatAgent } from '../shared/chat'
 import type { Branches } from '../shared/git'
 import { paneIds } from '../shared/layout'
 import type { AppState, Id, Task } from '../shared/types'
@@ -8,6 +8,8 @@ import { flowSections, lastActive, lastLine, type PaneTarget } from './sidebar-m
 
 export interface OverviewPane extends PaneTarget {
   label: string
+  /** 대화 pane 이면 그 에이전트 — 줄 앞에 로고를 그린다(59단계) */
+  agent?: ChatAgent
   activity?: PaneActivity
 }
 
@@ -37,8 +39,9 @@ function targets(task: Task, activity: Readonly<Record<Id, PaneActivity>>): Over
   return task.tabs.flatMap((tab, ti) => paneIds(tab.layout).flatMap((paneId, pi) => {
     const pane = task.panes[paneId]
     if (!pane) return []
-    const kind = pane.kind === 'chat' ? AGENT_NAME[pane.chat?.agent ?? 'claude'] : pane.kind === 'review' ? '변경 검토' : '터미널'
-    return [{ taskId: task.id, tabId: tab.id, paneId, label: `${tab.title ?? `탭 ${ti + 1}`} · ${kind}${paneIds(tab.layout).length > 1 ? ` ${pi + 1}` : ''}`, activity: activity[paneId] }]
+    const agent = pane.kind === 'chat' ? (pane.chat?.agent ?? 'claude') : undefined
+    const kind = agent ? AGENT_NAME[agent] : pane.kind === 'review' ? '변경 검토' : '터미널'
+    return [{ taskId: task.id, tabId: tab.id, paneId, label: `${tab.title ?? `탭 ${ti + 1}`} · ${kind}${paneIds(tab.layout).length > 1 ? ` ${pi + 1}` : ''}`, ...(agent ? { agent } : {}), activity: activity[paneId] }]
   }))
 }
 

@@ -117,10 +117,22 @@ describe('에이전트 상태 글자', () => {
     const { lastLine } = await import('../../src/renderer/sidebar-model')
     const task = { panes: { p1: {} } } as unknown as Parameters<typeof lastLine>[0]
     const at = (a: PaneActivity) => lastLine(task, { p1: a })
-    expect(at(chain([ag('working')]))).toEqual({ text: '● Claude · 작업 중', tone: 'run' })
-    expect(at(chain([ag('permission')]))).toEqual({ text: 'Claude · 허락 기다림', tone: 'wait' })
-    expect(at(chain([ag('input')], seen))).toEqual({ text: 'Claude · 입력 기다림', tone: 'wait' })
-    expect(at(chain([ag('done')], seen))).toEqual({ text: '✓ Claude · 끝남', tone: 'dim' })
-    expect(at(chain([ag('failed')]))).toEqual({ text: '✗ Claude · 실패', tone: 'err' })
+    // 59단계: 줄 앞에 로고를 그리게 어느 에이전트인지도 함께 준다
+    expect(at(chain([ag('working')]))).toEqual({ text: '● Claude · 작업 중', tone: 'run', agent: 'claude' })
+    expect(at(chain([ag('permission')]))).toEqual({ text: 'Claude · 허락 기다림', tone: 'wait', agent: 'claude' })
+    expect(at(chain([ag('input')], seen))).toEqual({ text: 'Claude · 입력 기다림', tone: 'wait', agent: 'claude' })
+    expect(at(chain([ag('done')], seen))).toEqual({ text: '✓ Claude · 끝남', tone: 'dim', agent: 'claude' })
+    expect(at(chain([ag('failed')]))).toEqual({ text: '✗ Claude · 실패', tone: 'err', agent: 'claude' })
+    expect(at(chain([ag('working', { agent: 'codex' } as Partial<ActivityEvent>)]))).toEqual({ text: '● Codex · 작업 중', tone: 'run', agent: 'codex' })
+  })
+  it('에이전트가 아닌 줄(명령 · 벨)에는 에이전트가 없다 — 로고를 그리지 않는다', async () => {
+    const { lastLine } = await import('../../src/renderer/sidebar-model')
+    const task = { panes: { p1: {} } } as unknown as Parameters<typeof lastLine>[0]
+    expect(lastLine(task, { p1: running })).toEqual({ text: '● claude', tone: 'run' })
+    expect(lastLine(task, { p1: running })).not.toHaveProperty('agent')
+    // 에이전트가 끝나 셸로 돌아오면(ended) 다시 명령 줄
+    const back = lastLine(task, { p1: chain([ag('working'), ag('ended')]) })
+    expect(back).toEqual({ text: '● claude', tone: 'run' })
+    expect(back).not.toHaveProperty('agent')
   })
 })

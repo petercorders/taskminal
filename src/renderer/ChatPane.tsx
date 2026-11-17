@@ -21,6 +21,7 @@ import {
 } from '../shared/chat'
 import { conversationMessage } from '../shared/conversation-search'
 import { Icon } from './icons'
+import { AgentIcon } from './AgentIcon'
 
 interface Props {
   paneId: string
@@ -706,6 +707,7 @@ export function ChatPane(p: Props) {
     >
       <header className="chat-head">
         <span className={`chat-agent ${agent}`} data-testid="chat-agent">
+          <AgentIcon agent={agent} size={12} />
           {name}
         </span>
         <span className="chat-where" title={p.cwd}>
