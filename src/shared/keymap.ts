@@ -28,6 +28,8 @@ export const SHORTCUTS = [
   { command: 'schedules', accel: '', label: '예약과 결과함' },
   { command: 'worktrees', accel: '', label: '워크트리 관리' },
   { command: 'issues', accel: '', label: '이슈 연결' },
+  // 56단계: 옆 패널 '환경 준비·확장' 도 ⌘P 에서 (도구 줄 · 고르기 칸과 같은 이름)
+  { command: 'development', accel: '', label: '환경 준비·확장' },
   { command: 'overview', accel: '', label: '전체 보기' },
   { command: 'remote-workspace', accel: '', label: '원격 작업 공간' },
   { command: 'accounts', accel: '', label: '사용량·계정' },

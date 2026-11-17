@@ -69,3 +69,8 @@ export function validGitTarget(value: unknown): value is GitTarget {
     && (v.base === null || validRefPart(v.base)) && (v.repo === null || typeof v.repo === 'string' && /^[\w.-]+\/[\w.-]+$/.test(v.repo))
     && typeof v.remoteUrl === 'string' && v.remoteUrl.length <= 4096 && !v.remoteUrl.includes('\0')
 }
+
+/** GitHub remote 주소(https · scp · ssh 꼴)의 owner/repo — 다른 호스트면 null. 56단계: main 에서 옮김(이슈 연결 저장소 칸도 쓴다) */
+export function githubRepo(url: string): string | null {
+  return /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? null
+}

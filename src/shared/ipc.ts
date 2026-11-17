@@ -5,9 +5,9 @@ import type { AppState } from './types'
 export const IPC = {
   developmentRequest:'development:request',
   remoteRequest: 'remote-workspace:request',
-  issuesList: 'issues:list', issuesConfigure: 'issues:configure', issuesLinks: 'issues:links', issuesPrepare: 'issues:prepare', issuesLinkPr: 'issues:link-pr', issuesClose: 'issues:close',
+  issuesList: 'issues:list', issuesConfigure: 'issues:configure', issuesLinks: 'issues:links', issuesPrepare: 'issues:prepare', issuesLinkPr: 'issues:link-pr', issuesClose: 'issues:close', issuesRepo: 'issues:repo',
   browserTabs:'browser:tabs',browserCreateTab:'browser:create-tab',browserSelectTab:'browser:select-tab',browserCloseTab:'browser:close-tab',browserRemember:'browser:remember',
-  worktreesList:'worktrees:list',worktreesCreate:'worktrees:create',worktreesOpen:'worktrees:open',worktreesRemove:'worktrees:remove',
+  worktreesList:'worktrees:list',worktreesCreate:'worktrees:create',worktreesOpen:'worktrees:open',worktreesRemove:'worktrees:remove',worktreesTargets:'worktrees:targets',
   schedulesView:'schedules:view',schedulesSave:'schedules:save',schedulesRemove:'schedules:remove',schedulesRunNow:'schedules:run-now',
   workflowsAppend:'workflows:append',workflowsMessage:'workflows:message',workflowsAnswer:'workflows:answer',workflowsView: 'workflows:view', workflowsSave:'workflows:save', workflowsRemove:'workflows:remove', workflowsStart:'workflows:start', workflowsStop:'workflows:stop', workflowsRetry:'workflows:retry',
   conversationsSearch: 'conversations:search',

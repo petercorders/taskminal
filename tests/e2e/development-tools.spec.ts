@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { captureWindow, firstWindow, seedState, waitLoaded } from './helpers'
 let temp:string,root:string,target:string,app:ElectronApplication,win:Page
 const git=(...args:string[])=>execFileSync('git',['-c','commit.gpgsign=false',...args],{cwd:root,encoding:'utf8'})
+// 56단계: 환경 준비·확장은 '일감 도구 ▾' 메뉴로
+async function openDevelopment(){await win.getByRole('button',{name:'일감 도구 ▾'}).click();await win.getByRole('menuitem',{name:'환경 준비·확장'}).click()}
 function config(commands:Array<{file:string;args:string[]}>=[]){writeFileSync(join(root,'.taskminal/environment.json'),JSON.stringify({copies:['.env'],commands}))}
 test.beforeEach(async()=>{
  temp=realpathSync(mkdtempSync(join(tmpdir(),'tm-development-')));root=join(temp,'repo');target=join(temp,'checkout');mkdirSync(root);mkdirSync(join(root,'.taskminal'))
@@ -13,10 +15,11 @@ test.beforeEach(async()=>{
  writeFileSync(join(root,'.env'),'ORIGINAL_PRIVATE_CONFIG=local\n')
  const data=join(temp,'data');mkdirSync(data);seedState(data,[{id:'t',name:'환경 검증',paneId:'p',cwd:root}])
  app=await electron.launch({args:['.'],env:{...process.env,TASKMINAL_USER_DATA:data}});win=await firstWindow(app);await waitLoaded(win)
- await win.getByRole('button',{name:'환경·확장',exact:true}).click();await expect(win.getByTestId('development-panel')).toBeVisible()
+ await openDevelopment();await expect(win.getByTestId('development-panel')).toBeVisible()
 })
 test.afterEach(async()=>{await app?.close();rmSync(temp,{recursive:true,force:true,maxRetries:5})})
-async function preview(){await win.getByRole('textbox',{name:'준비할 worktree 경로',exact:true}).fill(target);await win.getByRole('button',{name:'환경 준비 미리보기',exact:true}).click();await expect(win.getByText('로컬 명령은 이 컴퓨터의 권한으로 실행됩니다.',{exact:false})).toBeVisible()}
+// 56단계: 경로를 치지 않고 이 저장소의 워크트리 중에서 고른다
+async function preview(){await win.getByRole('combobox',{name:'준비할 워크트리',exact:true}).selectOption(target);await win.getByRole('button',{name:'환경 준비 미리보기',exact:true}).click();await expect(win.getByText('로컬 명령은 이 컴퓨터의 권한으로 실행됩니다.',{exact:false})).toBeVisible()}
 test('환경 미리보기 확인 뒤 ignored 설정을 독립 복사하고 기존 대상은 보존한다',async()=>{
  config([{file:process.execPath,args:['-e',"require('fs').writeFileSync('ready.txt','prepared')"]}])
  await preview();await expect(win.getByTestId('environment-preview')).not.toContainText('ORIGINAL_PRIVATE_CONFIG');await win.getByTestId('environment-preview').scrollIntoViewIfNeeded();await captureWindow(app,'/tmp/taskminal-50-environment-preview.png');await win.getByRole('button',{name:'확인하고 환경 준비',exact:true}).click()
@@ -52,7 +55,7 @@ test('준비 완료 응답 유실 뒤 같은 요청 번호로 확인하고 초�
 test('패널을 닫아도 준비를 유지하고 다시 열어 실제 실행 중인 명령을 중단한다',async()=>{
  config([{file:process.execPath,args:['-e',"require('fs').writeFileSync('started.txt','started');setInterval(()=>{},1000)"]}]);await preview();await win.getByRole('button',{name:'확인하고 환경 준비',exact:true}).click()
  await expect.poll(()=>{try{return readFileSync(join(target,'started.txt'),'utf8')}catch{return ''}}).toBe('started')
- await win.getByRole('button',{name:'작업 보조 화면 닫기',exact:true}).click();await win.getByRole('button',{name:'환경·확장',exact:true}).click()
+ await win.getByRole('button',{name:'작업 보조 화면 닫기',exact:true}).click();await openDevelopment()
  await expect(win.getByTestId('preparation-record').first().locator('strong')).toHaveText('실행 중');await win.getByRole('button',{name:'환경 준비 중단',exact:true}).click();await expect(win.getByTestId('preparation-record').first().locator('strong')).toHaveText('중단')
 })
 test('좁은 창과 200% 확대에서도 준비 확인·취소와 확장 검사에 키보드로 도달한다',async()=>{

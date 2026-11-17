@@ -10,3 +10,6 @@
 .development-records { display: flex; flex-direction: column; gap: var(--space-2); }
 .development-panel .work-tools-row { flex-wrap: wrap; }
 .development-panel .button { white-space: normal; overflow-wrap: anywhere; }
+.development-format summary { cursor: pointer; color: var(--muted); }
+.development-format[open] summary { margin-bottom: var(--space-2); }
+.development-format pre { margin: 0 0 var(--space-2); padding: var(--space-2); white-space: pre-wrap; background: var(--bg); font: 12px/1.6 ui-monospace, monospace; }

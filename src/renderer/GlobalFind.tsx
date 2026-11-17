@@ -24,10 +24,13 @@ import type { AppState } from '../shared/types'
 import { sidebarSections } from './sidebar-model'
 import { terminals } from './terminals'
 import { trapModalTab } from './Modal'
+import { FindSwitch } from './work-tools-ui'
+import type { FindKind } from '../shared/work-tools'
 
 export type FindScope = 'all' | 'task' | 'group'
 const SCOPES: readonly FindScope[] = ['all', 'task', 'group']
-const SCOPE_LABEL: Record<FindScope, string> = { all: '모든 일감', task: '지금 일감', group: '지금 묶음' }
+// 56단계: 범위 낱말을 다른 찾기 화면(명령 기록 · 에이전트 세션)과 같게 — '이 일감'
+const SCOPE_LABEL: Record<FindScope, string> = { all: '모든 일감', task: '이 일감', group: '이 묶음' }
 /** 완료 상태 (model 의 기본 상태 '완료') */
 const DONE = 'done'
 /** 결과가 이보다 많으면 일감마다 MANY_SHOW 줄만 먼저 */
@@ -76,11 +79,13 @@ interface Props {
   onMemo(memo: FindMemo): void
   onJump(target: FindTarget, keepOpen: boolean): void
   onClose(): void
+  /** 56단계: 찾는 곳 바꾸기 — 쓰던 검색어를 가져간다 */
+  onSwitch?(kind: FindKind, query: string): void
 }
 
 const rowKey = (paneId: string, line: number) => `${paneId}:${line}`
 
-export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Props) {
+export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose, onSwitch }: Props) {
   const [query, setQuery] = useState(memo.query)
   const [scope, setScope] = useState<FindScope>(memo.scope)
   const [cs, setCs] = useState(memo.cs)
@@ -440,6 +445,8 @@ export function GlobalFind({ state, redact, memo, onMemo, onJump, onClose }: Pro
         )}
         {savedTabs > 0 && <p className="gf-note" data-testid="gf-saved">열지 않은 탭 {savedTabs}개는 저장된 출력에서 찾았어요</p>}
         <p className="history-keys">↑↓ 고르기 · ↩ 가기 · ⌘↩ 열어 둔 채 · ⌃⇥ 범위 · ⌥⌘1 이전 세션 · ⌥⌘3 완료 · ⌥⌘C Aa · ⌥⌘R .* · esc</p>
+        {/* 찾는 곳 바꾸기는 맨 아래 — Tab 순환이 입력칸에서 시작해 입력칸으로 돌아오게(팔레트 꼴 화면) */}
+        <FindSwitch current="output" query={query} {...(onSwitch ? { onSwitch } : {})} />
       </div>
     </div>
   )

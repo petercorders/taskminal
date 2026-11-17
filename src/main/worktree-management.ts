@@ -6,7 +6,7 @@ import {
   isWorktreeOid, parseWorktrees, validWorktreeJournal,
   type CreateWorktree, type ManagedWorktree, type WorktreeCreateReceipt,
   type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
-  type WorktreeSnapshot, type WorktreeView,
+  type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
 } from '../shared/worktree-management'
 
 export interface WorktreeJournal {
@@ -250,6 +250,12 @@ export class WorktreeManagement {
     } catch { entry.reasons.push('상태 미확인 — 정리할 수 없어요'); entry.removable = false }
   }
 
+  /** 56단계: 환경 준비 대상 고르기용 — list() 는 워크트리마다 git status(무시한 파일까지)를 돌려 느릴 수 있어 등록 목록만 준다 */
+  async targets(root: string): Promise<WorktreeTargets> {
+    const registry = await this.registry(root)
+    return { root: registry.root, entries: registry.entries.map(({ path, commonDir, primary, bare, prunable }) => ({ path, commonDir, primary, bare, prunable })) }
+  }
+
   async list(root: string, usedCwds: readonly string[] = []): Promise<WorktreeView> {
     const registry = await this.registry(root)
     // Keep every entry for nesting and ownership decisions; never truncate the safety registry.
@@ -275,7 +281,7 @@ export class WorktreeManagement {
     validateTarget(target)
     const entry = this.find(await this.registry(root), target)
     await this.inspect(entry, [])
-    if (!entry.canOpen || entry.bare || entry.prunable || entry.unknownAttributes.length) throw new Error('이 checkout을 열 수 없어요. 경로와 등록을 확인해 주세요.')
+    if (!entry.canOpen || entry.bare || entry.prunable || entry.unknownAttributes.length) throw new Error('이 워크트리를 열 수 없어요. 경로와 등록을 확인해 주세요.')
     return { path: entry.path }
   }
 
@@ -325,7 +331,7 @@ export class WorktreeManagement {
     catch { state = 'unknown' }
     return {
       state, path: receipt.path, existing,
-      message: state === 'created' ? '등록된 checkout과 기준 커밋을 확인했어요.' : '생성 결과를 확인해야 해요. 폴더·브랜치를 확인하기 전에는 같은 요청을 다시 실행하지 않아요.',
+      message: state === 'created' ? '등록된 워크트리와 기준 커밋을 확인했어요.' : '생성 결과를 확인해야 해요. 폴더·브랜치를 확인하기 전에는 같은 요청을 다시 실행하지 않아요.',
     }
   }
 

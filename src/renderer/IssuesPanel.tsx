@@ -53,6 +53,8 @@ const linkVersions = new Map<string, number>()
 const consumers = new Map<string, number>()
 // 55단계: Jira 목록은 요청 번호 · 한 번에 하나 · 안 보이면 미룸을 JiraList 가 맡는다
 const jiraLists = new Map<string, JiraList>()
+// 56단계: 저장소 칸을 일감 폴더의 remote 로 채우려고 물은 키 — 키마다 한 번(다시 열 때 · 복귀 때 다시 묻지 않는다)
+const repoAsking = new Set<string>()
 const JIRA_STORAGE: Record<JiraStatus['storage'], string> = { encrypted: '암호화해 저장함', memory: '이번 실행 동안만 기억', env: '환경 변수', none: '' }
 const visibleConsumer = (key: string) => (consumers.get(key) ?? 0) > 0 && !document.hidden
 const subscribe = (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify) } }
@@ -101,6 +103,7 @@ export function IssuesPanel(p: Props) {
     }
     document.addEventListener('visibilitychange', visible)
     void loadLinks()
+    askRepo()
     // 다시 연 패널은 전에 읽은 Jira 목록을 한 번 새로 읽는다(읽는 중이면 끝난 뒤)
     if (drafts.get(key)!.provider === 'jira' && jiraList.view.at !== null) jiraList.refresh(drafts.get(key)!.source.trim() || JIRA_DEFAULT_JQL)
     return () => {
@@ -113,6 +116,17 @@ export function IssuesPanel(p: Props) {
     // Each operation updates only its original namespace, even after closing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
+  /** 56단계: GitHub 저장소 칸이 비었으면 일감 폴더의 remote 로 채운다 — 열 때 · GitHub 로 바꿀 때, 묻는 중이면 겹치지 않는다.
+   *  답이 오기 전에 직접 썼거나 서비스를 바꿨으면 그대로 둔다. 칸이 차 있으면 묻지 않으니 채운 뒤엔 다시 묻지 않는다. */
+  function askRepo() {
+    const now = drafts.get(key)!
+    if (repoAsking.has(key) || now.provider !== 'github' || now.source.trim()) return
+    repoAsking.add(key)
+    void p.api.repo(p.root).then((repo) => {
+      const current = drafts.get(key)
+      if (repo && current && current.provider === 'github' && !current.source.trim()) update(key, { source: repo })
+    }).catch(() => {}).finally(() => repoAsking.delete(key))
+  }
   function loadLinks(): Promise<void> {
     if (!visibleConsumer(key)) { linkAgain.delete(key); return Promise.resolve() }
     const pending = linkReads.get(key)
@@ -254,7 +268,7 @@ export function IssuesPanel(p: Props) {
     <p className="dim small">조회·폴더·PR 입력 초안은 패널을 닫아도 유지되며 앱 종료·새로고침 때 사라집니다.</p>
     <form className="issues-controls" onSubmit={(event) => { event.preventDefault(); if (drafts.get(key)!.provider !== 'jira') return void list(); const jql = drafts.get(key)!.source.trim(); if (jql) void jiraList.load(jql) }}>
       <fieldset disabled={draft.listing || draft.busy}>
-        <label className="field"><span>이슈 서비스</span><select value={draft.provider} onChange={(event) => update(key, { provider: event.target.value as Provider, source: event.target.value === 'jira' ? JIRA_DEFAULT_JQL : '', items: [], selected: undefined, cursor: undefined, error: '' })}><option value="github">GitHub</option><option value="linear">Linear</option><option value="jira">Jira</option></select></label>
+        <label className="field"><span>이슈 서비스</span><select value={draft.provider} onChange={(event) => { update(key, { provider: event.target.value as Provider, source: event.target.value === 'jira' ? JIRA_DEFAULT_JQL : '', items: [], selected: undefined, cursor: undefined, error: '' }); askRepo() }}><option value="github">GitHub</option><option value="linear">Linear</option><option value="jira">Jira</option></select></label>
         <label className="field"><span>{draft.provider === 'github' ? 'GitHub 저장소 (owner/repo)' : draft.provider === 'jira' ? 'JQL' : 'Linear 팀 키'}</span><input required value={draft.source} maxLength={draft.provider === 'jira' ? 2000 : 200} placeholder={draft.provider === 'github' ? 'owner/repo' : draft.provider === 'jira' ? JIRA_DEFAULT_JQL : 'TEAM'} onChange={(event) => update(key, { source: event.target.value, items: [], selected: undefined, cursor: undefined })} /></label>
         <button className="button" type="submit">이슈 조회</button>
       </fieldset>

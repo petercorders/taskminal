@@ -15,6 +15,8 @@ import { Modal } from './Modal'
 import { Icon } from './icons'
 import { shortPath } from './sidebar-model'
 import './agent-sessions.css'
+import { FindSwitch } from './work-tools-ui'
+import type { FindKind } from '../shared/work-tools'
 
 /** 화면에 그리는 줄 상한 — 찾기로 좁힌다 */
 const SHOWN_MAX = 200
@@ -32,12 +34,15 @@ interface Props {
   openKeys: ReadonlySet<string>
   onResume(session: AgentSession, how: ResumeHow, taskId: string): Promise<void>
   onClose(): void
+  /** 56단계: 다른 찾기 화면에서 가져온 검색어 · 찾는 곳 바꾸기 */
+  initialQuery?: string
+  onSwitch?(kind: FindKind, query: string): void
 }
 
 const expand = (path: string, home: string) => (path === '~' ? home : path.startsWith('~/') ? `${home}${path.slice(1)}` : path)
 
 /** 53단계 '에이전트 세션' — 밖에서 시작한 Claude · Codex 세션을 찾아 대화 · 터미널로 이어 한다 */
-export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose }: Props) {
+export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose, initialQuery, onSwitch }: Props) {
   const titleId = useId()
   const input = useRef<HTMLInputElement>(null)
   const feed = useRef<SessionFeed<AgentSessionList> | null>(null)
@@ -46,7 +51,7 @@ export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose 
   const [list, setList] = useState<AgentSessionList | null>(null)
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState('')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [agent, setAgent] = useState<SessionFilter['agent']>('all')
   const [scope, setScope] = useState<SessionFilter['scope']>(taskId ? 'task' : 'all')
   const [busy, setBusy] = useState<string | null>(null)
@@ -141,6 +146,7 @@ export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose 
           </button>
         </div>
       </div>
+      <FindSwitch current="sessions" query={query} {...(onSwitch ? { onSwitch } : {})} />
       <p className="agent-sessions-hint">터미널 · 다른 앱에서 시작한 Claude · Codex 세션이에요. 기록 파일은 읽기만 해요.</p>
       <label className="field">
         <span>찾기</span>

@@ -18,8 +18,8 @@ test('명시한 기준으로 checkout을 만들고 같은 요청을 재전송해
  const destination=join(base,'new-checkout')
  await panel().getByRole('textbox',{name:'브랜치 이름',exact:true}).fill('feature/ui')
  await panel().getByRole('textbox',{name:'기준 커밋 또는 ref',exact:true}).fill('HEAD')
- await panel().getByRole('textbox',{name:'새 checkout의 절대 경로',exact:true}).fill(destination)
- await panel().getByRole('button',{name:'checkout 만들기',exact:true}).click()
+ await panel().getByRole('textbox',{name:'새 워크트리 폴더의 절대 경로',exact:true}).fill(destination)
+ await panel().getByRole('button',{name:'워크트리 만들기',exact:true}).click()
  const created=panel().getByRole('article').filter({hasText:destination});await expect(created).toBeVisible()
  const journal=await app.evaluate(({app})=>app.getPath('userData'))
  const {readFileSync}=await import('node:fs');const receipt=JSON.parse(readFileSync(join(journal,'worktrees/journal.json'),'utf8')).creates[0]
@@ -33,9 +33,9 @@ test('명시한 기준으로 checkout을 만들고 같은 요청을 재전송해
 })
 test('clean checkout만 확인 후 정리하며 확인 뒤 HEAD가 바뀌면 보존한다',async()=>{
  await expect(row().getByRole('button',{name:'정리…'})).toBeEnabled();await row().getByRole('button',{name:'정리…'}).click()
- const confirm=win.getByRole('alertdialog',{name:'checkout을 정리할까요?'});await expect(confirm).toContainText(target);await win.keyboard.press('Meta+t');await expect(win.locator('[role=tablist] [role=tab]')).toHaveCount(1);await win.keyboard.press('Meta+w');await expect(confirm).toBeVisible();await expect(win.locator('[role=tablist] [role=tab]')).toHaveCount(1);git(target,'commit','--allow-empty','-m','changed')
- await confirm.getByRole('button',{name:'이 checkout 정리'}).click();await expect(panel().getByRole('alert')).toContainText('바뀌었어요');expect(existsSync(target)).toBe(true)
- await panel().getByRole('button',{name:'목록 새로 읽기'}).click();await expect(row().getByRole('button',{name:'정리…'})).toBeEnabled();await row().getByRole('button',{name:'정리…'}).click();await win.getByRole('alertdialog').getByRole('button',{name:'이 checkout 정리'}).click()
+ const confirm=win.getByRole('alertdialog',{name:'워크트리를 정리할까요?'});await expect(confirm).toContainText(target);await win.keyboard.press('Meta+t');await expect(win.locator('[role=tablist] [role=tab]')).toHaveCount(1);await win.keyboard.press('Meta+w');await expect(confirm).toBeVisible();await expect(win.locator('[role=tablist] [role=tab]')).toHaveCount(1);git(target,'commit','--allow-empty','-m','changed')
+ await confirm.getByRole('button',{name:'이 워크트리 정리'}).click();await expect(panel().getByRole('alert')).toContainText('바뀌었어요');expect(existsSync(target)).toBe(true)
+ await panel().getByRole('button',{name:'목록 새로 읽기'}).click();await expect(row().getByRole('button',{name:'정리…'})).toBeEnabled();await row().getByRole('button',{name:'정리…'}).click();await win.getByRole('alertdialog').getByRole('button',{name:'이 워크트리 정리'}).click()
  await expect(row()).toHaveCount(0);expect(existsSync(target)).toBe(false);expect(git(repo,'branch','--list','spare')).toContain('spare')
 })
 test('ignored 파일·기본 checkout을 보호하며 작은 창 확대에서 형식 입력과 취소를 유지한다',async()=>{
@@ -65,4 +65,70 @@ for(const suffix of ['line\npart','slash\\part'])test(`실제 셸 cwd가 모호�
  expect(snapshot.removable).toBe(false)
  expect(await win.evaluate(async({root,target})=>{try{await window.taskminal.worktrees.remove(root,target);return false}catch{return true}},{root:repo,target:snapshot})).toBe(true)
  expect(existsSync(target)).toBe(true);await win.evaluate(()=>window.taskminal.pty.kill('ambiguous-shell'))
+})
+
+// 56단계: 만든 워크트리에서 바로 환경 준비로 — 절대 경로를 다시 치지 않고, 형식 설명 · 명령은 읽을 꼴로
+test('워크트리 카드의 환경 준비… 는 그 워크트리를 고른 채 환경 준비 패널을 열고, 명령은 한 줄로 보인다',async()=>{
+ mkdirSync(join(repo,'.taskminal'));writeFileSync(join(repo,'.taskminal/environment.json'),JSON.stringify({copies:[],commands:[{file:'echo',args:['hello world',"it's"]}]}))
+ // 워크트리 둘이 있는 채로 각 카드에서 연다 — 둘 중 하나는 목록 첫째가 아니라서, 고른 값 대신 첫째를 쓰면 드러난다
+ const extra=join(base,'z-extra');git(repo,'worktree','add','-b','extra',extra,'HEAD')
+ await panel().getByRole('button',{name:'목록 새로 읽기'}).click()
+ await expect(panel().getByRole('article').filter({hasText:extra})).toHaveCount(1)
+ await expect(row().getByRole('button',{name:'환경 준비…'})).toBeEnabled()
+ // 기본 워크트리(저장소 자신)에는 없다
+ await expect(panel().getByRole('article').filter({hasText:'기본'}).getByRole('button',{name:'환경 준비…'})).toHaveCount(0)
+ await row().getByRole('button',{name:'환경 준비…'}).click()
+ const dev=win.getByTestId('development-panel');await expect(dev).toBeVisible()
+ const pick=dev.getByRole('combobox',{name:'준비할 워크트리'})
+ await expect(pick).toHaveValue(target)
+ await expect(pick.locator(`option[value="${repo}"]`)).toHaveCount(0)
+ await expect(dev.locator('details.development-format')).not.toHaveAttribute('open',/.*/)
+ await dev.getByRole('button',{name:'환경 준비 미리보기',exact:true}).click()
+ const preview=dev.getByTestId('environment-preview')
+ await expect(preview.locator('pre')).toHaveText(`echo 'hello world' 'it'\\''s'`)
+ await expect(preview).not.toContainText('"file"')
+ // 다른 워크트리 카드에서 열면 그 워크트리를 고른다
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0]!.webContents.send('app:command','worktrees'))
+ await panel().getByRole('article').filter({hasText:extra}).getByRole('button',{name:'환경 준비…'}).click()
+ await expect(dev.getByRole('combobox',{name:'준비할 워크트리'})).toHaveValue(extra)
+})
+// 만드는 중 · 읽는 중(busy)에는 환경 준비로 넘어가지 않는다 — 목록 읽기를 붙잡아 둔 사이 꺼져 있다
+test('목록을 읽는 동안 환경 준비… 는 꺼져 있다',async()=>{
+ await expect(row().getByRole('button',{name:'환경 준비…'})).toBeEnabled()
+ await app.evaluate(({ipcMain})=>{
+  const handlers=(ipcMain as unknown as {_invokeHandlers:Map<string,(...args:unknown[])=>Promise<unknown>>})._invokeHandlers
+  const original=handlers.get('worktrees:list')!
+  ipcMain.removeHandler('worktrees:list');ipcMain.handle('worktrees:list',async(...args)=>{await new Promise(r=>(globalThis as unknown as {releaseList:()=>void}).releaseList=r as ()=>void);return original(...args)})
+ })
+ await panel().getByRole('button',{name:'목록 새로 읽기'}).click()
+ await expect(row().getByRole('button',{name:'환경 준비…'})).toBeDisabled()
+ await app.evaluate(()=>(globalThis as unknown as {releaseList:()=>void}).releaseList())
+ await expect(row().getByRole('button',{name:'환경 준비…'})).toBeEnabled()
+})
+// 56 리뷰: 일감이 링크된 워크트리에 있으면 기본 워크트리가 환경 준비 대상이고, 자기 폴더(준비해도 실패한다)는 아니다
+test('일감 폴더가 링크된 워크트리면 기본 워크트리 카드에 환경 준비… 가 있고 자기 카드에는 없다',async()=>{
+ await app.close()
+ seedState(data,[{id:'linked',name:'링크',paneId:'shell',cwd:target}])
+ app=await electron.launch({args:['.'],env:{...process.env,TASKMINAL_USER_DATA:data}});win=await firstWindow(app);await waitLoaded(win)
+ await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0]!.webContents.send('app:command','worktrees'))
+ const primary=panel().getByRole('article').filter({hasText:'기본'})
+ await expect(primary.getByRole('button',{name:'환경 준비…'})).toBeEnabled()
+ await expect(row().getByRole('button',{name:'환경 준비…'})).toHaveCount(0)
+ await primary.getByRole('button',{name:'환경 준비…'}).click()
+ const pick=win.getByTestId('development-panel').getByRole('combobox',{name:'준비할 워크트리'})
+ await expect(pick).toHaveValue(repo)
+ await expect(pick.locator(`option[value="${target}"]`)).toHaveCount(0)
+})
+// 56 리뷰: 다시 읽기가 직접 입력에서 비운 경로를 첫 워크트리로 채우지 않는다
+test('직접 입력으로 비운 경로는 준비 기록 다시 확인 뒤에도 비어 있다',async()=>{
+ await row().getByRole('button',{name:'환경 준비…'}).click()
+ const dev=win.getByTestId('development-panel')
+ const pick=dev.getByRole('combobox',{name:'준비할 워크트리'})
+ await expect(pick).toHaveValue(target)
+ await pick.selectOption({label:'직접 입력…'})
+ const input=dev.getByRole('textbox',{name:'준비할 워크트리 경로'})
+ await input.fill('')
+ const again=dev.getByRole('button',{name:'준비 기록 다시 확인'})
+ await again.click();await expect(again).toBeEnabled()
+ await expect(input).toHaveValue('')
 })

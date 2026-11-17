@@ -77,13 +77,13 @@ test('/ 로 거르기: 이름 · 묶음으로 걸러지고, Enter 는 첫 일감
   await filter.press('Enter')
   await expect(win.locator('[data-testid="task-view"][aria-hidden="false"]')).toHaveAttribute('data-task-name', 'C 배포')
   // 묶음 보기에서도 같은 규칙: 폴더 · 묶음 이름으로 맞은 일감을 Enter 로 고른다
-  await sidebar().getByRole('radio', { name: '묶음' }).click()
+  await sidebar().getByRole('radio', { name: '묶음별' }).click()
   await filter.fill('')
   await anyRow('A 일감').locator('.task-main').click()
   await filter.fill('서버')
   await filter.press('Enter')
   await expect(win.locator('[data-testid="task-view"][aria-hidden="false"]')).toHaveAttribute('data-task-name', 'C 배포')
-  await sidebar().getByRole('radio', { name: '흐름' }).click()
+  await sidebar().getByRole('radio', { name: '상태별' }).click()
   await filter.focus()
   await filter.press('Escape')
   await expect(filter).toHaveValue('')
@@ -93,7 +93,7 @@ test('/ 로 거르기: 이름 · 묶음으로 걸러지고, Enter 는 첫 일감
 test('묶음 보기로 바꾸고 칸을 접으면 껐다 켜도 남는다', async () => {
   await section('wait').getByRole('button', { name: /대기/ }).click()
   await expect(section('wait').getByTestId('task-row')).toHaveCount(0)
-  await sidebar().getByRole('radio', { name: '묶음' }).click()
+  await sidebar().getByRole('radio', { name: '묶음별' }).click()
   await expect(sidebar().getByRole('heading', { name: '서버' })).toBeVisible()
   await expect(sidebar().locator('[data-testid="flow-section"]')).toHaveCount(0)
   await expect.poll(() => saved().settings.sidebarView, { timeout: 5_000 }).toBe('group')
@@ -101,8 +101,8 @@ test('묶음 보기로 바꾸고 칸을 접으면 껐다 켜도 남는다', asyn
   await app!.close()
   app = undefined
   await launch()
-  await expect(sidebar().getByRole('radio', { name: '묶음' })).toHaveAttribute('aria-checked', 'true')
-  await sidebar().getByRole('radio', { name: '흐름' }).click()
+  await expect(sidebar().getByRole('radio', { name: '묶음별' })).toHaveAttribute('aria-checked', 'true')
+  await sidebar().getByRole('radio', { name: '상태별' }).click()
   await expect(section('wait').getByTestId('task-row')).toHaveCount(0) // 접힘도 남았다
 })
 

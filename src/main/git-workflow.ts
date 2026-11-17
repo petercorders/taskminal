@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { validGitTarget, validRefPart, validWorkflowOptions, type CreatePullRequest, type GitTarget, type GitWorkflowResult, type GitWorkflowView, type MergePullRequest, type PrFeedbackRequest, type PullRequestView, type WorkflowOptions } from '../shared/git-workflow'
+import { githubRepo, validGitTarget, validRefPart, validWorkflowOptions, type CreatePullRequest, type GitTarget, type GitWorkflowResult, type GitWorkflowView, type MergePullRequest, type PrFeedbackRequest, type PullRequestView, type WorkflowOptions } from '../shared/git-workflow'
 import { FAILED_CHECK_STATES, LOG_CHECKS, failedChecks, logTail, reviewNotes, type FailedCheck, type PrFeedbackResult } from '../shared/ci-feedback'
 
 export interface WorkflowOutput { code: number; stdout: string; timedOut: boolean; missing: boolean }
@@ -26,9 +26,6 @@ export function makeWorkflowRunner(bins: { git?: string; gh?: string } = {}): Wo
 const EMPTY: GitWorkflowView = { state: 'not-repo', root: null, branch: null, head: null, remotes: [], target: null, upstream: null, ahead: 0, behind: 0, gh: 'not-github', pr: null }
 const fields = 'number,title,url,state,isDraft,headRefOid,headRefName,isCrossRepository,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup'
 const result = (state: GitWorkflowResult['state'], message: string, url?: string): GitWorkflowResult => ({ state, message, ...(url ? { url } : {}) })
-function githubRepo(url: string): string | null {
-  return /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? null
-}
 function safeUrl(url: string): string { return url.replace(/(https?:\/\/)[^/@\s]+@/g, '$1').replace(/[?#].*$/, '') }
 /** 한도 안에 끝나지 않으면 fallback — 밑의 작업은 멈추지 않는다(gh 는 runner 의 30초 한도로 끝난다) */
 function within<T, F>(work: Promise<T>, ms: number, fallback: F): Promise<T | F> {
@@ -142,11 +139,11 @@ export class GitWorkflowService {
   push(dir: string, target: GitTarget): Promise<GitWorkflowResult> {
     return this.locked(dir, target, async () => {
       const check = await this.run('git', ['ls-remote', '--heads', target.remote, `refs/heads/${target.branch}`], target.root)
-      if (check.code === 0 && check.stdout.split(/\s/)[0] === target.head) return result('ok', '이 커밋은 이미 원격에 있어요.')
+      if (check.code === 0 && check.stdout.split(/\s/)[0] === target.head) return result('ok', '이 커밋은 이미 remote 에 있어요.')
       const r = await this.run('git', ['push', '--set-upstream', target.remote, `${target.head}:refs/heads/${target.branch}`], target.root)
       const after = await this.run('git', ['ls-remote', '--heads', target.remote, `refs/heads/${target.branch}`], target.root)
-      if (after.code === 0 && after.stdout.split(/\s/)[0] === target.head) return result('ok', '원격에 올렸어요.')
-      return r.timedOut || r.code === 0 || after.code !== 0 ? result('unknown', '원격 반영 여부를 확인하지 못했어요. 다시 시도하면 원격부터 확인해요.') : result('error', '올리지 못했어요. 원격 권한이나 다른 커밋이 있는지 확인해 주세요.')
+      if (after.code === 0 && after.stdout.split(/\s/)[0] === target.head) return result('ok', 'remote 에 올렸어요.')
+      return r.timedOut || r.code === 0 || after.code !== 0 ? result('unknown', 'push 반영 여부를 확인하지 못했어요. 다시 시도하면 remote 부터 확인해요.') : result('error', '올리지 못했어요. remote 권한이나 다른 커밋이 있는지 확인해 주세요.')
     })
   }
   create(dir: string, request: CreatePullRequest): Promise<GitWorkflowResult> {
@@ -156,11 +153,11 @@ export class GitWorkflowService {
       if (view.gh !== 'ready' || !t.repo || !t.base || t.base === t.branch) return result('blocked', 'GitHub 로그인과 base/head 브랜치를 확인해 주세요.')
       const operation = `${t.root}\0${t.repo}\0${t.base}\0${t.branch}`
       if (view.pr) { this.pending(operation, false); return result('ok', '이미 열린 PR이 있어요.', view.pr.url) }
-      if (this.storageError) return result('blocked', '이전 원격 작업 기록을 읽지 못했어요. GitHub에서 PR을 먼저 확인해 주세요.')
+      if (this.storageError) return result('blocked', '이전 GitHub 작업 기록을 읽지 못했어요. GitHub에서 PR을 먼저 확인해 주세요.')
       if (this.uncertainCreates.has(operation)) return result('unknown', '이전 PR 생성 결과를 아직 확인하지 못했어요. GitHub에서 생성 여부를 확인한 뒤 다시 읽어 주세요.')
       const pushed = await this.run('git', ['ls-remote', '--heads', t.remote, `refs/heads/${t.branch}`], t.root)
-      if (pushed.code !== 0 || pushed.stdout.split(/\s/)[0] !== t.head) return result('blocked', '현재 커밋을 먼저 원격에 올려 주세요.')
-      if (!this.pending(operation, true)) return result('blocked', '원격 작업 기록을 저장하지 못해 PR을 만들지 않았어요.')
+      if (pushed.code !== 0 || pushed.stdout.split(/\s/)[0] !== t.head) return result('blocked', '현재 커밋을 먼저 remote 에 올려 주세요.')
+      if (!this.pending(operation, true)) return result('blocked', 'GitHub 작업 기록을 저장하지 못해 PR을 만들지 않았어요.')
       const r = await this.run('gh', ['pr', 'create', '--repo', t.repo, '--base', t.base, '--head', t.branch, '--title', request.title.trim(), '--body-file', '-'], t.root, request.body)
       const after = await this.findPr(t.root, t.repo, t.branch, t.base)
       if (after.ok && after.pr) { this.pending(operation, false); return result('ok', 'PR을 확인했어요.', after.pr.url) }
@@ -230,4 +227,15 @@ export class GitWorkflowService {
     const { notes, more } = reviewNotes(pv, lineRows, redact)
     return { state: 'ok', number: n, head, checks, notes, more, lineComments: Array.isArray(lineRows) ? 'ok' : 'error', at: Date.now() }
   }
+}
+
+/** 56단계: 폴더의 GitHub 저장소(owner/repo) — origin, 없으면 하나뿐인 remote. 로컬 git 만 읽는다(gh · 네트워크 없음) */
+export async function localGithubRepo(run: WorkflowRunner, dir: string): Promise<string | null> {
+  const listed = await run('git', ['remote'], dir)
+  if (listed.code !== 0) return null
+  const remotes = listed.stdout.trim().split('\n').filter(validRefPart)
+  const name = remotes.includes('origin') ? 'origin' : remotes.length === 1 ? remotes[0]! : null
+  if (!name) return null
+  const url = await run('git', ['remote', 'get-url', name], dir)
+  return url.code === 0 ? githubRepo(url.stdout.trim()) : null
 }

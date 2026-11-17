@@ -10,6 +10,8 @@ import type { HistoryView } from './history-state'
 import { integratedPanes } from './runtime'
 import { terminals } from './terminals'
 import { Icon } from './icons'
+import { FindSwitch } from './work-tools-ui'
+import type { FindKind } from '../shared/work-tools'
 
 type Chip = 'all' | 'failed' | 'running'
 
@@ -31,6 +33,9 @@ interface Props {
   onSaveQuick(entry: HistoryEntry): void
   onRemove(entry: HistoryEntry): void
   onClose(): void
+  /** 56단계: 다른 찾기 화면에서 가져온 검색어 · 찾는 곳 바꾸기 */
+  initialQuery?: string
+  onSwitch?(kind: FindKind, query: string): void
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -51,8 +56,8 @@ function paneLabel(task: Task | undefined, paneId: string): string {
 /** 다음 범위 (⌥R) */
 const nextScope = (s: HistoryScope): HistoryScope => HISTORY_SCOPES[(HISTORY_SCOPES.indexOf(s) + 1) % HISTORY_SCOPES.length]!
 
-export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity, signal, onInsert, onRunSplit, onGoto, onNewTab, onSaveQuick, onRemove, onClose }: Props) {
-  const [query, setQuery] = useState('')
+export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity, signal, onInsert, onRunSplit, onGoto, onNewTab, onSaveQuick, onRemove, onClose, initialQuery, onSwitch }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [scope, setScope] = useState<HistoryScope>('task')
   const [chip, setChip] = useState<Chip>('all')
   const [hideShort, setHideShort] = useState(true)
@@ -63,8 +68,11 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // 56단계: 찾을 곳을 바꿔 들어오면 이미 열려 있던 패널도 가져온 검색어로(새 신호마다 한 번 — 그냥 ⌘Y 는 검색어를 그대로 둔다)
+    if (initialQuery !== undefined) setQuery(initialQuery)
     inputRef.current?.focus()
     inputRef.current?.select()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signal])
 
   const taskOf = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
@@ -150,6 +158,7 @@ export function HistoryPanel({ view, tasks, activeTaskId, activePaneId, activity
           esc
         </button>
       </div>
+      <FindSwitch current="history" query={query} {...(onSwitch ? { onSwitch } : {})} />
       {view.saveFailed && (
         <p className="history-fail" role="status" data-testid="history-save-failed">
           기록을 저장하지 못했어요 · 디스크 공간을 확인해 주세요

@@ -17,7 +17,9 @@ test.afterEach(async () => { await app?.close(); rmSync(data, { recursive: true,
 
 test('900px에서 줄바꿈된 도구 줄을 보조 화면이 덮지 않고 헤더를 유지한다', async () => {
   await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]!; window.webContents.setZoomFactor(1); window.setSize(900, 700) })
-  await win.getByRole('button', { name: '작업 흐름', exact: true }).click()
+  // 56단계: 작업 흐름은 '일감 도구 ▾' 메뉴로
+  await win.getByRole('button', { name: '일감 도구 ▾' }).click()
+  await win.getByRole('menuitem', { name: '작업 흐름' }).click()
   await expect(win.locator('.workflow-panel')).toBeVisible()
   await expect.poll(() => win.evaluate(() => {
     const toolbar = document.querySelector<HTMLElement>('.workspace-toolbar')!, panel = document.querySelector<HTMLElement>('.work-tool-panel')!

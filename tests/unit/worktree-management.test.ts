@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseWorktrees, validWorktreeJournal, type WorktreeSnapshot, type WorktreeJournalState } from '../../src/shared/worktree-management'
+import { parseWorktrees, prepareTarget, validWorktreeJournal, type WorktreeSnapshot, type WorktreeJournalState } from '../../src/shared/worktree-management'
 import { WorktreeManagement, makeWorktreeGit, type WorktreeGit } from '../../src/main/worktree-management'
 import { AtomicJournal } from '../../src/main/atomic-journal'
 
@@ -122,6 +122,23 @@ describe('real Git worktree management', () => {
     expect(writes).toBe(1)
   })
 
+  // 56단계: 환경 준비 대상 고르기 — 상태 조사 없는 등록 목록, 일감 폴더 자신만 뺀다(기본 워크트리도 다른 폴더면 대상)
+  it('targets lists the registry without status and prepare targets exclude only the task folder', async () => {
+    const f = repository(), row = await linked(f)
+    const fromLinked = await f.service().targets(row.path)
+    expect(fromLinked.root).toBe(row.path)
+    expect(fromLinked.entries.map((entry) => entry.path)).toEqual([f.root, row.path])
+    expect(fromLinked.entries[0]).not.toHaveProperty('statusKnown')
+    expect(fromLinked.entries.filter((entry) => prepareTarget(entry, fromLinked.root)).map((entry) => entry.path)).toEqual([f.root])
+    const fromPrimary = await f.service().targets(f.root)
+    expect(fromPrimary.entries.filter((entry) => prepareTarget(entry, fromPrimary.root)).map((entry) => entry.path)).toEqual([row.path])
+  })
+  it('does not offer the separate git directory primary entry as a prepare target', async () => {
+    const f = repository(true), row = await linked(f)
+    const view = await f.service().targets(row.path)
+    expect(view.entries.map((entry) => entry.path)).toEqual([join(f.temporary, 'admin'), row.path])
+    expect(view.entries.filter((entry) => prepareTarget(entry, view.root))).toEqual([])
+  })
   it('supports a bare source while protecting the primary metadata entry', async () => {
     const f = repository(), bare = join(f.temporary, 'bare.git'), path = join(f.temporary, 'from-bare')
     git(f.root, 'clone', '--bare', '--no-local', f.root, bare)
