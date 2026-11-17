@@ -170,6 +170,16 @@ function useSystemDark(): boolean {
   return dark
 }
 
+// 58c: 탭 화면(tab-view)은 처음 본 순서로 그린다 — 탭 순서를 바꿔도 DOM 노드를 옮기지 않게.
+// 노드를 옮기면 그 안의 포커스가 풀리고 스크롤 위치(대화 · 변경 pane)가 처음으로 돌아간다. 한 번에 하나만 보이므로 그리는 순서는 화면에 영향이 없다
+// id 순으로 그리지 않는 이유: 새 탭은 늘 끝에 붙으므로 '처음 본 순서' 는 탭을 옮기기 전까지 지금의 화면 순서와 같다(순서에 기대는 것이 그대로).
+// 닫힌 탭의 id 는 지우지 않는다 — 짧은 글자 하나씩이라 실행 중에 쌓여도 작다
+const tabViewSeq = new Map<string, number>()
+function inFirstSeenOrder<T extends { id: string }>(tabs: readonly T[]): T[] {
+  for (const t of tabs) if (!tabViewSeq.has(t.id)) tabViewSeq.set(t.id, tabViewSeq.size)
+  return [...tabs].sort((a, b) => tabViewSeq.get(a.id)! - tabViewSeq.get(b.id)!)
+}
+
 /** 탭을 모두 닫은 일감: 일감은 남기고 새 탭 버튼. 보이는 일감이면 버튼이 포커스를 받는다(키보드로 바로 새 탭). */
 function NoTabs({ active, focusSignal, onAdd }: { active: boolean; focusSignal: number; onAdd(): void }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -718,7 +728,7 @@ export function App() {
   const term = useMemo(
     () => termSettings(settings, theme),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.accent, settings.shell, settings.shellIntegration, settings.restoreScrollback, theme],
+    [settings.fontFamily, settings.fontSize, settings.lineHeight, settings.cursorStyle, settings.cursorBlink, settings.scrollback, settings.optionAsMeta, settings.copyOnSelect, settings.osc52Copy, settings.accent, settings.shell, settings.shellIntegration, settings.restoreScrollback, theme],
   )
   const busyPanes = (ids: string[]) => ids.filter((id) => activity[id]?.busy).length
   // 화면에서 비밀값 가리기 (17단계) — 이 칸들이 바뀔 때만 새 객체(바뀌면 모든 pane 이 처음부터 다시 훑는다)
@@ -1841,6 +1851,11 @@ export function App() {
       case 'prev-tab':
         dispatch({ type: 'tab/cycle', taskId: task.id, step: command === 'next-tab' ? 1 : -1 })
         return refocus()
+      case 'move-tab-left':
+      case 'move-tab-right':
+        // 58c: 활성 탭을 한 칸 — 끝에서는 그대로(리듀서가 같은 상태를 돌려준다)
+        if (tab) dispatch({ type: 'tab/move', taskId: task.id, tabId: tab.id, to: task.tabs.indexOf(tab) + (command === 'move-tab-left' ? -1 : 1) })
+        return refocus()
       case 'last-tab':
         dispatch({ type: 'tab/nth', taskId: task.id, n: 9 })
         return refocus()
@@ -2180,6 +2195,7 @@ export function App() {
                   onAdd={() => addTab(task.id)}
                   onClose={(tabId) => closeTab(task, tabId)}
                   onRename={(tabId, title) => dispatch({ type: 'tab/rename', taskId: task.id, tabId, title })}
+                  onMove={(tabId, to) => dispatch({ type: 'tab/move', taskId: task.id, tabId, to })}
                   onDone={refocus}
                   onSplit={(dir) => dispatch({ type: 'pane/split', taskId: task.id, dir, paneId: newId() })}
                   templates={state.settings.templates}
@@ -2258,7 +2274,7 @@ export function App() {
                     }}
                   />
                 )}
-                {task.tabs.map((tab) => {
+                {inFirstSeenOrder(task.tabs).map((tab) => {
                   const tabActive = tab.id === task.activeTabId
                   const mounted = (taskActive && tabActive) || seenTabs.has(tab.id)
                   return (

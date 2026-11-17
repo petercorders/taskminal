@@ -18,15 +18,23 @@ import type { RemoteTerminalHost } from './terminal-host'
 import type { RemoteWorkspace, RemoteTerminal, RemoteChat } from '../../shared/remote-workspace'
 
 interface Workspace extends RemoteWorkspace { chats: Array<RemoteChat & ChatRef> }
-interface Receipt { id: string; hash: string; done: boolean; result?: unknown }
+interface Receipt { id: string; hash: string; done: boolean; result?: unknown; /** 터미널 입력의 기록이면 그 터미널 id (58단계) */ input?: string }
 interface Journal { root: string; workspaces: Workspace[]; receipts: Receipt[] }
+/** 요청 기록을 끝없이 쌓지 않는다 (58단계) — 기록이 쓰기(터미널 글자)마다 하나씩 쌓이고 지워지지 않아 1만에서 모든 쓰기가 막혔다.
+ *  터미널 입력은 터미널마다 최근 것만 따로 남겨, 글자가 다른 요청(대화 보내기 · 저장 · 열기)이나 다른 터미널의 기록을 밀어내지 않게 한다.
+ *  이 밖으로 밀려 지워진 번호가 다시 오면 새 요청으로 실행된다. 셋을 더해도 1만(기록 파일 한도)에 닿지 않는다. */
+export const INPUT_KEEP = 100
+/** 끝난 기록 전체(터미널 입력 포함)의 상한 */
+export const RECEIPT_KEEP = 8000
+/** 안 끝난 기록(실패 · 중단된 요청이 다시 실행되지 않게 막는 울타리)의 상한 */
+export const UNDONE_KEEP = 1000
 const id = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
 const text = (v: unknown, max = 4096): string => { if (typeof v !== 'string' || v.length > max || v.includes('\0')) throw Error('요청 내용을 확인해 주세요'); return v }
 const key = (v: unknown): string => { if (!id(v)) throw Error('대상 번호를 확인해 주세요'); return v }
 const valid = (v: unknown): v is Journal => {
   if (!v || typeof v !== 'object') return false
   const j = v as Journal
-  return typeof j.root === 'string' && Array.isArray(j.workspaces) && j.workspaces.length <= 50 && j.workspaces.every(w => id(w.id) && typeof w.path === 'string' && typeof w.name === 'string' && Array.isArray(w.sessions) && w.sessions.length <= 200 && w.sessions.every(s => id(s.id) && typeof s.title === 'string') && Array.isArray(w.chats) && w.chats.length <= 200 && w.chats.every(c => id(c.id) && ['claude','codex'].includes(c.agent))) && Array.isArray(j.receipts) && j.receipts.length <= 10000 && j.receipts.every(r => id(r.id) && /^[a-f0-9]{64}$/.test(r.hash) && typeof r.done === 'boolean')
+  return typeof j.root === 'string' && Array.isArray(j.workspaces) && j.workspaces.length <= 50 && j.workspaces.every(w => id(w.id) && typeof w.path === 'string' && typeof w.name === 'string' && Array.isArray(w.sessions) && w.sessions.length <= 200 && w.sessions.every(s => id(s.id) && typeof s.title === 'string') && Array.isArray(w.chats) && w.chats.length <= 200 && w.chats.every(c => id(c.id) && ['claude','codex'].includes(c.agent))) && Array.isArray(j.receipts) && j.receipts.length <= 10000 && j.receipts.every(r => id(r.id) && /^[a-f0-9]{64}$/.test(r.hash) && typeof r.done === 'boolean' && (r.input === undefined || id(r.input)))
 }
 const inside = (root: string, target: string) => { const r = relative(root, target); return r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r) }
 /** Owns processes independently of HTTP clients. A client disconnect never kills them. */
@@ -70,7 +78,8 @@ export class RemoteWorkspaceServer {
   private async cwd(w: Workspace) { const path = await realpath(w.path); if (this.closed || path !== w.path || !inside(this.root, path)) throw Error('서버가 종료됐거나 작업 폴더 경계가 바뀌었어요'); return path }
   private session(w: Workspace, value: unknown) { const s = w.sessions.find(s => s.id === key(value)); if (!s) throw Error('터미널을 찾지 못했어요'); return s }
   private chatRef(w: Workspace, value: unknown) { const c = w.chats.find(c => c.id === key(value)); if (!c) throw Error('대화를 찾지 못했어요'); return c }
-  private once(request: unknown, method: string, args: unknown[], job: () => Promise<unknown>) {
+  /** input: 터미널 입력이면 그 터미널 id — 기록을 터미널마다 따로 짧게 남긴다 */
+  private once(request: unknown, method: string, args: unknown[], job: () => Promise<unknown>, input?: string) {
     const requestId = key(request), hash = createHash('sha256').update(JSON.stringify([method, args])).digest('hex')
     const operation = this.queue.catch(() => {}).then(async () => {
       if (this.closed) throw Error('서버가 종료됐어요')
@@ -80,11 +89,21 @@ export class RemoteWorkspaceServer {
         if (!existing.done) throw Error('이전 요청 결과 확인 필요. 파일·출력·기록을 확인한 뒤 새 요청으로 진행해 주세요')
         return structuredClone(existing.result)
       }
+      this.prune(input)
       if (this.data.receipts.length >= 10000) throw Error('요청 기록 한도에 도달했어요. 새 서버 데이터 폴더가 필요합니다')
-      const r: Receipt = { id: requestId, hash, done: false }; this.data.receipts.push(r); this.persist()
+      const r: Receipt = { id: requestId, hash, done: false, ...(input ? { input } : {}) }; this.data.receipts.push(r); this.persist()
       // Persist a fence before side effects. Interrupted requests are never blindly replayed.
       const result = await job(); r.done = true; r.result = result; this.persist(); return result
     }); this.queue = operation; return operation
+  }
+  /** 새 기록을 넣기 전에 오래된 것을 지운다: 이 터미널의 끝난 입력 · 끝난 기록 전체 · 안 끝난 기록, 각각 상한까지 */
+  private prune(input?: string) {
+    const drop = new Set<Receipt>()
+    const oldest = (list: Receipt[], keep: number) => { for (const r of list.slice(0, Math.max(0, list.length - keep))) drop.add(r) }
+    if (input) oldest(this.data.receipts.filter(r => r.done && r.input === input), INPUT_KEEP - 1)
+    oldest(this.data.receipts.filter(r => r.done && !drop.has(r)), RECEIPT_KEEP - 1)
+    oldest(this.data.receipts.filter(r => !r.done), UNDONE_KEEP - 1)
+    if (drop.size) this.data.receipts = this.data.receipts.filter(r => !drop.has(r))
   }
   private async git(cwd: string, args: string[]) {
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.toUpperCase().startsWith('GIT_')))
@@ -160,7 +179,7 @@ export class RemoteWorkspaceServer {
     if (method === 'write' && a.length === 3) {
       const s = this.session(w, a[1]), v = a[2] as {requestId: string; data: string}; if (!v) throw Error('입력 형식')
       const data = text(v.data, 100000)
-      return this.once(v.requestId, method, [w.id, s.id, data], async () => { const e = this.terminals.get(s.id); if ((!this.host&&!e?.process) || s.exited !== undefined) throw Error('터미널이 종료됐어요'); if(this.host)await this.host.write(s.id,data);else e!.process!.write(data); return null })
+      return this.once(v.requestId, method, [w.id, s.id, data], async () => { const e = this.terminals.get(s.id); if ((!this.host&&!e?.process) || s.exited !== undefined) throw Error('터미널이 종료됐어요'); if(this.host)await this.host.write(s.id,data);else e!.process!.write(data); return null }, s.id)
     }
     if (method === 'stop' && a.length === 2) { const s = this.session(w, a[1]); if(s.exited === undefined){if(this.host)await this.host.kill(s.id);else this.terminals.get(s.id)?.process?.kill()} return null }
     if (method === 'chat' && a.length === 3) {

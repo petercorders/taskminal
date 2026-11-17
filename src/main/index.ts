@@ -314,6 +314,8 @@ const chats = () =>
     reserved:paneId=>!!lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId),
     permissionFor:paneId=>lastState?.tasks.some(t=>t.panes[paneId]?.workflowRunId)?'ask':undefined,
     permission: () => chatPermission,
+    // 58b: claude 를 띄울 때마다 지금 설정을 본다(처음 한 번만 읽지 않는다) — 끈 것이 아니면 켬
+    agentGuide: () => lastState?.settings.agentGuide !== false,
     channel: IPC.chatEvent,
     appVersion: app.getVersion(),
   }))

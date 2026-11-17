@@ -52,6 +52,7 @@ export function defaultExtraSettings(): ExtraSettings {
     cursorBlink: true,
     optionAsMeta: false,
     copyOnSelect: false,
+    osc52Copy: true,
     notify: {
       wait: { banner: true, sound: true },
       long: { banner: true, sound: false },
@@ -71,6 +72,7 @@ export function defaultExtraSettings(): ExtraSettings {
     hiddenPorts: [],
     portTipSeen: false,
     chatPermission: 'ask',
+    agentGuide: true,
     newTaskStart: 'chat-claude',
     sidebarView: 'flow',
     sidebarClosed: ['done'], // 흐름 보기에서 기본 마지막 상태(완료)는 접어 둔다 (21b 보드)
@@ -161,6 +163,7 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     cursorBlink: bool(v['cursorBlink'], d.cursorBlink),
     optionAsMeta: bool(v['optionAsMeta'], d.optionAsMeta),
     copyOnSelect: bool(v['copyOnSelect'], d.copyOnSelect),
+    osc52Copy: bool(v['osc52Copy'], d.osc52Copy),
     notify: parseNotify(v['notify'], d.notify),
     longAfterSec: oneOf<number>(v['longAfterSec'], LONG_AFTER_CHOICES, d.longAfterSec),
     muteViewed: bool(v['muteViewed'], d.muteViewed),
@@ -175,6 +178,7 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     hiddenPorts: parsePorts(v['hiddenPorts']),
     portTipSeen: bool(v['portTipSeen'], d.portTipSeen),
     chatPermission: isChatPermission(v['chatPermission']) ? v['chatPermission'] : d.chatPermission,
+    agentGuide: bool(v['agentGuide'], d.agentGuide),
     newTaskStart: oneOf<NewTaskStart>(v['newTaskStart'], NEW_TASK_STARTS, d.newTaskStart),
     sidebarView: oneOf<'flow' | 'group'>(v['sidebarView'], ['flow', 'group'], d.sidebarView),
     sidebarClosed: Array.isArray(v['sidebarClosed']) ? [...new Set(v['sidebarClosed'].filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 64))].slice(0, 64) : d.sidebarClosed,

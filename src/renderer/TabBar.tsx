@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { taskActivity, type PaneActivity } from '../shared/activity'
 import { paneIds } from '../shared/layout'
 import { tabLabels } from '../shared/model'
@@ -18,6 +18,8 @@ interface Props {
   onAdd(): void
   onClose(tabId: Id): void
   onRename(tabId: Id, title: string): void
+  /** 탭을 끌어 다른 탭 위에 놓았다 (58c) — 그 탭의 자리(0부터)로. 키보드는 ⌘P '탭을 왼쪽으로 · 오른쪽으로' */
+  onMove(tabId: Id, to: number): void
   /** 이름 바꾸기를 끝내거나 취소했다 — 터미널이 포커스를 다시 가져가게 */
   onDone(): void
   /** 활성 pane 을 나눈다 (단축키 ⌘D · ⇧⌘D 는 8단계) */
@@ -37,12 +39,15 @@ interface Props {
   ports?: { of(tabId: Id): PortChip[]; failed: boolean; onOpen(c: PortChip): void; onMenu(c: PortChip, x: number, y: number): void }
 }
 
+/** 탭 끌기에 싣는 값 = 탭 id (사이드바 일감 끌기와 다른 종류 — 서로의 자리에 놓이지 않는다) */
+const DRAG_TYPE = 'application/x-taskminal-tab'
+
 export const tabElementId = (tabId: Id) => `tab-${tabId}`
 export const tabPanelId = (tabId: Id) => `tabpanel-${tabId}`
 
 /** 일감의 탭 줄: 탭 고르기 · 닫기 · "+" 새 탭 · 더블클릭 또는 F2 로 이름 바꾸기.
  *  ← → 는 탭 사이 포커스만 옮기고 Enter · Space 로 고른다(수동 활성화) — 고르면 포커스가 터미널로 가기 때문. */
-export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, onChat, historyOpen, onHistory, ports, notes }: Props) {
+export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRename, onMove, onDone, onSplit, templates, onAddTemplate, onSaveTemplate, onChat, historyOpen, onHistory, ports, notes }: Props) {
   const [editing, setEditing] = useState<Id | null>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -53,7 +58,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
     listRef.current
       ?.querySelector(`[data-tab-id="${CSS.escape(task.activeTabId)}"]`)
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [visible, task.activeTabId, task.tabs.length])
+    // 활성 탭의 자리도 본다 — '탭을 왼쪽 · 오른쪽으로' 로 옮기면 id · 개수는 그대로라 줄 밖으로 나가도 따라가지 않았다(58 리뷰)
+  }, [visible, task.activeTabId, task.tabs.length, task.tabs.findIndex((t) => t.id === task.activeTabId)])
 
   const moveFocus = (e: KeyboardEvent, index: number) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
@@ -81,6 +87,27 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
               data-tab-id={tab.id}
               data-running={act.running}
               data-attention={act.attention}
+              // 이름을 고치는 중에는 끌지 않는다 — 입력칸의 글자 선택이 탭 끌기가 된다
+              draggable={editing === null}
+              onDragStart={(e: DragEvent<HTMLDivElement>) => {
+                // 이름 입력칸에서 글자를 골라 끄는 것도 여기로 올라온다 — 탭 끌기로 치지 않는다
+                if (editing !== null) return
+                e.dataTransfer.setData(DRAG_TYPE, tab.id)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(e: DragEvent<HTMLDivElement>) => {
+                if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={(e: DragEvent<HTMLDivElement>) => {
+                const id = e.dataTransfer.getData(DRAG_TYPE)
+                if (!id) return
+                e.preventDefault()
+                // 끄는 사이 탭이 닫혔을 수 있다 — 자리는 놓는 순간의 탭 줄에서, 옮길 탭은 id 로 다시 찾는다(없으면 리듀서가 그대로 둔다)
+                onMove(id, index)
+                onDone()
+              }}
             >
               {act.attention ? (
                 <span className="tab-mark attention" aria-label="확인 필요" role="img" />

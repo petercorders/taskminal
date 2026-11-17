@@ -28,6 +28,7 @@ describe('설정 기본값', () => {
       cursorBlink: true,
       optionAsMeta: false,
       copyOnSelect: false,
+      osc52Copy: true,
       longAfterSec: 30,
       muteViewed: true,
       keys: {},
@@ -48,6 +49,12 @@ describe('설정 기본값', () => {
   it('스크롤 되살리기: 끈 값은 남고, 불리언이 아니면 기본(켬)', () => {
     expect(load({ restoreScrollback: false }).restoreScrollback).toBe(false)
     expect(load({ restoreScrollback: 'no' }).restoreScrollback).toBe(true)
+  })
+
+  it('터미널 안 프로그램의 복사 허용(OSC 52, 58c): 옛 파일은 켬, 끈 값은 남고, 불리언이 아니면 기본(켬)', () => {
+    expect(load({ fontSize: 14 }).osc52Copy).toBe(true)
+    expect(load({ osc52Copy: false }).osc52Copy).toBe(false)
+    expect(load({ osc52Copy: 0 }).osc52Copy).toBe(true)
   })
 })
 
@@ -71,6 +78,7 @@ describe('설정 검증', () => {
       cursorBlink: false,
       optionAsMeta: true,
       copyOnSelect: true,
+      osc52Copy: false,
       notify: { wait: { banner: false, sound: true }, long: { banner: true, sound: true }, fail: { banner: false, sound: false }, exit: { banner: true, sound: false } },
       longAfterSec: 300,
       muteViewed: false,
@@ -94,6 +102,7 @@ describe('설정 검증', () => {
       cursorBlink: false,
       optionAsMeta: true,
       copyOnSelect: true,
+      osc52Copy: false,
       longAfterSec: 300,
       muteViewed: false,
       keys: { 'new-tab': 'Command+Y', clear: '' },
@@ -204,5 +213,11 @@ describe('대화 · 사이드바 보기 설정 (21단계)', () => {
     expect(s.sidebarView).toBe('flow')
     expect(s.sidebarClosed).toEqual(['wait'])
     expect(parseExtraSettings({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] }, [])).toMatchObject({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] })
+  })
+  it('58b 에이전트에게 Taskminal 명령 알려 주기: 기본 켬 · 끈 값은 남고 · 불리언이 아니면 기본', () => {
+    expect(defaultSettings().agentGuide).toBe(true)
+    expect(load({}).agentGuide).toBe(true) // 옛 저장 파일
+    expect(load({ agentGuide: false }).agentGuide).toBe(false)
+    expect(load({ agentGuide: 'no' }).agentGuide).toBe(true)
   })
 })

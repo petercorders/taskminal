@@ -15,6 +15,7 @@ import {
   type ChatPermission,
 } from '../../shared/chat'
 import type { AgentSession } from './session'
+import { agentGuide } from '../../shared/agent-guide'
 import { isObj } from '../../shared/guards'
 
 export interface ChildLike {
@@ -55,6 +56,8 @@ export interface ClaudeSessionOptions {
   onExit(): void
   /** 52단계: rate_limit_event 의 rate_limit_info(허용 상태여도) — 한도 실수치 */
   onUsage?(info: unknown): void
+  /** 58b: Taskminal 명령 안내를 붙일지 — 띄울 때마다 묻는다(설정을 바꾸면 다음에 띄울 때부터) */
+  agentGuide?(): boolean
 }
 
 const STDERR_KEEP = 2000
@@ -85,7 +88,9 @@ export class ClaudeSession implements AgentSession {
     const gen = ++this.gen
     this.buf = ''
     this.stderr = ''
-    const child = this.o.spawn(this.o.bin, [...claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt),...(this.o.model?['--model',this.o.model]:[]),...(this.o.effort?['--effort',this.o.effort]:[])], { cwd: this.o.cwd, env: this.o.env })
+    // 58b: 안내는 이 실행의 인자로만 — 새 대화 · 이어 하기(--resume) · 갈라 띄우기 모두 여기서 띄운다
+    const guide = this.o.agentGuide?.() ? ['--append-system-prompt', agentGuide()] : []
+    const child = this.o.spawn(this.o.bin, [...claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt),...(this.o.model?['--model',this.o.model]:[]),...(this.o.effort?['--effort',this.o.effort]:[]),...guide], { cwd: this.o.cwd, env: this.o.env })
     this.child = child
     child.stdin?.on?.('error', () => {}) // EPIPE — 끝남은 exit 가 알린다
     child.stdout?.on('data', (d: Buffer | string) => gen === this.gen && this.onData(String(d)))

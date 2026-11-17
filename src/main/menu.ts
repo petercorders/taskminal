@@ -126,6 +126,8 @@ export function buildAppMenu(dev: boolean, keys: Readonly<Record<string, string>
         { type: 'separator' },
         item('next-tab'),
         item('prev-tab'),
+        item('move-tab-left'),
+        item('move-tab-right'),
         {
           label: '탭으로 가기',
           submenu: [...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((n) => item(`tab-${n}`)), item('last-tab')],

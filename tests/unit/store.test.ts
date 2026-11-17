@@ -164,6 +164,28 @@ describe('reducer — 단축키 동작', () => {
     expect(reducer(s, { type: 'pane/cycle', taskId: a, step: 1 }).tasks[0]!.tabs[1]!.activePaneId).toBe('p2')
   })
 
+  it('tab/move 는 그 일감의 탭 순서만 바꾼다 — 활성 탭 · 다른 일감은 그대로, 바뀐 것 없으면 같은 상태 (58c)', () => {
+    let s = withTasks('a', 'b')
+    const [a, b] = [s.tasks[0]!.id, s.tasks[1]!.id]
+    s = reducer(s, { type: 'tab/add', taskId: a, tabId: 'tab2', paneId: 'p2' })
+    s = reducer(s, { type: 'tab/add', taskId: a, tabId: 'tab3', paneId: 'p3' })
+    const first = s.tasks[0]!.tabs[0]!.id
+    const order = (st: AppState) => st.tasks[0]!.tabs.map((t) => t.id)
+    const moved = reducer(s, { type: 'tab/move', taskId: a, tabId: 'tab2', to: 0 })
+    expect(order(moved)).toEqual(['tab2', first, 'tab3'])
+    expect(moved.tasks[0]!.activeTabId).toBe('tab3')
+    expect(moved.tasks[1]).toBe(s.tasks[1]) // 다른 일감은 같은 객체
+    expect(moved.activeTaskId).toBe(s.activeTaskId)
+    expect(order(reducer(s, { type: 'tab/move', taskId: a, tabId: 'tab2', to: 2 }))).toEqual([first, 'tab3', 'tab2'])
+    // 끝에서 한 칸 더 · 같은 자리 · 없는 탭 · 다른 일감의 탭 · 없는 일감 — 같은 상태 객체(저장을 건너뛴다)
+    expect(reducer(s, { type: 'tab/move', taskId: a, tabId: first, to: -1 })).toBe(s)
+    expect(reducer(s, { type: 'tab/move', taskId: a, tabId: 'tab3', to: 3 })).toBe(s)
+    expect(reducer(s, { type: 'tab/move', taskId: a, tabId: 'tab2', to: 1 })).toBe(s)
+    expect(reducer(s, { type: 'tab/move', taskId: a, tabId: 'nope', to: 0 })).toBe(s)
+    expect(reducer(s, { type: 'tab/move', taskId: b, tabId: 'tab2', to: 0 })).toBe(s)
+    expect(reducer(s, { type: 'tab/move', taskId: 'nope', tabId: 'tab2', to: 0 })).toBe(s)
+  })
+
   it('settings/font 는 8~32 안으로, 같은 값이면 같은 상태', () => {
     const s = emptyState()
     expect(reducer(s, { type: 'settings/font', size: 15 }).settings.fontSize).toBe(15)

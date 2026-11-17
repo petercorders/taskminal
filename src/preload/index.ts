@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { BackupInfo } from '../shared/backup'
 import { IPC, type AppInfo, type BackupMark, type HostView, type LoadedState, type PtyAttachResult, type PtyExit, type RedactStatus, type ScrollbackEntry } from '../shared/ipc'
 import type { LogRow } from '../shared/errlog'
@@ -93,6 +93,8 @@ const api: TaskminalApi = {
   gitBranches: (dirs) => ipcRenderer.invoke(IPC.gitBranches, dirs) as Promise<Record<string, string | null>>,
   openLink: (url) => ipcRenderer.send(IPC.openLink, url),
   setMenuKeys: (keys) => ipcRenderer.send(IPC.menuKeys, keys),
+  // 58c: 터미널 pane 에 끌어 놓은 파일의 경로 — 샌드박스 renderer 의 File 에는 path 가 없다
+  filePath: (file) => webUtils.getPathForFile(file),
   pty: {
     attach: (paneId) => ipcRenderer.invoke(IPC.ptyAttach, paneId) as Promise<PtyAttachResult>,
     spawn: (paneId, opts) => ipcRenderer.invoke(IPC.ptySpawn, paneId, opts) as Promise<void>,

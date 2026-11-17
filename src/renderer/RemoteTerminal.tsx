@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type { RemoteApi } from '../shared/remote-workspace'
+import { pushInput, takeInput, type RemoteInput } from '../shared/remote-input'
 import '@xterm/xterm/css/xterm.css'
 import './RemoteTerminal.css'
 
 // Locks survive a panel remount, but raw output and input never leave its lifetime.
 const reads = new Map<string, Promise<unknown>>()
 const MAX_INPUT = 64 * 1024
-interface Input { requestId: string; data: string }
+// 한 요청에 묶는 글자 수 — 서버의 쓰기 한도(10만 자)보다 넉넉히 작게
+const MAX_BATCH = 16 * 1024
 
 export function RemoteTerminal({ api, connection, workspace, session }: {
   api: RemoteApi; connection: string; workspace: string; session: string
@@ -44,7 +46,7 @@ export function RemoteTerminal({ api, connection, workspace, session }: {
     let resizing = false, pendingSize: { cols: number; rows: number } | undefined
     let lastSize = ''
     let finishWrite: (() => void) | undefined
-    const queue: Input[] = []
+    const queue: RemoteInput[] = []
     const key = JSON.stringify([connection, workspace, session])
     setNotice(''); setFailure(''); setReadFailure(''); setResizeFailure(''); setUncertain(''); setSize(''); setPendingInput(0)
     const visible = () => alive && !document.hidden && element.getClientRects().length > 0
@@ -54,9 +56,10 @@ export function RemoteTerminal({ api, connection, workspace, session }: {
       sending = true
       try {
         while (alive && visible() && !paused && queue.length) {
-          const item = queue[0]!
+          // 쌓인 글자를 한 요청으로 — 글자마다 왕복을 기다리면 먼 서버에서 입력이 밀린다. 이미 보낸 묶음은 그대로 다시 나온다.
+          const item = takeInput(queue, MAX_BATCH)!
           try {
-            await api.write(connection, workspace, session, item)
+            await api.write(connection, workspace, session, { requestId: item.requestId, data: item.data })
             if (!alive) return
             queue.shift(); queued -= item.data.length
             setPendingInput(queued)
@@ -80,7 +83,7 @@ export function RemoteTerminal({ api, connection, workspace, session }: {
         setFailure('입력 대기열이 가득 차 새 입력을 보내지 않았어요. 처리가 끝난 뒤 다시 입력하세요.')
         return
       }
-      queue.push({ requestId: crypto.randomUUID(), data }); queued += data.length
+      pushInput(queue, data, crypto.randomUUID()); queued += data.length
       setPendingInput(queued)
       void send()
     })
