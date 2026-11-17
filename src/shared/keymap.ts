@@ -16,6 +16,9 @@ export const SHORTCUTS = [
   { command: 'font-reset', accel: 'Command+0', label: '기본 글자 크기' },
   { command: 'next-tab', accel: 'Shift+Command+]', label: '다음 탭' },
   { command: 'prev-tab', accel: 'Shift+Command+[', label: '이전 탭' },
+  // 58c: 활성 탭을 한 칸 옮긴다(탭 끌어 놓기의 키보드 길) — 기본 키 없이 ⌘P · 창 메뉴로. 이름을 tab- 으로 시작하면 탭 번호(tab-N)로 처리된다
+  { command: 'move-tab-left', accel: '', label: '탭을 왼쪽으로' },
+  { command: 'move-tab-right', accel: '', label: '탭을 오른쪽으로' },
   { command: 'next-pane', accel: 'Command+]', label: '다음 pane' },
   { command: 'prev-pane', accel: 'Command+[', label: '이전 pane' },
   { command: 'next-task', accel: 'Alt+Command+Down', label: '다음 일감' },

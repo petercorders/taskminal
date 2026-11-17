@@ -17,6 +17,7 @@ import {
   markCommandSent,
   moveGroup,
   moveStatus,
+  moveTab,
   removeGroup,
   removeStatus,
   removeTemplate,
@@ -78,6 +79,8 @@ export type Action =
   /** n번째 탭(1부터), 9 = 마지막 */
   | { type: 'tab/nth'; taskId: Id; n: number }
   | { type: 'tab/cycle'; taskId: Id; step: 1 | -1 }
+  /** 탭 순서 바꾸기 (58c) — to 는 옮긴 뒤의 자리(0부터). 끝에서 더 · 같은 자리면 같은 상태 */
+  | { type: 'tab/move'; taskId: Id; tabId: Id; to: number }
   | { type: 'pane/cycle'; taskId: Id; step: 1 | -1 }
   | { type: 'settings/font'; size: number }
   | { type: 'pane/split'; taskId: Id; dir: SplitDir; paneId: Id; spec?: SplitSpec }
@@ -176,6 +179,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateTask(state, action.taskId, (t) => selectTabAt(t, action.n))
     case 'tab/cycle':
       return updateTask(state, action.taskId, (t) => cycleTab(t, action.step))
+    case 'tab/move':
+      return updateTask(state, action.taskId, (t) => moveTab(t, action.tabId, action.to))
     case 'pane/cycle':
       return updateTask(state, action.taskId, (t) => cycleActivePane(t, action.step))
     case 'settings/font': {

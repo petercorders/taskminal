@@ -170,6 +170,14 @@ function useSystemDark(): boolean {
   return dark
 }
 
+// 58c: 탭 화면(tab-view)은 처음 본 순서로 그린다 — 탭 순서를 바꿔도 DOM 노드를 옮기지 않게.
+// 노드를 옮기면 그 안의 포커스가 풀리고 스크롤 위치(대화 · 변경 pane)가 처음으로 돌아간다. 한 번에 하나만 보이므로 그리는 순서는 화면에 영향이 없다
+const tabViewSeq = new Map<string, number>()
+function inFirstSeenOrder<T extends { id: string }>(tabs: readonly T[]): T[] {
+  for (const t of tabs) if (!tabViewSeq.has(t.id)) tabViewSeq.set(t.id, tabViewSeq.size)
+  return [...tabs].sort((a, b) => tabViewSeq.get(a.id)! - tabViewSeq.get(b.id)!)
+}
+
 /** 탭을 모두 닫은 일감: 일감은 남기고 새 탭 버튼. 보이는 일감이면 버튼이 포커스를 받는다(키보드로 바로 새 탭). */
 function NoTabs({ active, focusSignal, onAdd }: { active: boolean; focusSignal: number; onAdd(): void }) {
   const ref = useRef<HTMLButtonElement>(null)
@@ -1841,6 +1849,11 @@ export function App() {
       case 'prev-tab':
         dispatch({ type: 'tab/cycle', taskId: task.id, step: command === 'next-tab' ? 1 : -1 })
         return refocus()
+      case 'move-tab-left':
+      case 'move-tab-right':
+        // 58c: 활성 탭을 한 칸 — 끝에서는 그대로(리듀서가 같은 상태를 돌려준다)
+        if (tab) dispatch({ type: 'tab/move', taskId: task.id, tabId: tab.id, to: task.tabs.indexOf(tab) + (command === 'move-tab-left' ? -1 : 1) })
+        return refocus()
       case 'last-tab':
         dispatch({ type: 'tab/nth', taskId: task.id, n: 9 })
         return refocus()
@@ -2180,6 +2193,7 @@ export function App() {
                   onAdd={() => addTab(task.id)}
                   onClose={(tabId) => closeTab(task, tabId)}
                   onRename={(tabId, title) => dispatch({ type: 'tab/rename', taskId: task.id, tabId, title })}
+                  onMove={(tabId, to) => dispatch({ type: 'tab/move', taskId: task.id, tabId, to })}
                   onDone={refocus}
                   onSplit={(dir) => dispatch({ type: 'pane/split', taskId: task.id, dir, paneId: newId() })}
                   templates={state.settings.templates}
@@ -2258,7 +2272,7 @@ export function App() {
                     }}
                   />
                 )}
-                {task.tabs.map((tab) => {
+                {inFirstSeenOrder(task.tabs).map((tab) => {
                   const tabActive = tab.id === task.activeTabId
                   const mounted = (taskActive && tabActive) || seenTabs.has(tab.id)
                   return (

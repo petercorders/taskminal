@@ -12,6 +12,7 @@ import {
   findPaneTask,
   focusPane,
   markCommandSent,
+  moveTab,
   normalizeState,
   openReviewPane,
   findReviewPane,
@@ -616,6 +617,59 @@ describe('focusPane · setTabRatio · findPaneTask', () => {
     const pid = s.tasks[0].tabs[1].activePaneId
     expect(findPaneTask(s, pid)).toBe(s.tasks[0].id)
     expect(findPaneTask(s, 'ghost')).toBeNull()
+  })
+})
+
+describe('moveTab — 탭 순서 바꾸기 (58c)', () => {
+  // 탭 4개(개발 · 로그 · t1 · t2), 활성 = 마지막(t2)
+  const fourTabs = () => {
+    const next = ['t1', 'p1', 't2', 'p2']
+    return addTab(addTab(flutterTask(), () => next.shift()!), () => next.shift()!)
+  }
+  const order = (t: Task) => t.tabs.map((x) => x.id)
+
+  test('가운데 탭을 왼쪽 · 오른쪽으로 한 칸', () => {
+    const t = fourTabs()
+    const [a, b, c, d] = order(t)
+    expect(order(moveTab(t, b!, 0))).toEqual([b, a, c, d])
+    expect(order(moveTab(t, b!, 2))).toEqual([a, c, b, d])
+  })
+
+  test('여러 칸(끌어 놓기): 놓은 탭의 자리를 차지하고 사이의 탭이 한 칸씩 밀린다', () => {
+    const t = fourTabs()
+    const [a, b, c, d] = order(t)
+    expect(order(moveTab(t, a!, 3))).toEqual([b, c, d, a])
+    expect(order(moveTab(t, d!, 0))).toEqual([d, a, b, c])
+    expect(order(moveTab(t, a!, 2))).toEqual([b, c, a, d])
+    expect(order(moveTab(t, d!, 1))).toEqual([a, d, b, c])
+  })
+
+  test('양 끝에서 더 가려 하거나 · 같은 자리 · 없는 탭이면 같은 객체', () => {
+    const t = fourTabs()
+    const [a, b, , d] = order(t)
+    expect(moveTab(t, a!, -1)).toBe(t)
+    expect(moveTab(t, d!, 4)).toBe(t)
+    expect(moveTab(t, b!, 1)).toBe(t)
+    expect(moveTab(t, 'ghost', 0)).toBe(t)
+  })
+
+  test('탭이 하나면 어디로도 같은 객체', () => {
+    const t = fourTabs()
+    const one = { ...t, tabs: [t.tabs[0]!], activeTabId: t.tabs[0]!.id }
+    for (const to of [-1, 0, 1]) expect(moveTab(one, one.tabs[0]!.id, to)).toBe(one)
+  })
+
+  test('활성 탭 · 탭 내용 · pane 은 그대로 — 순서만 바뀐다', () => {
+    const t = fourTabs()
+    const [a, , , d] = order(t)
+    // 활성 탭(마지막)을 옮겨도, 다른 탭을 옮겨도 활성 탭은 같다
+    for (const moved of [moveTab(t, d!, 0), moveTab(t, a!, 2)]) {
+      expect(moved.activeTabId).toBe(t.activeTabId)
+      expect(moved.panes).toBe(t.panes)
+      expect(moved.tabs).toHaveLength(4)
+      for (const tab of t.tabs) expect(moved.tabs.find((x) => x.id === tab.id)).toBe(tab)
+    }
+    expect(order(t)).toEqual([a, order(t)[1], order(t)[2], d]) // 받은 일감은 고치지 않는다
   })
 })
 
