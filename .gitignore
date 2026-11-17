@@ -1,4 +1,5 @@
-node_modules/
+# 끝에 / 를 붙이지 않는다 — worktree 에 링크로 건 node_modules 는 폴더가 아니라 / 붙은 규칙에 안 걸려 git add -A 가 링크를 커밋한다(58단계)
+node_modules
 out/
 dist/
 test-results/
