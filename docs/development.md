@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-18 (58 원격 터미널 입력 · 에이전트 안내 · 터미널 손동작 — 단위1,452 통과 · e2e 는 사용자 지시로 돌리지 않음(돌려야 할 목록은 단계 문서). 공개0.1.2 유지. 상세 `docs/stages/58-remote-input-guide-gestures.md`)
+마지막 갱신: 2026-11-18 (59 AI 도구 실제 로고 — 단위1,469 통과 · e2e 는 사용자 지시로 돌리지 않음(58 · 59 의 돌려야 할 목록은 각 단계 문서). 공개0.1.2 유지. 상세 `docs/stages/59-agent-icons.md`)
 
 2026-11-16 사용자 지시 "main 반영해주고 공개 릴리스는 아직"에 따라 PR #2를 포함한 최신 기능을 main에 통합한다. 기존 표의 'main 미병합'은 각 단계 완료 당시 기록이다. 다음 독립 작업은 최신 `origin/main`에서 작업별 브랜치로 시작한다. 새 공개 릴리스·태그·공증·배포는 계속 보류한다.
 
@@ -53,6 +53,7 @@
 | 56 앱 사용 흐름 고침 | 흐름 점검 9건: 팔레트가 옆 패널 위 · Esc 로 옆 패널 닫기 · 초안 든 대화 · 도구 줄 두 묶음(이 일감 · 앱, ⌘P 와 같은 이름, 원격이면 꺼서 이유) · 찾기 한 메뉴 + 찾을 곳 바꾸기(검색어 가져감) · GitHub 패널 PR 카드 위 · 워크트리 → 환경 준비(고르기 · 셸 한 줄 미리보기) · 이슈 저장소 채우기 · 두 뜻 낱말. 단위1,401·e2e396(392+재통과2·건너뜀2)·변이 14+8+1·리뷰 9/10 · UI/UX HIGH1 고침. `docs/stages/56-flow-polish.md` |
 | 57 56 남은 것 정리 | 원격 터미널 시험 흔들림은 재현 안 됨(56 포함 main 0/30 · 부하 0/6, 고치지 않음) · 이슈 저장소를 빈 답 · 실패 뒤 다시 묻는 e2e · `~` 펼치기 11벌(main 10 · renderer 1)을 공용 `expandHome` 으로 · e2e 임시 폴더 정리 38곳에 `maxRetries`(ENOTEMPTY 흔들림). 단위1,402·e2e397(395+건너뜀2)·변이1·리뷰 6/7. `docs/stages/57-followups.md` |
 | 58 원격 입력 · 에이전트 안내 · 터미널 손동작 | Orca 비교 v4 의 1~5: 원격 서버 요청 기록 정리(터미널마다 100 · 전체 8,000 · 안 끝난 1,000 — 1만에서 쓰기가 막히던 것) · 원격 입력 묶어 보내기 · 대화 claude 에 `taskminal` 안내(`--append-system-prompt`, 설정으로 끔) · 터미널에 파일 끌어 놓기 · OSC 52 복사 · 탭 순서 바꾸기. 단위1,452·변이38·리뷰 8/10. **e2e 미실행(사용자 지시)** — 돌려야 할 목록은 `docs/stages/58-remote-input-guide-gestures.md` |
+| 59 AI 도구 실제 로고 | Claude · Codex 이름 앞에 실제 로고(simple-icons CC0 · lobe-icons MIT, path 만 `src/shared/agent-icons.ts`) — 탭 · pane 머리 · 사이드바 · 전체 보기 · 새 일감 · 세션 · 계정 등 14곳. `THIRD_PARTY_NOTICES.md` 를 앱 묶음에. 단위1,469·변이18·리뷰 3/9. **e2e 미실행** — `docs/stages/59-agent-icons.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
