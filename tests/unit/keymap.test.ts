@@ -106,6 +106,27 @@ describe('SHORTCUTS', () => {
   })
 })
 
+describe('탭 순서 바꾸기 명령 (58c)', () => {
+  it("'탭을 왼쪽으로' · '탭을 오른쪽으로' 가 명령 표에 있고 기본 키는 없다", () => {
+    const table = shortcutTable()
+    expect(table.find((s) => s.command === 'move-tab-left')).toEqual({ command: 'move-tab-left', accel: '', label: '탭을 왼쪽으로' })
+    expect(table.find((s) => s.command === 'move-tab-right')).toEqual({ command: 'move-tab-right', accel: '', label: '탭을 오른쪽으로' })
+    expect(isAppCommand('move-tab-left')).toBe(true)
+    expect(isAppCommand('move-tab-right')).toBe(true)
+  })
+
+  it('사용자가 키를 정하면 그 키로 온다', () => {
+    const table = shortcutTable({ 'move-tab-left': 'Control+Command+[', 'move-tab-right': 'Control+Command+]' })
+    expect(commandForKey(key('BracketLeft', { ctrlKey: true }), table)).toBe('move-tab-left')
+    expect(commandForKey(key('BracketRight', { ctrlKey: true }), table)).toBe('move-tab-right')
+    expect(commandForKey(key('BracketLeft', { ctrlKey: true }))).toBeNull() // 기본 표에는 키가 없다
+  })
+
+  it('tab- 으로 시작하는 명령은 탭 번호(tab-1~8)뿐 — 그 이름은 n번째 탭으로 처리되고 ⌘P 에서 빠진다', () => {
+    expect(SHORTCUTS.map((s) => s.command).filter((c) => c.startsWith('tab-'))).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `tab-${n}`))
+  })
+})
+
 describe('repeatable', () => {
   it('만들거나 지우는 명령은 키 반복으로 되풀이하지 않는다, 옮기기 · 글꼴은 된다', () => {
     for (const c of ['new-tab', 'new-task', 'split-right', 'split-down', 'close-pane', 'palette'] as const) expect(repeatable(c), c).toBe(false)

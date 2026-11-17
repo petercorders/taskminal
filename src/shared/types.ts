@@ -157,6 +157,8 @@ export interface Settings {
   cursorBlink: boolean
   optionAsMeta: boolean
   copyOnSelect: boolean
+  /** 58c: 터미널 안 프로그램(vim · tmux …)이 OSC 52 로 Mac 클립보드에 쓰는 것을 받기 — 읽기 요청에는 늘 답하지 않는다 */
+  osc52Copy: boolean
   // 알림 · 활동
   notify: Record<NotifyKind, NotifyWay>
   /** '오래 걸린 명령' 기준 (초) */

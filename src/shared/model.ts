@@ -246,6 +246,16 @@ export function cycleTab(task: Task, step: 1 | -1): Task {
   return selectTab(task, task.tabs[(i + step + task.tabs.length) % task.tabs.length].id)
 }
 
+/** 탭을 같은 일감 안의 to 번째 자리(0부터)로 옮긴다 (58c — 탭 끌어 놓기 · '탭을 왼쪽/오른쪽으로'). 순서만 바뀌고 활성 탭은 그대로.
+ *  없는 탭 · 범위 밖(끝에서 한 칸 더) · 같은 자리면 같은 객체. */
+export function moveTab(task: Task, tabId: Id, to: number): Task {
+  const from = task.tabs.findIndex((t) => t.id === tabId)
+  if (from < 0 || to === from || to < 0 || to >= task.tabs.length) return task
+  const tabs = [...task.tabs]
+  tabs.splice(to, 0, ...tabs.splice(from, 1))
+  return { ...task, tabs }
+}
+
 /** 활성 탭 안에서 다음 · 이전 pane (⌘[ ]). */
 export function cycleActivePane(task: Task, step: 1 | -1): Task {
   const tab = activeTab(task)

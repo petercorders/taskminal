@@ -11,6 +11,8 @@ export interface TermSettings {
   scrollback: number
   optionAsMeta: boolean
   copyOnSelect: boolean
+  /** 터미널 안 프로그램의 복사(OSC 52)를 받기 */
+  osc52Copy: boolean
   /** 실제로 보이는 테마 (system 을 푼 값) */
   theme: 'dark' | 'light'
   accent: string
@@ -31,6 +33,7 @@ export function termSettings(s: Settings, theme: 'dark' | 'light'): TermSettings
     scrollback: s.scrollback,
     optionAsMeta: s.optionAsMeta,
     copyOnSelect: s.copyOnSelect,
+    osc52Copy: s.osc52Copy,
     theme,
     accent: s.accent,
     shell: s.shell,
