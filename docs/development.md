@@ -151,7 +151,7 @@
 - crashReporter 는 임시 userData(e2e)에서 켜지 않는다 — crashpad_handler 가 stdio 를 물고 남아 `app.close()` 가 끝나지 않는다(기존 e2e 가 모두 멈췄다).
 - 사이드바는 상태를 읽는 중에도 그려진다 · 그 사이 온 명령(메뉴 · app:command)은 버린다 → e2e 는 `waitLoaded(win)`(tests/e2e/helpers.ts) 뒤에 명령을 보낸다.
 - 첫 실행 안내는 state.json 이 없고 `<userData>/first-run-seen` 이 없을 때만 — e2e 는 `TASKMINAL_FIRST_RUN=seen` 이 기본(playwright 설정), 안내를 보는 시험만 지운다.
-- renderer 에 여는 API 를 늘리면 `window.spec` 의 허용 목록도 고친다(보안 기본값 시험).
+- renderer 에 여는 API 를 늘리면 허용 목록 `tests/preload-surface.ts` 를 고친다 — `window.spec`(보안 기본값) 과 단위 `preload-surface.test` 가 같이 본다.
 
 ### 19 기록과 찾기
 계획 · 결과 `docs/stages/19-history.md`. 구조: `src/shared/history.ts`(기록 모양 · 거르기 · 날짜 묶음 · 꼬리 · `hasMask` · `safeToInsert`) · `src/shared/global-find.ts`(찾기 · 가린 글 판정) · `src/shared/danger.ts`(위험 명령 — 20단계 빠른 명령이 같은 표) · `src/main/history-store.ts` · `src/renderer/history-state.ts`(useHistory — 대기열 · 숨김) · `history-ui.tsx` · `GlobalFind.tsx`. 짚어 둔 함정:
@@ -268,7 +268,7 @@
 - zsh 셸 통합의 함수는 `function 이름 {` 으로 정의한다 — `이름() {` 은 사용자 alias 가 있으면 펼쳐져 구문 오류가 난다(51단계, 커밋 가드가 잡음).
 - 파일 감시(fs.watch · FSEvents)는 부하가 크면 늦거나 감시 직후 생긴 파일을 놓친다 — 감시만 믿지 말고 주기 읽기(51 · 52: 3초, (inode · 수정 시각 · 크기) 비교)로 받친다. 전체 검사에서만 실패하던 원인.
 - Playwright `-g` 는 이름 일부로 고르므로 다른 시험이 걸릴 수 있다 — 변이 확인처럼 '그 시험' 이어야 하는 곳은 `파일:줄` 로 고른다(51~55 UI 고침에서 다른 시험을 돌려 변이가 산 것처럼 보였다).
-- preload API 를 더하거나 빼면 `window.spec` '보안 기본값' 의 키 목록도 고친다 — 전체 검사에서야 드러난다(50 · 56).
+- preload API 를 더하거나 빼고 허용 목록을 안 고친 것이 전체 검사(e2e)에서야 드러났다(50 · 55 합치기 · 56) → 목록을 `tests/preload-surface.ts` 한 곳으로 모으고 단위 `preload-surface.test` 를 두어, preload 를 고친 턴 끝 `vitest related` 에서 바로 잡는다.
 - 켜진 단추는 '첫 읽기가 끝났다' 는 뜻이 아니다 — 패널 첫 화면은 읽기 effect 전에 그려진다. 처리기를 바꿔 붙잡는 시험은 바꾼 처리기를 거친 읽기가 한 번 끝난 뒤에 붙잡기를 켠다(56 issues.spec).
 - 56단계 전체 검사에서 `remote-terminal-depth.spec` :75 · :128 이 처음엔 실패하고 다시 돌리면 통과(원격 터미널에 친 글자가 5초 안에 다 닿지 않음). 따로 반복 이 브랜치 2/30 · origin/main 0/30 — 원인 미확인, '친 글자가 셸에 안 닿음' 무리. 되풀이되면 그 시험의 기다림을 고친다.
 - 겹침 회귀 검사는 상자가 아니라 글자 끝을 잰다 — `min-width: 0` 인 flex 항목은 상자가 줄어도 안의 글자가 넘쳐 이웃을 덮는다(52 한도 막대).
