@@ -1,6 +1,7 @@
 import { mkdir, realpath } from 'node:fs/promises'
-import { join, dirname, resolve } from 'node:path'
+import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { createHash } from 'node:crypto'
 import type { WorkflowRun, RunStep } from '../shared/workflows'
 import { validWorktreeJournal, type WorktreeJournalState } from '../shared/worktree-management'
@@ -14,7 +15,7 @@ export class WorkflowWorkspaces {
     this.service = new WorktreeManagement({journal:new AtomicJournal<WorktreeJournalState>(join(data,'journal.json'),validWorktreeJournal)})
   }
   async prepare(root: string, run: WorkflowRun, step: RunStep): Promise<string> {
-    const canonical = await realpath(root==='~'?homedir():root.startsWith('~/')?resolve(homedir(),root.slice(2)):root)
+    const canonical = await realpath(expandHome(root,homedir()))
     if (run.root && run.root!==canonical) throw new Error('실행 도중 일감 폴더가 바뀌었어요')
     run.root=canonical
     if (!run.workflow.isolate) return canonical

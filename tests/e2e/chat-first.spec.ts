@@ -45,7 +45,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('새 일감 기본 = Claude 대화 칸(셸 없음) · 터미널을 고르면 셸 · 만들기 두 번에 하나', async () => {

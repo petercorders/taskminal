@@ -37,7 +37,7 @@ test.beforeEach(async()=>{
  app=await electron.launch({args:['.'],env:{...process.env,TASKMINAL_USER_DATA:dir}})
  const win=await firstWindow(app);await waitLoaded(win)
 })
-test.afterEach(async()=>{await app?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));rmSync(dir,{recursive:true,force:true})})
+test.afterEach(async()=>{await app?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));rmSync(dir,{recursive:true,force:true,maxRetries:5})})
 test('real CLI snapshots fill/click/capture and fences old references after navigation',async()=>{
  const tabs=await cli('tabs','task');expect(tabs.code).toBe(0)
  const tab=JSON.parse(tabs.out).selectedTabId as string

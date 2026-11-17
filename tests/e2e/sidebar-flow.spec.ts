@@ -35,7 +35,7 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('기본은 흐름 보기: 상태 순서대로 칸, 일감은 제 칸에, 확인 필요 칸은 비면 없다', async () => {

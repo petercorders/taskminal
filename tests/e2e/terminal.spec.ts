@@ -20,7 +20,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await launched?.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const pane = () => win.getByTestId('pane-pane-1')

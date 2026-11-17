@@ -33,8 +33,8 @@ test.beforeEach(async () => {
 })
 test.afterEach(async () => {
   await app.close()
-  rmSync(userData, { recursive: true, force: true })
-  rmSync(work, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
+  rmSync(work, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const where = (name: string) => win.getByTestId('sidebar').getByRole('listitem').filter({ hasText: name }).locator('.task-where')

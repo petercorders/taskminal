@@ -37,7 +37,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('터미널 안에서 taskminal list → 이 pane 표시 · 소켓 0600 · 앱을 끄면 종료 코드 3 · 소켓 지움', async () => {

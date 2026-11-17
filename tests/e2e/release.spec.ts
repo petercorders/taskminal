@@ -30,7 +30,7 @@ test.afterEach(async () => {
   await app?.close()
   await new Promise<void>((r) => (server ? server.close(() => r()) : r()))
   server = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const ZIP = (v: string) => `Taskminal-${v}-arm64-mac.zip`

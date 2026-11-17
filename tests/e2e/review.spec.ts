@@ -48,7 +48,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('⇧⌘G → 파일 · diff → 줄 2개 골라 ⌫ → 파일에서 빠짐 → ⌘Z 로 되살림', async () => {

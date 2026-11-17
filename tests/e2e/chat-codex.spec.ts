@@ -49,7 +49,7 @@ test.beforeEach(() => {
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test('⌘P 새 대화 (Codex) → 보내기: 배지 · 글 · 명령 줄 · 끝남', async () => {

@@ -1,5 +1,6 @@
 // 대화 pane 들의 주인 (main) — paneId 마다 Claude 프로세스 하나. 이벤트를 가려서 창 · 디스크로 보낸다.
 import { homedir } from 'node:os'
+import { expandHome } from '../../shared/cwd'
 import { chatStatus, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
@@ -70,8 +71,6 @@ function agentEnv(base: NodeJS.ProcessEnv, path: string): Record<string, string>
   if (path) env['PATH'] = path
   return env
 }
-
-const expandHome = (p: string) => (p === '~' ? homedir() : p.startsWith('~/') ? homedir() + p.slice(1) : p)
 
 export class ChatManager {
   private panes = new Map<string, Entry>()
@@ -145,7 +144,7 @@ export class ChatManager {
         ...(chat.model?{model:chat.model}:{}),...(chat.effort?{effort:chat.effort}:{}),
         bin: found.bin,
         env: sessionEnv,
-        cwd: expandHome(cwd),
+        cwd: expandHome(cwd, homedir()),
         permission: this.d.permissionFor?.(paneId)??(this.forcedAsk.has(paneId)?'ask':this.d.permission()),
         ...(chat.sessionId ? { sessionId: chat.sessionId } : {}),
         ...(chat.sessionId && chat.forkAt ? { forkAt: chat.forkAt } : {}),

@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
 import { lstat, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { expandHome } from '../shared/cwd'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   isWorktreeOid, parseWorktrees, validWorktreeJournal,
   type CreateWorktree, type ManagedWorktree, type WorktreeCreateReceipt,
@@ -69,7 +70,7 @@ export function makeWorktreeGit(bin = 'git'): WorktreeGit {
 
 function absolutePath(value: unknown, expand = false): string {
   if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0')) throw new Error('절대 경로를 확인해 주세요')
-  const path = expand && (value === '~' || value.startsWith('~/')) ? join(homedir(), value.slice(2)) : value
+  const path = expand ? expandHome(value, homedir()) : value
   if (!isAbsolute(path)) throw new Error('절대 경로를 확인해 주세요')
   return resolve(path)
 }

@@ -46,7 +46,7 @@ test.beforeEach(async ({}, info) => {
 })
 test.afterEach(async () => {
   await launched?.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const lines = () => (existsSync(marks) ? readFileSync(marks, 'utf8').split('\n').filter(Boolean).sort() : [])

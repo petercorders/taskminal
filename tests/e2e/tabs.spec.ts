@@ -23,7 +23,7 @@ test.beforeEach(async () => {
 })
 test.afterEach(async () => {
   await launched?.close()
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 const tabs = () => win.getByTestId('tab')

@@ -23,7 +23,7 @@ const statusOf = (name: string) => saved().tasks.find((t) => t.name === name)?.s
 test.afterEach(async () => {
   await app?.close()
   app = undefined
-  rmSync(userData, { recursive: true, force: true })
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5 })
 })
 
 test.describe('상태 옮기기', () => {

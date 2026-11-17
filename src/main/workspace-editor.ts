@@ -2,6 +2,7 @@ import { constants } from 'node:fs'
 import { open, realpath, lstat, rename, unlink } from 'node:fs/promises'
 import { resolve, dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { createHash, randomUUID } from 'node:crypto'
 import { WorkspaceFiles } from './workspace-files'
 import type { EditableFile, EditorSave, EditorSaveResult } from '../shared/workspace'
@@ -13,7 +14,7 @@ export class WorkspaceEditor {
   private readonly locks = new Map<string, Promise<unknown>>()
   private readonly files = new WorkspaceFiles()
   private async target(root: string, path: string) {
-    const base = await realpath(root === '~' ? homedir() : root.startsWith('~/') ? resolve(homedir(), root.slice(2)) : root)
+    const base = await realpath(expandHome(root, homedir()))
     const target = await this.files.path(base, path)
     if (resolve(base, path) !== target) throw new Error('심볼릭 링크는 편집할 수 없어요')
     return target

@@ -6,6 +6,7 @@ import { BrowserTabsStore } from './browser-tabs-store'
 import { AtomicJournal } from './atomic-journal'
 import { resolve, join } from 'node:path'
 import { homedir } from 'node:os'
+import { expandHome } from '../shared/cwd'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
 import { WorkspaceFiles } from './workspace-files'
@@ -38,7 +39,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     if (!w) throw new Error('닫힌 창')
     return w
   }
-  const expand = (s: string) => resolve(s === '~' ? homedir() : s.startsWith('~/') ? resolve(homedir(), s.slice(2)) : s)
+  const expand = (s: string) => resolve(expandHome(s, homedir()))
   const root = (event: IpcMainInvokeEvent, dir: unknown): string => {
     win(event)
     if (
