@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ChatManager, type Sink } from '../../src/main/chat/chat-manager'
 import { AgentBinFinder } from '../../src/main/chat/find-bin'
 import type { ChildLike } from '../../src/main/chat/claude-adapter'
+import { agentGuide } from '../../src/shared/agent-guide'
 import type { ChatEvent } from '../../src/shared/chat'
 
 const KEY = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789'
@@ -18,7 +19,7 @@ class FakeChild extends EventEmitter implements ChildLike {
   }
 }
 
-function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' = 'ask') {
+function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' = 'ask', agentGuide?: () => boolean) {
   const sent: unknown[][] = []
   const stored: ChatEvent[] = []
   const children: FakeChild[] = []
@@ -49,6 +50,7 @@ function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' =
       return found ? { bin: '/x/claude', path: '/login/path' } : null
     },
     permission: () => permission,
+    ...(agentGuide ? { agentGuide } : {}),
     channel: 'chat:event',
     now: () => 7,
   })
@@ -244,4 +246,56 @@ describe('workflow ownership',()=>{
   t.m.setPermission('auto')
   expect(t.children[0]!.written.at(-1)).toContain('"mode":"default"')
  })
+})
+
+describe('에이전트에게 Taskminal 명령 알려 주기 (58b)', () => {
+  /** 띄운 프로세스가 받은 안내 — 없으면 undefined */
+  const guideOf = (args: string[]) => (args.includes('--append-system-prompt') ? args[args.indexOf('--append-system-prompt') + 1] : undefined)
+
+  it('켜면 claude 인자에 --append-system-prompt 와 안내가 있고, 끄면 없다', async () => {
+    const on = setup(true, [], 'ask', () => true)
+    on.release()
+    expect(await on.m.send(on.sink, 'p1', 'a', '/tmp', { agent: 'claude' })).toBe('ok')
+    expect(guideOf(on.args[0]!)).toBe(agentGuide())
+    expect(on.args[0]!.filter((a) => a === '--append-system-prompt')).toHaveLength(1)
+
+    const off = setup(true, [], 'ask', () => false)
+    off.release()
+    expect(await off.m.send(off.sink, 'p1', 'a', '/tmp', { agent: 'claude' })).toBe('ok')
+    expect(off.args[0]).not.toContain('--append-system-prompt')
+    expect(off.args[0]).not.toContain(agentGuide())
+  })
+  it('이어 하기(--resume) · 갈라 띄우기도 새 대화와 같은 안내를 받는다', async () => {
+    const t = setup(true, [], 'ask', () => true)
+    t.release()
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude', sessionId: 's1' })
+    await t.m.send(t.sink, 'p2', 'a', '/tmp', { agent: 'claude', sessionId: 's1', forkAt: 'u-1' })
+    expect(t.args[0]).toEqual(expect.arrayContaining(['--resume', 's1']))
+    expect(guideOf(t.args[0]!)).toBe(agentGuide())
+    expect(t.args[1]).toContain('--fork-session')
+    expect(guideOf(t.args[1]!)).toBe(agentGuide())
+  })
+  it('띄울 때마다 지금 설정을 읽는다 — 띄운 뒤 끄면 다음에 띄울 때부터 없다', async () => {
+    let enabled = true
+    const t = setup(true, [], 'ask', () => enabled)
+    t.release()
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'claude' })
+    expect(guideOf(t.args[0]!)).toBe(agentGuide())
+    enabled = false
+    // 같은 pane 의 프로세스가 끝난 뒤 다음 보내기가 다시 띄운다
+    t.children[0]!.stdout.emit('data', JSON.stringify({ type: 'result', subtype: 'success', is_error: false, duration_ms: 5, terminal_reason: 'completed' }) + '\n')
+    t.children[0]!.emit('exit', 0, null)
+    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', { agent: 'claude' })).toBe('ok')
+    expect(t.args).toHaveLength(2)
+    expect(t.args[1]).not.toContain('--append-system-prompt')
+    // 다른 pane 의 새 대화도
+    await t.m.send(t.sink, 'p2', 'a', '/tmp', { agent: 'claude' })
+    expect(t.args[2]).not.toContain('--append-system-prompt')
+  })
+  it('codex 대화의 인자는 그대로', async () => {
+    const t = setup(true, [], 'ask', () => true)
+    t.release()
+    expect(await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'codex' })).toBe('ok')
+    expect(t.args[0]).toEqual(['app-server'])
+  })
 })

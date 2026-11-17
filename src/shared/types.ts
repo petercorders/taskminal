@@ -189,6 +189,8 @@ export interface Settings {
   // 21단계
   /** 대화 허락 방식 — 처음 'ask'(매번 묻기), 바꾸면 유지 */
   chatPermission: ChatPermission
+  /** 58b: 대화 pane 의 claude 에게 Taskminal 명령(taskminal …)을 알려 주기 — 그 실행의 인자로만 붙인다. 다음에 띄울 때부터 */
+  agentGuide: boolean
   /** 26단계: 새 일감의 시작 — 대화(Claude · Codex) 또는 터미널. 기본 Claude 대화 */
   newTaskStart: NewTaskStart
   /** 사이드바 보기 — 흐름(상태별 칸, 기본) · 묶음 */

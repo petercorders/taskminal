@@ -232,6 +232,14 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
           }
         />
         </Group>
+        <Group title="대화">
+        <Row
+          title="에이전트에게 Taskminal 명령 알려 주기"
+          desc="Claude 대화가 일감 메모 · 알림 · 다른 대화 · 브라우저 명령(taskminal …)을 쓸 수 있게 짧은 안내를 붙여요 (그 실행에만 붙이고 전역 설정은 바꾸지 않아요 · 다음에 띄우는 대화부터)"
+          keywords="claude agent cli 시스템 프롬프트 system prompt task note notify chat browser 안내"
+          control={<Switch label="에이전트에게 Taskminal 명령 알려 주기" checked={s.agentGuide} onChange={(v) => patch({ agentGuide: v })} />}
+        />
+        </Group>
         <Group title="앱">
         <Row
           title="셸까지 모두 끝낼 때 실행 중이면 묻기"

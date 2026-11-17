@@ -205,4 +205,10 @@ describe('대화 · 사이드바 보기 설정 (21단계)', () => {
     expect(s.sidebarClosed).toEqual(['wait'])
     expect(parseExtraSettings({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] }, [])).toMatchObject({ chatPermission: 'auto', sidebarView: 'group', sidebarClosed: [] })
   })
+  it('58b 에이전트에게 Taskminal 명령 알려 주기: 기본 켬 · 끈 값은 남고 · 불리언이 아니면 기본', () => {
+    expect(defaultSettings().agentGuide).toBe(true)
+    expect(load({}).agentGuide).toBe(true) // 옛 저장 파일
+    expect(load({ agentGuide: false }).agentGuide).toBe(false)
+    expect(load({ agentGuide: 'no' }).agentGuide).toBe(true)
+  })
 })
