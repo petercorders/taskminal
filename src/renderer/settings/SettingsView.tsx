@@ -439,6 +439,12 @@ export function SettingsView({ state, shortcuts, dispatch, newId, initialSection
         <Group title="입력 · 복사">
         <Row title="Option 키를 Meta 로" desc="켜면 ⌥ 로 특수문자를 입력할 수 없어요 (emacs · vim 용)" control={<Switch label="Option 키를 Meta 로" checked={s.optionAsMeta} onChange={(v) => patch({ optionAsMeta: v })} />} />
         <Row title="선택하면 바로 복사" desc="끄면 ⌘C 로 복사" control={<Switch label="선택하면 바로 복사" checked={s.copyOnSelect} onChange={(v) => patch({ copyOnSelect: v })} />} />
+        <Row
+          title="터미널 안 프로그램의 복사 허용 (OSC 52)"
+          desc="vim · tmux 같은 프로그램이 Mac 클립보드에 쓸 수 있어요 · 클립보드 읽기는 늘 막아요"
+          keywords="osc52 clipboard 원격 ssh"
+          control={<Switch label="터미널 안 프로그램의 복사 허용 (OSC 52)" checked={s.osc52Copy} onChange={(v) => patch({ osc52Copy: v })} />}
+        />
         </Group>
         <Group title="포트">
         <Row title="숨긴 포트" desc={s.hiddenPorts.length ? '탭 · 사이드바 · ⌘P 에 보이지 않는 포트예요' : '숨긴 포트가 없어요 · 포트 칩 메뉴 › 이 포트 숨기기'} keywords="포트 서버 칩 다시 보이기">

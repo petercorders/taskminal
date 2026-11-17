@@ -52,6 +52,7 @@ export function defaultExtraSettings(): ExtraSettings {
     cursorBlink: true,
     optionAsMeta: false,
     copyOnSelect: false,
+    osc52Copy: true,
     notify: {
       wait: { banner: true, sound: true },
       long: { banner: true, sound: false },
@@ -161,6 +162,7 @@ export function parseExtraSettings(v: unknown, templateIds: readonly string[]): 
     cursorBlink: bool(v['cursorBlink'], d.cursorBlink),
     optionAsMeta: bool(v['optionAsMeta'], d.optionAsMeta),
     copyOnSelect: bool(v['copyOnSelect'], d.copyOnSelect),
+    osc52Copy: bool(v['osc52Copy'], d.osc52Copy),
     notify: parseNotify(v['notify'], d.notify),
     longAfterSec: oneOf<number>(v['longAfterSec'], LONG_AFTER_CHOICES, d.longAfterSec),
     muteViewed: bool(v['muteViewed'], d.muteViewed),

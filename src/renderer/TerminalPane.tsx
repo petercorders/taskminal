@@ -11,6 +11,7 @@ import { groupHits, SecretMasker, type MaskHit, type MaskSettings } from './secr
 import { parseCommandOsc, parseNotifyOsc, parseOsc133, type ActivityEvent } from '../shared/activity'
 import { parseOsc7 } from '../shared/cwd'
 import { linkToOpen } from '../shared/links'
+import { OSC52_MAX_BYTES, parseOsc52 } from '../shared/osc52'
 import { cleanExit, isTerminalReply, splitForWrite } from '../shared/pty'
 import { reconnectDelay, SIGNAL_SCAN_MAX, sshOutputSignal, UP_CONFIRM_MS, type RemoteState, type SshSignal } from '../shared/remote'
 import { webglBlock } from '../shared/renderer'
@@ -322,6 +323,13 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
           osc7Panes.add(paneId)
           onCwdRef.current?.(path)
         }
+        return true
+      }),
+      // 58c: 터미널 안 프로그램의 복사(OSC 52) — 올 때마다 지금 설정을 본다. '선택하면 바로 복사' 와 같은 길로 써서 가린 값은 ‹가림:종류› 로 간다.
+      // 읽기 요청(?)은 parseOsc52 가 버린다 — 답하지 않는다
+      term.parser.registerOscHandler(52, (data) => {
+        const text = settingsRef.current.osc52Copy ? parseOsc52(data, OSC52_MAX_BYTES) : null
+        if (text !== null) void navigator.clipboard.writeText(masker.maskText(text)).catch(() => {})
         return true
       }),
     ]
