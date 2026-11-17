@@ -1,5 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
+import type { ChatAgent } from '../shared/chat'
 import type { Id, Template } from '../shared/types'
+import { AgentIcon } from './AgentIcon'
 
 interface Props {
   templates: Template[]
@@ -39,9 +41,12 @@ export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSav
     items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
   }
 
-  const item = (key: string, label: string, onClick: () => void, disabled = false, testId?: string) => (
+  // agent: 새 대화 항목 — 비어 있던 체크 칸에 그 도구의 로고(59단계). 칸 폭이 같아 다른 항목과 글자 왼쪽 끝이 그대로 맞는다
+  const item = (key: string, label: string, onClick: () => void, disabled = false, testId?: string, agent?: ChatAgent) => (
     <button key={key} type="button" role="menuitem" className="menu-item" onClick={onClick} disabled={disabled} tabIndex={-1} data-testid={testId}>
-      <span className="menu-check" aria-hidden />
+      <span className="menu-check" aria-hidden>
+        {agent && <AgentIcon agent={agent} />}
+      </span>
       {label}
     </button>
   )
@@ -52,8 +57,8 @@ export function TemplateMenu({ templates, hasTab, x, y, onPick, onSaveTab, onSav
         <div className="menu-heading" role="presentation">
           새 대화
         </div>
-        {item('chat-claude', '새 대화 (Claude)', () => onChat('claude'), false, 'tab-menu-chat-claude')}
-        {item('chat-codex', '새 대화 (Codex)', () => onChat('codex'), false, 'tab-menu-chat-codex')}
+        {item('chat-claude', '새 대화 (Claude)', () => onChat('claude'), false, 'tab-menu-chat-claude', 'claude')}
+        {item('chat-codex', '새 대화 (Codex)', () => onChat('codex'), false, 'tab-menu-chat-codex', 'codex')}
         <div className="menu-sep" role="separator" />
         <div className="menu-heading" role="presentation">
           템플릿 탭 열기

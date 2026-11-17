@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AccountStatus, AgentAccount } from '../shared/accounts'
 import type { ChatAgent } from '../shared/chat'
+import { AgentIcon } from './AgentIcon'
 
 const states = { ready: '조회됨', 'signed-out': '로그인 필요', unsupported: '아직 한도 값 없음', unavailable: '조회 불가', missing: 'CLI 없음' }
 export function AccountsPanel() {
@@ -104,7 +105,11 @@ export function AccountsPanel() {
         <p role="status">계정·사용량을 읽는 중…</p>
       ) : (
         <div className="work-usage" role="status">
-          <strong>{status.display}</strong>
+          {/* 59단계: 이 계정이 어느 도구의 것인지 — 기본 계정 이름('Claude 기본 계정')이 아닌 이름 · 메일이어도 로고로 보인다 */}
+          <strong className={chosen ? 'agent-label' : undefined}>
+            {chosen && <AgentIcon agent={chosen.agent} />}
+            {status.display}
+          </strong>
           <p>
             {states[status.state]}
             {status.message ? ` · ${status.message}` : ''}

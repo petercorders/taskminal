@@ -39,6 +39,19 @@ describe('전체 보기', () => {
     expect(card.panes).toHaveLength(2)
     expect(card.panes.find((x) => x.paneId === 'chat')!.label).toContain('Claude')
   })
+  it('대화 pane 줄은 어느 에이전트인지도 준다(로고) — 터미널 · 변경 줄에는 없다', () => {
+    const s = fixture()
+    s.tasks[0] = splitActivePaneChat(s.tasks[0]!, 'right', () => 'chat', 'codex')
+    s.tasks[1] = splitActivePaneChat(s.tasks[1]!, 'right', () => 'chat2', 'claude')
+    const cards = overviewSections(s, {}, {}, new Set(), '').flatMap((x) => x.cards)
+    const panes = cards.flatMap((c) => c.panes)
+    expect(panes.find((x) => x.paneId === 'chat')).toMatchObject({ agent: 'codex' })
+    expect(panes.find((x) => x.paneId === 'chat')!.label).toContain('Codex')
+    expect(panes.find((x) => x.paneId === 'chat2')).toMatchObject({ agent: 'claude' })
+    const shells = panes.filter((x) => x.paneId !== 'chat' && x.paneId !== 'chat2')
+    expect(shells).toHaveLength(2)
+    for (const shell of shells) expect(shell).not.toHaveProperty('agent')
+  })
   it('목록에서 고른 뒤 pane·탭·일감이 사라지면 다른 대상에 보내지 않는다', () => {
     const s = fixture()
     const t = s.tasks[0]!

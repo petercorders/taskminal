@@ -15,6 +15,8 @@ beforeEach(async () => {
   const c = join(appPath, 'Contents')
   const res = join(c, 'Resources')
   mkdirSync(join(c, 'MacOS'), { recursive: true })
+  mkdirSync(res, { recursive: true })
+  writeFileSync(join(res, 'THIRD_PARTY_NOTICES.md'), '') // 59단계: 제3자 고지
   writeFileSync(join(c, 'MacOS', 'Taskminal'), '')
   writeFileSync(
     join(c, 'Info.plist'),
@@ -80,6 +82,11 @@ describe('check-package (14단계)', () => {
     expect(await check()).toEqual(['Resources/bin/taskminal 에 실행 권한이 없음'])
     rmSync(cli)
     expect(await check()).toEqual(['명령줄 도구 없음: Resources/bin/taskminal (extraResources)'])
+  })
+
+  it('제3자 고지 파일이 없으면 (59단계 — Codex 로고의 MIT 고지가 배포물에 같이 있어야 한다)', async () => {
+    rmSync(join(appPath, 'Contents/Resources/THIRD_PARTY_NOTICES.md'))
+    expect(await check()).toEqual(['제3자 고지 없음: Resources/THIRD_PARTY_NOTICES.md (extraResources)'])
   })
 
   it('spawn-helper 에 실행 권한이 없으면 — 셸이 posix_spawnp failed 로 안 뜬다', async () => {

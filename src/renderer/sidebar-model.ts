@@ -1,6 +1,6 @@
 // 사이드바에 보일 칸 나누기. 순수 함수라 단위 시험한다.
 import { taskActivity, type PaneActivity } from '../shared/activity'
-import { agentLabel } from '../shared/agent-hooks'
+import { agentLabel, type AgentKind } from '../shared/agent-hooks'
 import { paneIds } from '../shared/layout'
 import type { AppState, Group, Id, Task } from '../shared/types'
 
@@ -160,8 +160,9 @@ export function unreadTasks(state: AppState, activity: Readonly<Record<Id, PaneA
   return out
 }
 
-/** 줄 둘째 칸 — 일감에서 가장 최근에 움직인 pane 의 한 줄. 아무 일도 없었으면 null(폴더를 보인다) */
-export function lastLine(task: Task, activity: Readonly<Record<Id, PaneActivity>>): { text: string; tone: 'err' | 'wait' | 'run' | 'dim' } | null {
+/** 줄 둘째 칸 — 일감에서 가장 최근에 움직인 pane 의 한 줄. 아무 일도 없었으면 null(폴더를 보인다).
+ *  에이전트 상태 줄이면 agent 도 준다 — 줄 앞에 그 도구의 로고를 그린다(59단계) */
+export function lastLine(task: Task, activity: Readonly<Record<Id, PaneActivity>>): { text: string; tone: 'err' | 'wait' | 'run' | 'dim'; agent?: AgentKind } | null {
   let best: PaneActivity | undefined
   let bestAt = -1
   for (const id of Object.keys(task.panes)) {
@@ -177,9 +178,10 @@ export function lastLine(task: Task, activity: Readonly<Record<Id, PaneActivity>
   // 51단계: 터미널에서 띄운 claude · codex 는 명령 대신 에이전트 상태(Claude · 허락 기다림)
   if (best.agent) {
     const label = agentLabel(best.agent)
-    if (best.state === 'failed') return { text: `✗ ${label}`, tone: 'err' }
-    if (best.attention || best.state === 'waiting') return { text: label, tone: 'wait' }
-    return best.state === 'running' ? { text: `● ${label}`, tone: 'run' } : { text: `✓ ${label}`, tone: 'dim' }
+    const agent = best.agent.agent
+    if (best.state === 'failed') return { text: `✗ ${label}`, tone: 'err', agent }
+    if (best.attention || best.state === 'waiting') return { text: label, tone: 'wait', agent }
+    return best.state === 'running' ? { text: `● ${label}`, tone: 'run', agent } : { text: `✓ ${label}`, tone: 'dim', agent }
   }
   const cmd = best.command ?? ''
   if (best.attention && best.state !== 'failed') return { text: best.message ?? (cmd ? `입력 기다림 · ${cmd}` : '입력 기다림'), tone: 'wait' }

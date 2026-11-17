@@ -14,6 +14,7 @@ import {
 } from '../shared/agent-sessions'
 import { Modal } from './Modal'
 import { Icon } from './icons'
+import { AgentIcon } from './AgentIcon'
 import { shortPath } from './sidebar-model'
 import './agent-sessions.css'
 import { FindSwitch } from './work-tools-ui'
@@ -194,7 +195,10 @@ export function AgentSessionsPanel({ taskId, tasks, openKeys, onResume, onClose,
               <div className="agent-session-text">
                 <span className="agent-session-summary">{label}</span>
                 <span className="agent-session-meta">
-                  {s.agent === 'claude' ? 'Claude' : 'Codex'}
+                  <span className="agent-label">
+                    <AgentIcon agent={s.agent} size={12} />
+                    {s.agent === 'claude' ? 'Claude' : 'Codex'}
+                  </span>
                   {s.accountName ? ` · ${s.accountName}` : ''} · <span title={s.cwd}>{shortPath(s.cwd)}</span> · {sessionAgo(s.updatedAt, now)}
                   {open ? ' · 이 앱에 열림' : ''}
                 </span>

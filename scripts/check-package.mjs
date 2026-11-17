@@ -45,6 +45,9 @@ export async function checkPackage(appPath, { arch = lipoArch, verify = codesign
     if (!existsSync(join(res, iconFile))) problems.push(`아이콘 파일 없음: Resources/${iconFile}`)
   }
 
+  // 59단계: 제3자 고지(Codex 로고 = MIT)는 배포물에 읽을 수 있는 파일로 같이 있어야 한다
+  if (!existsSync(join(res, 'THIRD_PARTY_NOTICES.md'))) problems.push('제3자 고지 없음: Resources/THIRD_PARTY_NOTICES.md (extraResources)')
+
   const asar = join(res, 'app.asar')
   if (!existsSync(asar)) {
     problems.push('Resources/app.asar 없음')
