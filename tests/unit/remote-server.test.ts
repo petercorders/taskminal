@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, readFile, rename, symlink, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RECEIPT_KEEP, RemoteWorkspaceServer } from '../../src/main/remote/workspace-server'
+import { INPUT_KEEP, RECEIPT_KEEP, UNDONE_KEEP, RemoteWorkspaceServer } from '../../src/main/remote/workspace-server'
 import type { WorkspaceFiles } from '../../src/main/workspace-files'
 import * as pty from 'node-pty'
 vi.mock('node-pty',()=>({spawn: vi.fn()}))
@@ -75,6 +75,7 @@ test('git diff includes staged and working changes even before the first commit'
 })
 
 // 58단계: 요청 기록이 쓰기(터미널 글자)마다 하나씩 쌓이고 지워지지 않아 1만에서 모든 쓰기가 400 으로 막혔다.
+type Receipt = { id: string; hash: string; done: boolean; result?: unknown; input?: string }
 async function terminalServer() {
   temp = await realpath(await mkdtemp(join(tmpdir(), 'tm-remote-receipts-')))
   const root = join(temp, 'root'); await mkdir(root)
@@ -83,11 +84,12 @@ async function terminalServer() {
   service = new RemoteWorkspaceServer(root, join(temp, 'data'))
   const w = await service.call('open', ['.', 'r-open']) as { id: string }
   const t = await service.call('terminal', [w.id, 'r-term']) as { id: string }
-  const receipts = () => (Reflect.get(service!, 'data') as { receipts: Array<{ id: string; hash: string; done: boolean; result?: unknown }> }).receipts
-  const seed = (n: number, done = true) => { for (let i = 0; i < n; i++) receipts().push({ id: `seed-${done ? 'd' : 'u'}-${receipts().length}`, hash: 'a'.repeat(64), done, ...(done ? { result: null } : {}) }) }
-  const type = (requestId: string, data = 'x') => service!.call('write', [w.id, t.id, { requestId, data }])
-  return { write, receipts, seed, type }
+  const receipts = () => (Reflect.get(service!, 'data') as { receipts: Receipt[] }).receipts
+  const seed = (n: number, done = true, input?: string) => { for (let i = 0; i < n; i++) receipts().push({ id: `seed-${done ? 'd' : 'u'}-${receipts().length}`, hash: 'a'.repeat(64), done, ...(done ? { result: null } : {}), ...(input ? { input } : {}) }) }
+  const type = (requestId: string, data = 'x', terminal = t.id) => service!.call('write', [w.id, terminal, { requestId, data }])
+  return { write, receipts, seed, type, w, t }
 }
+const typed = (write: ReturnType<typeof vi.fn>, data: string) => write.mock.calls.filter(([d]) => d === data).length
 
 test('끝난 요청 기록이 1만에 가까워도 쓰기가 막히지 않고, 끝난 기록은 최근 것만 남는다', async () => {
   const { write, receipts, seed, type } = await terminalServer()
@@ -98,16 +100,28 @@ test('끝난 요청 기록이 1만에 가까워도 쓰기가 막히지 않고, �
   expect(receipts().some((r) => r.id === 'w-19')).toBe(true)
 })
 
-test('정리 뒤에도 방금 보낸 번호를 다시 보내면 한 번만 실행된다', async () => {
-  const { write, seed, type } = await terminalServer()
-  seed(9_995)
-  await type('again', 'q')
-  for (let i = 0; i < 50; i++) await type(`after-${i}`)
-  await type('again', 'q')
-  expect(write.mock.calls.filter(([data]) => data === 'q')).toHaveLength(1)
+test('터미널 입력 기록은 터미널마다 최근 것만 — 글자가 다른 요청(작업 공간 열기)의 기록을 밀어내지 않는다', async () => {
+  const { receipts, seed, type, t } = await terminalServer()
+  seed(9_000, true, t.id) // 이 터미널에 친 글자 9천 개 — 끝난 기록 전체 상한보다 많다
+  for (let i = 0; i < 5; i++) await type(`w-${i}`)
+  expect(receipts().filter((r) => r.input === t.id).length).toBeLessThanOrEqual(INPUT_KEEP)
+  // 맨 처음 만든 'r-open' · 'r-term' 기록이 그대로라 같은 번호를 다시 보내도 새로 만들지 않는다
+  const again = await service!.call('terminal', [(await service!.call('open', ['.', 'r-open']) as { id: string }).id, 'r-term']) as { id: string }
+  expect(again.id).toBe(t.id)
+  expect(vi.mocked(pty.spawn)).toHaveBeenCalledTimes(1)
 })
 
-test('안 끝난 기록(중단된 요청의 울타리)은 정리하지 않는다 — 같은 번호는 다시 실행되지 않고 거절된다', async () => {
+test('다른 터미널에 아무리 쳐도 이 터미널의 방금 보낸 번호는 한 번만 실행된다', async () => {
+  const { write, seed, type, w } = await terminalServer()
+  const other = await service!.call('terminal', [w.id, 'r-term-2']) as { id: string }
+  await type('mine', 'q')
+  seed(9_000, true, other.id)
+  for (let i = 0; i < 5; i++) await type(`other-${i}`, 'x', other.id)
+  await type('mine', 'q')
+  expect(typed(write, 'q')).toBe(1)
+})
+
+test('안 끝난 기록(중단된 요청의 울타리)은 끝난 기록 정리에 쓸려 나가지 않는다 — 같은 번호는 다시 실행되지 않고 거절된다', async () => {
   const { write, receipts, seed, type } = await terminalServer()
   receipts().unshift({ id: 'stuck', hash: 'a'.repeat(64), done: false })
   seed(9_990)
@@ -117,11 +131,22 @@ test('안 끝난 기록(중단된 요청의 울타리)은 정리하지 않는다
   expect(write).toHaveBeenCalledTimes(5)
 })
 
-test('한계: 최근 것 밖으로 밀려 지워진 옛 번호는 새 요청으로 실행된다', async () => {
-  const { write, seed, type } = await terminalServer()
+test('안 끝난 기록도 끝없이 쌓이지 않는다 — 오래된 것부터 지워 1만 한도에 닿지 않는다', async () => {
+  const { receipts, seed, type } = await terminalServer()
+  seed(UNDONE_KEEP + 300, false)
+  const newest = receipts().at(-1)!.id
+  seed(RECEIPT_KEEP + 500)
+  await type('after')
+  expect(receipts().filter((r) => !r.done).length).toBeLessThanOrEqual(UNDONE_KEEP)
+  expect(receipts().some((r) => r.id === newest)).toBe(true)
+  expect(receipts().length).toBeLessThan(10_000)
+})
+
+test('한계: 그 터미널의 최근 입력 밖으로 밀려 지워진 옛 번호는 새 요청으로 실행된다', async () => {
+  const { write, seed, type, t } = await terminalServer()
   await type('old', 'o')
-  seed(RECEIPT_KEEP + 10)
+  seed(INPUT_KEEP, true, t.id)
   await type('newer')
   await type('old', 'o')
-  expect(write.mock.calls.filter(([data]) => data === 'o')).toHaveLength(2)
+  expect(typed(write, 'o')).toBe(2)
 })

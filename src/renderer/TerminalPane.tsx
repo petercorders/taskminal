@@ -326,9 +326,11 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
         return true
       }),
       // 58c: 터미널 안 프로그램의 복사(OSC 52) — 올 때마다 지금 설정을 본다. '선택하면 바로 복사' 와 같은 길로 써서 가린 값은 ‹가림:종류› 로 간다.
-      // 읽기 요청(?)은 parseOsc52 가 버린다 — 답하지 않는다
+      // 읽기 요청(?)은 parseOsc52 가 버린다 — 답하지 않는다.
+      // 보이는 pane · 포커스된 창에서 온 것만 받는다: 숨은 탭 · 뒤에 있는 창의 출력(로그 · cat 한 파일)이 모르는 사이 클립보드를 바꾸지 못하게.
+      // (포커스 없는 창에서는 navigator.clipboard 도 거절한다)
       term.parser.registerOscHandler(52, (data) => {
-        const text = settingsRef.current.osc52Copy ? parseOsc52(data, OSC52_MAX_BYTES) : null
+        const text = settingsRef.current.osc52Copy && visibleRef.current && document.hasFocus() ? parseOsc52(data, OSC52_MAX_BYTES) : null
         if (text !== null) void navigator.clipboard.writeText(masker.maskText(text)).catch(() => {})
         return true
       }),
@@ -481,8 +483,9 @@ export function TerminalPane({ paneId, cwd, active, visible, focusSignal, settin
     const onDrop = (e: DragEvent) => {
       if (!hasFiles(e)) return
       e.preventDefault()
-      if (ended) return
-      const text = shellQuotePaths([...e.dataTransfer!.files].map((f) => window.taskminal.filePath(f)))
+      // 시작 명령이 아직 안 나갔으면 받지 않는다 — 놓은 경로 뒤에 시작 명령과 ↩ 가 붙어 그 줄이 실행된다
+      if (ended || (startRef.current.command && !sentStarts.has(paneId))) return
+      const text = shellQuotePaths([...e.dataTransfer!.files].map((f) => window.taskminal.filePath(f)), /Win/.test(navigator.platform))
       if (!text) return
       term.paste(text)
       term.focus() // 놓은 pane 이 활성이 되어 이어서 칠 수 있게

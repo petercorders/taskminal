@@ -172,6 +172,8 @@ function useSystemDark(): boolean {
 
 // 58c: 탭 화면(tab-view)은 처음 본 순서로 그린다 — 탭 순서를 바꿔도 DOM 노드를 옮기지 않게.
 // 노드를 옮기면 그 안의 포커스가 풀리고 스크롤 위치(대화 · 변경 pane)가 처음으로 돌아간다. 한 번에 하나만 보이므로 그리는 순서는 화면에 영향이 없다
+// id 순으로 그리지 않는 이유: 새 탭은 늘 끝에 붙으므로 '처음 본 순서' 는 탭을 옮기기 전까지 지금의 화면 순서와 같다(순서에 기대는 것이 그대로).
+// 닫힌 탭의 id 는 지우지 않는다 — 짧은 글자 하나씩이라 실행 중에 쌓여도 작다
 const tabViewSeq = new Map<string, number>()
 function inFirstSeenOrder<T extends { id: string }>(tabs: readonly T[]): T[] {
   for (const t of tabs) if (!tabViewSeq.has(t.id)) tabViewSeq.set(t.id, tabViewSeq.size)

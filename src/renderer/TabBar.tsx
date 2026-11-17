@@ -58,7 +58,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
     listRef.current
       ?.querySelector(`[data-tab-id="${CSS.escape(task.activeTabId)}"]`)
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [visible, task.activeTabId, task.tabs.length])
+    // 활성 탭의 자리도 본다 — '탭을 왼쪽 · 오른쪽으로' 로 옮기면 id · 개수는 그대로라 줄 밖으로 나가도 따라가지 않았다(58 리뷰)
+  }, [visible, task.activeTabId, task.tabs.length, task.tabs.findIndex((t) => t.id === task.activeTabId)])
 
   const moveFocus = (e: KeyboardEvent, index: number) => {
     const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
@@ -89,6 +90,8 @@ export function TabBar({ task, activity, visible, onSelect, onAdd, onClose, onRe
               // 이름을 고치는 중에는 끌지 않는다 — 입력칸의 글자 선택이 탭 끌기가 된다
               draggable={editing === null}
               onDragStart={(e: DragEvent<HTMLDivElement>) => {
+                // 이름 입력칸에서 글자를 골라 끄는 것도 여기로 올라온다 — 탭 끌기로 치지 않는다
+                if (editing !== null) return
                 e.dataTransfer.setData(DRAG_TYPE, tab.id)
                 e.dataTransfer.effectAllowed = 'move'
               }}
