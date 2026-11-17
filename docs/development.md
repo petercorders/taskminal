@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-17 (57 56 남은 것 정리: 원격 터미널 흔들림 재현 안 됨 · 저장소 다시 묻기 시험 · `~` 펼치기 한 곳으로. 단위1,402·e2e397(395 통과·2 건너뜀). 공개0.1.2 유지. 상세 `docs/stages/57-followups.md`)
+마지막 갱신: 2026-11-18 (58 원격 터미널 입력 · 에이전트 안내 · 터미널 손동작 — 단위1,452 통과 · e2e 는 사용자 지시로 돌리지 않음(돌려야 할 목록은 단계 문서). 공개0.1.2 유지. 상세 `docs/stages/58-remote-input-guide-gestures.md`)
 
 2026-11-16 사용자 지시 "main 반영해주고 공개 릴리스는 아직"에 따라 PR #2를 포함한 최신 기능을 main에 통합한다. 기존 표의 'main 미병합'은 각 단계 완료 당시 기록이다. 다음 독립 작업은 최신 `origin/main`에서 작업별 브랜치로 시작한다. 새 공개 릴리스·태그·공증·배포는 계속 보류한다.
 
@@ -52,6 +52,7 @@
 | 51~55 Orca 비교 v3 | 51 터미널 claude·codex 상태 훅(세션 단위 `--settings`·`-c notify`) · 52 Claude 5시간·주간 한도 막대 · 53 밖에서 시작한 세션 기록·이어 하기 · 54 PR 실패 체크·리뷰 → 대화 입력칸 초안 · 55 Jira 읽기(safeStorage). 단위1,387·e2e379(375+재통과2, 건너뜀2)·변이 25+7+1(+worker 10)·리뷰 10건 중 9 고침·UI/UX 3건 고침. 실제 TUI·Jira·GitHub·키체인 미검증. `docs/stages/51-55-orca-gap-v3.md`, `53-agent-sessions.md`, `55-jira.md` |
 | 56 앱 사용 흐름 고침 | 흐름 점검 9건: 팔레트가 옆 패널 위 · Esc 로 옆 패널 닫기 · 초안 든 대화 · 도구 줄 두 묶음(이 일감 · 앱, ⌘P 와 같은 이름, 원격이면 꺼서 이유) · 찾기 한 메뉴 + 찾을 곳 바꾸기(검색어 가져감) · GitHub 패널 PR 카드 위 · 워크트리 → 환경 준비(고르기 · 셸 한 줄 미리보기) · 이슈 저장소 채우기 · 두 뜻 낱말. 단위1,401·e2e396(392+재통과2·건너뜀2)·변이 14+8+1·리뷰 9/10 · UI/UX HIGH1 고침. `docs/stages/56-flow-polish.md` |
 | 57 56 남은 것 정리 | 원격 터미널 시험 흔들림은 재현 안 됨(56 포함 main 0/30 · 부하 0/6, 고치지 않음) · 이슈 저장소를 빈 답 · 실패 뒤 다시 묻는 e2e · `~` 펼치기 11벌(main 10 · renderer 1)을 공용 `expandHome` 으로 · e2e 임시 폴더 정리 38곳에 `maxRetries`(ENOTEMPTY 흔들림). 단위1,402·e2e397(395+건너뜀2)·변이1·리뷰 6/7. `docs/stages/57-followups.md` |
+| 58 원격 입력 · 에이전트 안내 · 터미널 손동작 | Orca 비교 v4 의 1~5: 원격 서버 요청 기록 정리(터미널마다 100 · 전체 8,000 · 안 끝난 1,000 — 1만에서 쓰기가 막히던 것) · 원격 입력 묶어 보내기 · 대화 claude 에 `taskminal` 안내(`--append-system-prompt`, 설정으로 끔) · 터미널에 파일 끌어 놓기 · OSC 52 복사 · 탭 순서 바꾸기. 단위1,452·변이38·리뷰 8/10. **e2e 미실행(사용자 지시)** — 돌려야 할 목록은 `docs/stages/58-remote-input-guide-gestures.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
@@ -259,6 +260,9 @@
 - Playwright 는 페이지 포커스를 흉내 내 `document.hasFocus()` 를 못 낮춘다 · 합성 키는 네이티브 메뉴 단축키를 부르지 않는다.
 - 18단계부터 전체 e2e 첫 실행에서 `safety.spec.ts:48`(되살린 일감에 `echo BACK…`)이 명령 글자만 찍히고 5초 안에 출력이 없어 실패하고, 다시 돌리면 통과한다(전체 실행 4번 중 3번, 마지막 한 번은 처음부터 통과). 앞 71개만 같은 순서로 돌리면 재현 안 됨 — 원인 미확인. 19단계 전체 실행 3번 중 1번 다시 나옴: 받은 화면이 `echo BACK$((1+1)) ` 뿐 — **프롬프트가 한 번도 안 그려졌다**(입력은 tty 가 되돌린 글자). 시험은 프롬프트를 기다리지 않고 친다. 지킴이 `spawn` 은 같은 paneId 의 끝나지 않은 세션이 있으면 그 세션에 붙는다(`host-core.ts` spawn 의 `old && !old.exited`) — 지운 B 의 셸(SIGHUP · 2초 뒤 SIGKILL)과 되살린 B 가 같은 `p2` 를 쓰므로 후보지만, 지우기 → 되살리기 사이가 몇 초라 확인 못 함. 다음에 볼 것: 실패 때 지킴이 `list` 로 p2 세션의 pid · killed · 시작 시각을 남기기.
 - 22단계 전체 검사에서 한 번씩 불안정: `safety.spec` '일감 지우기 → … 되살리기' 의 셸 출력 기다림 · `sidebar-flow.spec` 의 afterEach `rmSync` ENOTEMPTY. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림 · 정리를 고친다. ENOTEMPTY 는 56(`settings.spec`) · 57(`browser-automation.spec`)에서 다시 나와 57 에서 정리 `rmSync` 38곳에 `maxRetries: 5` — 새 시험의 임시 폴더 정리도 그 꼴로 쓴다.
+- 멱등 기록(요청 번호 → 결과)을 '최근 N개' 한 창으로 줄이면 잦은 요청(터미널 글자)이 드문 요청(대화 보내기 · 저장)의 기록을 밀어내 '같은 번호 다시 보내기' 가 두 번 실행된다 — 잦은 종류는 대상마다 따로 줄인다(58 리뷰). 실패한 요청이 남기는 안 끝난 기록도 상한이 있어야 한다.
+- worktree 에 `node_modules` 를 링크로 걸면 `.gitignore` 의 `node_modules/`(폴더만)에 안 걸려 `git add -A` 가 링크를 커밋한다 — 파일을 골라 올리고 staged diff 를 직접 본다(58 worker).
+- 명령 이름이 `tab-` 으로 시작하면 App 이 탭 번호(tab-N)로 처리하고 팔레트에서 숨긴다 — 새 탭 명령은 다른 머리말로(58c `move-tab-left`).
 - 23단계 리뷰 뒤 전체 검사에서 한 번씩 불안정(처음 나옴): `persist.spec:93` ⌥⌘Q 묻기 전에 셸 자식 pid 하나가 이미 죽어 있음 · `ports.spec:56` python 서버 칩이 15초 안에 안 뜸. 다시 돌리면 통과 — 되풀이되면 그 시험의 기다림을 고친다.
 - 24단계 전체 검사에서 한 번(처음 나옴): `restore.spec:70` 이 되살린 pane 에 `echo "PWD=$PWD"` 를 쳤는데 앞 `echo "` 가 사라지고 `PWD=$PWD"` 만 들어가 `dquote>` 에 멈춤 — '이전 세션' 구분 줄이 그려진 직후였다. BACK2 · tabs:175 와 같은 '친 글자가 셸에 안 닿음' 무리(앞부분만 잃음). 같은 단계 첫 전체 검사에서는 `history.spec:201` afterEach `rmSync` ENOTEMPTY(sidebar-flow 와 같은 정리 문제) · `tabs.spec:231`(마지막 탭 닫고 새 탭 셸) 이 한 번씩 — 다시 돌리면 통과. 같은 검사 다음 판에 `find.spec:26`(`for` 가 사라짐) · `ports.spec:110/123`(서버 명령이 안 돌아 칩 없음)도 나와 원인을 봤다: **main 의 `PtyManager.write` 는 spawn · attach 답을 받아 주인을 정하기 전의 키를 조용히 버린다**(`owned()`), 시험은 프롬프트를 기다리지 않고 클릭 뒤 바로 친다. → `TerminalPane` 이 붙기 전에 친 키를 모아 두었다가 spawn · attach 가 끝나면 보낸다(상한 64KB, 24단계). 경합이라 정해진 재현 시험은 없다 — 고친 뒤 그 시험들을 3번씩 돌리고 전체 검사로 확인했다(결과는 `docs/stages/24-cli-resume.md`).
 - e2e 전체 실행에서 가끔 앱 창이 안 뜬다(원인 미확인, `test-results/launch-hangs/log.txt` 에 쌓임) → full-check 가 다시 돌려 '불안정(3)' 으로 나눈다. 보고에 적는다.
