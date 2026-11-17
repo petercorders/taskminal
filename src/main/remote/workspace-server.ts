@@ -20,6 +20,9 @@ import type { RemoteWorkspace, RemoteTerminal, RemoteChat } from '../../shared/r
 interface Workspace extends RemoteWorkspace { chats: Array<RemoteChat & ChatRef> }
 interface Receipt { id: string; hash: string; done: boolean; result?: unknown }
 interface Journal { root: string; workspaces: Workspace[]; receipts: Receipt[] }
+/** 끝난 요청 기록은 최근 이만큼만 남긴다 — 기록이 쓰기(터미널 글자)마다 하나씩 쌓이고 지워지지 않아 1만에서 모든 쓰기가 막혔다(58단계).
+ *  같은 번호 다시 보내기는 보낸 직후에 일어나므로 최근 것만 있으면 된다. 이보다 오래된 번호가 다시 오면 새 요청으로 실행된다. */
+export const RECEIPT_KEEP = 2000
 const id = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
 const text = (v: unknown, max = 4096): string => { if (typeof v !== 'string' || v.length > max || v.includes('\0')) throw Error('요청 내용을 확인해 주세요'); return v }
 const key = (v: unknown): string => { if (!id(v)) throw Error('대상 번호를 확인해 주세요'); return v }
@@ -80,11 +83,17 @@ export class RemoteWorkspaceServer {
         if (!existing.done) throw Error('이전 요청 결과 확인 필요. 파일·출력·기록을 확인한 뒤 새 요청으로 진행해 주세요')
         return structuredClone(existing.result)
       }
+      this.prune()
       if (this.data.receipts.length >= 10000) throw Error('요청 기록 한도에 도달했어요. 새 서버 데이터 폴더가 필요합니다')
       const r: Receipt = { id: requestId, hash, done: false }; this.data.receipts.push(r); this.persist()
       // Persist a fence before side effects. Interrupted requests are never blindly replayed.
       const result = await job(); r.done = true; r.result = result; this.persist(); return result
     }); this.queue = operation; return operation
+  }
+  /** 끝난 기록 중 오래된 것을 지운다. 안 끝난 기록은 중단된 요청을 다시 실행하지 않게 막는 울타리라 남긴다 */
+  private prune() {
+    let extra = this.data.receipts.filter(r => r.done).length - (RECEIPT_KEEP - 1)
+    if (extra > 0) this.data.receipts = this.data.receipts.filter(r => !r.done || extra-- <= 0)
   }
   private async git(cwd: string, args: string[]) {
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.toUpperCase().startsWith('GIT_')))

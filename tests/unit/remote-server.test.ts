@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, readFile, rename, symlink, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { RemoteWorkspaceServer } from '../../src/main/remote/workspace-server'
+import { RECEIPT_KEEP, RemoteWorkspaceServer } from '../../src/main/remote/workspace-server'
 import type { WorkspaceFiles } from '../../src/main/workspace-files'
 import * as pty from 'node-pty'
 vi.mock('node-pty',()=>({spawn: vi.fn()}))
@@ -72,4 +72,56 @@ test('git diff includes staged and working changes even before the first commit'
   git('reset', '-q', 'HEAD')
   const working = await diff()
   expect(working.diff).toContain('+working change'); expect(working.diff).not.toContain('+staged change')
+})
+
+// 58단계: 요청 기록이 쓰기(터미널 글자)마다 하나씩 쌓이고 지워지지 않아 1만에서 모든 쓰기가 400 으로 막혔다.
+async function terminalServer() {
+  temp = await realpath(await mkdtemp(join(tmpdir(), 'tm-remote-receipts-')))
+  const root = join(temp, 'root'); await mkdir(root)
+  const write = vi.fn()
+  vi.mocked(pty.spawn).mockReturnValue({ onData: vi.fn(), onExit: vi.fn(), kill: vi.fn(), resize: vi.fn(), write } as never)
+  service = new RemoteWorkspaceServer(root, join(temp, 'data'))
+  const w = await service.call('open', ['.', 'r-open']) as { id: string }
+  const t = await service.call('terminal', [w.id, 'r-term']) as { id: string }
+  const receipts = () => (Reflect.get(service!, 'data') as { receipts: Array<{ id: string; hash: string; done: boolean; result?: unknown }> }).receipts
+  const seed = (n: number, done = true) => { for (let i = 0; i < n; i++) receipts().push({ id: `seed-${done ? 'd' : 'u'}-${receipts().length}`, hash: 'a'.repeat(64), done, ...(done ? { result: null } : {}) }) }
+  const type = (requestId: string, data = 'x') => service!.call('write', [w.id, t.id, { requestId, data }])
+  return { write, receipts, seed, type }
+}
+
+test('끝난 요청 기록이 1만에 가까워도 쓰기가 막히지 않고, 끝난 기록은 최근 것만 남는다', async () => {
+  const { write, receipts, seed, type } = await terminalServer()
+  seed(9_995)
+  for (let i = 0; i < 20; i++) await type(`w-${i}`)
+  expect(write).toHaveBeenCalledTimes(20)
+  expect(receipts().filter((r) => r.done).length).toBeLessThanOrEqual(RECEIPT_KEEP)
+  expect(receipts().some((r) => r.id === 'w-19')).toBe(true)
+})
+
+test('정리 뒤에도 방금 보낸 번호를 다시 보내면 한 번만 실행된다', async () => {
+  const { write, seed, type } = await terminalServer()
+  seed(9_995)
+  await type('again', 'q')
+  for (let i = 0; i < 50; i++) await type(`after-${i}`)
+  await type('again', 'q')
+  expect(write.mock.calls.filter(([data]) => data === 'q')).toHaveLength(1)
+})
+
+test('안 끝난 기록(중단된 요청의 울타리)은 정리하지 않는다 — 같은 번호는 다시 실행되지 않고 거절된다', async () => {
+  const { write, receipts, seed, type } = await terminalServer()
+  receipts().unshift({ id: 'stuck', hash: 'a'.repeat(64), done: false })
+  seed(9_990)
+  for (let i = 0; i < 5; i++) await type(`w-${i}`)
+  expect(receipts().some((r) => r.id === 'stuck' && !r.done)).toBe(true)
+  await expect(type('stuck')).rejects.toThrow()
+  expect(write).toHaveBeenCalledTimes(5)
+})
+
+test('한계: 최근 것 밖으로 밀려 지워진 옛 번호는 새 요청으로 실행된다', async () => {
+  const { write, seed, type } = await terminalServer()
+  await type('old', 'o')
+  seed(RECEIPT_KEEP + 10)
+  await type('newer')
+  await type('old', 'o')
+  expect(write.mock.calls.filter(([data]) => data === 'o')).toHaveLength(2)
 })
