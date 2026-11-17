@@ -1,7 +1,7 @@
 {
   "name": "taskminal",
   "productName": "Taskminal",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "일감별로 터미널 세션을 묶어 쓰는 데스크톱 터미널",
   "author": "petercorders <petercorders@users.noreply.github.com>",
   "homepage": "https://taskminal.petercoders.com",
