@@ -62,7 +62,8 @@ test('터미널의 claude: 훅 설정을 붙여 띄우고 작업 중 → 허락 
   await waitText('pane-a', /%/)
   await type(`export PATH="${FAKE_BIN}:$PATH"; claude -r abc`)
   // 셸 함수가 이 실행에만 --settings 를 붙였다(사용자 설정 파일이 아니라 앱의 훅 파일)
-  const m = await waitText('pane-a', /FAKE ARGS: --settings (\S+claude-settings\.json) -r abc/)
+  // 63단계: 같은 함수가 Taskminal 명령 안내도 --append-system-prompt 로 붙인다(설정 기본 켬) — 안내는 여러 줄이라 사이를 건너뛴다
+  const m = await waitText('pane-a', /FAKE ARGS: --settings (\S+claude-settings\.json) --append-system-prompt [\s\S]*? -r abc/)
   expect(m[1]).toBe(join(hooks, 'claude-settings.json'))
   await waitText('pane-a', /FAKE READY/)
   await expect(headOf('pane-a').getByTestId('pane-status')).toContainText('Claude · 작업 중')

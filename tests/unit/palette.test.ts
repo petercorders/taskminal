@@ -174,6 +174,11 @@ describe('paletteItems — 파일 (65단계)', () => {
     expect(hit.marks).toEqual([11, 12, 13, 14, 15, 16, 17]) // 'src/shared/' 뒤의 palette
   })
 
+  it('이름에 맞은 긴 파일이, 경로 앞머리에만 맞은 짧은 파일보다 위다', () => {
+    const list = ['app/x.ts', 'src/deep/long/application-settings.tsx']
+    expect(paletteItems({ ...base, files: list, query: 'app', scope: 'file' }).map((i) => i.id)).toEqual(['src/deep/long/application-settings.tsx', 'app/x.ts'])
+  })
+
   it('전체 범위에서는 글자 그대로 든 것만(퍼지 없음) · 일감 뒤에 · 빈 찾기에는 없다', () => {
     expect(paths('idx', 'all')).toEqual([]) // index 의 퍼지 맞춤
     expect(paths('idx', 'file')).toEqual(['src/main/index.ts'])
