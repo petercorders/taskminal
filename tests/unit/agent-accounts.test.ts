@@ -32,8 +32,15 @@ test('codex 추가 계정: 턴 끝 알림을 -c 로 붙인다', () => {
   expect(out.argv).toEqual(['-c', 'cli_auth_credentials_store="file"', '-c', 'notify=["/h/codex-notify.sh"]'])
 })
 
+test('claude 추가 계정: 안내 변수가 있으면 --append-system-prompt 로 넘기고(63단계), codex 추가 계정에는 주지 않는다', () => {
+  const guide = { TASKMINAL_AGENT_GUIDE: '첫 줄\ntaskminal notify "확인" # 둘째', TASKMINAL_CODEX_GUIDE: 'developer_instructions="x"', TASKMINAL_CLAUDE_SETTINGS: '', TASKMINAL_CODEX_NOTIFY: '', TASKMINAL_AGENT_EVENTS: '' }
+  expect(run('claude', guide).argv).toEqual(['--append-system-prompt', '첫 줄\ntaskminal notify "확인" # 둘째'])
+  expect(run('claude', { ...guide, TASKMINAL_CLAUDE_SETTINGS: '/h/s.json' }).argv).toEqual(['--settings', '/h/s.json', '--append-system-prompt', '첫 줄\ntaskminal notify "확인" # 둘째'])
+  expect(run('codex', guide).argv).toEqual(['-c', 'cli_auth_credentials_store="file"'])
+})
+
 test('훅을 끈 셸(변수 없음)에서는 빈 인자를 만들지 않는다', () => {
-  const env = { TASKMINAL_CLAUDE_SETTINGS: '', TASKMINAL_CODEX_NOTIFY: '', TASKMINAL_AGENT_EVENTS: '' }
+  const env = { TASKMINAL_CLAUDE_SETTINGS: '', TASKMINAL_CODEX_NOTIFY: '', TASKMINAL_AGENT_EVENTS: '', TASKMINAL_AGENT_GUIDE: '' }
   expect(run('claude', env).argv).toEqual([])
   expect(run('codex', env).argv).toEqual(['-c', 'cli_auth_credentials_store="file"'])
 })

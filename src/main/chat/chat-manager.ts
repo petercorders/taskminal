@@ -33,6 +33,8 @@ export interface ChatManagerDeps {
   onUsage?: (paneId: string, env: Record<string, string>, info: unknown) => void
   /** 58b: 설정 '에이전트에게 Taskminal 명령 알려 주기' 의 지금 값 — claude 를 띄울 때마다 읽는다 */
   agentGuide?: () => boolean
+  /** 63단계: 이 환경(CODEX_HOME)의 codex 에 안내를 줄까 — 설정이 켜져 있고 사용자 config.toml 에 developer_instructions 가 없을 때 */
+  codexGuide?: (env: Record<string, string>) => boolean
 }
 
 /** pane 의 대화 정보 (상태 파일의 Pane.chat) */
@@ -162,7 +164,7 @@ export class ChatManager {
       }
       entry.s =
         chat.agent === 'codex'
-          ? new CodexSession({ ...common, saveImage: (img, n) => this.d.store.saveImage(paneId, img, n), ...(this.d.appVersion ? { clientVersion: this.d.appVersion } : {}) })
+          ? new CodexSession({ ...common, saveImage: (img, n) => this.d.store.saveImage(paneId, img, n), ...(this.d.appVersion ? { clientVersion: this.d.appVersion } : {}), ...(this.d.codexGuide ? { agentGuide: () => this.d.codexGuide!(sessionEnv) } : {}) })
           : new ClaudeSession({ ...common, onUsage: (info: unknown) => this.d.onUsage?.(paneId, sessionEnv, info), ...(this.d.agentGuide ? { agentGuide: this.d.agentGuide } : {}) })
       this.panes.set(paneId, entry)
       if (!entry.s.send(text, images)) return 'busy'

@@ -145,7 +145,8 @@ export class Accounts {
     const hooks =
       agent === 'codex'
         ? ' ${TASKMINAL_CODEX_NOTIFY:+-c} ${TASKMINAL_CODEX_NOTIFY:+"$TASKMINAL_CODEX_NOTIFY"}'
-        : ' ${TASKMINAL_CLAUDE_SETTINGS:+--settings} ${TASKMINAL_CLAUDE_SETTINGS:+"$TASKMINAL_CLAUDE_SETTINGS"}'
+        : // 63단계: claude 의 안내는 덧붙이기(--append-system-prompt)라 계정 설정을 덮지 않는다. codex 는 그 계정 config.toml 의 developer_instructions 를 덮을 수 있어 주지 않는다
+          ' ${TASKMINAL_CLAUDE_SETTINGS:+--settings} ${TASKMINAL_CLAUDE_SETTINGS:+"$TASKMINAL_CLAUDE_SETTINGS"} ${TASKMINAL_AGENT_GUIDE:+--append-system-prompt} ${TASKMINAL_AGENT_GUIDE:+"$TASKMINAL_AGENT_GUIDE"}'
     return (
       'env -i HOME="$HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" LANG="${LANG:-en_US.UTF-8}" TMPDIR="$TMPDIR" SHELL="$SHELL" SSH_AUTH_SOCK="$SSH_AUTH_SOCK" TASKMINAL_PANE_ID="$TASKMINAL_PANE_ID" TASKMINAL_TASK_ID="$TASKMINAL_TASK_ID" TASKMINAL_SOCKET="$TASKMINAL_SOCKET" TASKMINAL_CLI_NODE="$TASKMINAL_CLI_NODE" TASKMINAL_CLI_JS="$TASKMINAL_CLI_JS" TASKMINAL_AGENT_EVENTS="$TASKMINAL_AGENT_EVENTS" ' +
       vars +

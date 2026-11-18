@@ -83,6 +83,44 @@ describe('zsh claude · codex 감싸기', () => {
     ])
   })
 
+  // 63단계: 터미널에서 띄운 claude · codex 에도 Taskminal 명령 안내를 그 실행의 인자로
+  // 가짜 claude · codex 는 sh 의 echo 로 인자를 찍는다 — 백슬래시가 든 값은 echo 가 바꿔 찍으니 여기서는 쓰지 않는다
+  const GUIDE = { TASKMINAL_AGENT_GUIDE: '안내 "x" $HOME 한 줄', TASKMINAL_CODEX_GUIDE: 'developer_instructions="a b $HOME"' }
+
+  it('claude 에 안내를 --append-system-prompt 로 붙인다 — 상태 훅과 같이, 하위 명령 · 사용자가 system-prompt 를 준 실행은 그대로', () => {
+    const out = zsh({ ...ON, ...GUIDE }, 'claude -r abc; claude mcp list; claude --append-system-prompt mine y; claude --system-prompt-file f z; claude --settings=mine b')
+    expect(stderr).toBe('')
+    expect(out).toEqual([
+      'claude:--settings|/s/claude settings.json|--append-system-prompt|안내 "x" $HOME 한 줄|-r|abc',
+      'claude:mcp|list',
+      'claude:--settings|/s/claude settings.json|--append-system-prompt|mine|y',
+      'claude:--settings|/s/claude settings.json|--system-prompt-file|f|z',
+      'claude:--append-system-prompt|안내 "x" $HOME 한 줄|--settings=mine|b',
+    ])
+  })
+
+  it('여러 줄 안내도 인자 하나로 간다', () => {
+    writeFileSync(join(bin, 'claude'), '#!/bin/sh\necho "claude:n=$#"\n')
+    expect(zsh({ TASKMINAL_AGENT_GUIDE: '첫 줄\ntaskminal notify "확인" # 둘째 줄\n셋째 줄' }, 'claude -r abc')).toEqual(['claude:n=4'])
+  })
+
+  it('codex 에 안내를 -c 로 붙인다 — 턴 끝 알림과 같이, 하위 명령은 그대로', () => {
+    const out = zsh({ ...ON, ...GUIDE }, 'codex resume id1; codex login')
+    expect(stderr).toBe('')
+    expect(out).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|-c|developer_instructions="a b $HOME"|resume|id1', 'codex:login'])
+  })
+
+  it('상태 훅이 꺼져 있어도(안내 변수만) 안내는 붙이고, 세션 끝 기록은 남기지 않는다', () => {
+    const out = zsh(GUIDE, 'claude -r abc; print "rc=$?"; codex fail; print "rc=$?"')
+    expect(stderr).toBe('')
+    expect(out).toEqual(['claude:--append-system-prompt|안내 "x" $HOME 한 줄|-r|abc', 'rc=0', 'codex:-c|developer_instructions="a b $HOME"|fail', 'rc=7'])
+    expect(existsSync(log)).toBe(false)
+  })
+
+  it('안내 변수 없이 상태 훅만 있으면 지금까지와 같다 (빈 인자를 만들지 않는다)', () => {
+    expect(zsh(ON, 'claude a; codex b')).toEqual(['claude:--settings|/s/claude settings.json|a', 'codex:-c|notify=["/x/codex-notify.sh"]|b'])
+  })
+
   it('앱이 변수를 주지 않으면(설정 끔) 감싸지 않는다', () => {
     expect(zsh({}, 'claude -r abc; codex resume id1')).toEqual(['claude:-r|abc', 'codex:resume|id1'])
     expect(existsSync(log)).toBe(false)

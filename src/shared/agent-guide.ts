@@ -1,4 +1,4 @@
-// 대화 pane 의 claude 에게 주는 Taskminal 명령 안내 (58b). 순수.
+// 에이전트에게 주는 Taskminal 명령 안내 (58b 대화 pane 의 claude · 63단계 Codex 와 터미널의 claude · codex). 순수.
 // 에이전트는 환경 변수(TASKMINAL_PANE_ID · 소켓 · PATH)만 받아서는 `taskminal` 명령이 있는 줄 모른다 —
 // 띄울 때 --append-system-prompt 로 그 실행에만 붙인다(사용자 Claude 설정 파일은 건드리지 않는다).
 // 명령은 줄 머리(또는 && 뒤)에, 설명은 ` # ` 뒤에 적는다 — tests/unit/agent-guide.test.ts 가 명령마다 shared/cli.ts 해석기에 넣어 본다.
@@ -18,4 +18,32 @@ const GUIDE = [
 
 export function agentGuide(): string {
   return GUIDE
+}
+
+// 63단계: 같은 안내를 Codex 와 터미널에서 띄운 claude · codex 에게도.
+// codex 는 설정 키 developer_instructions 로 받는다(codex-cli 0.169.0 `codex -c … debug prompt-input` 의 developer 메시지로 확인).
+// -c 는 사용자 config.toml 의 같은 키를 덮으므로, 사용자가 그 키를 두었으면 주지 않는다.
+
+/** `codex -c <값>` — TOML 기본 문자열 이스케이프는 JSON 과 같다(\" · \\ · \n) */
+export function codexGuideArg(): string {
+  return `developer_instructions=${JSON.stringify(GUIDE)}`
+}
+
+/** 사용자 codex config.toml 맨 위(첫 [표] 앞)에 developer_instructions 가 있나 — 있으면 덮지 않게 안내를 주지 않는다 */
+export function codexHasDeveloperInstructions(toml: string): boolean {
+  for (const raw of toml.split('\n')) {
+    const line = raw.trim()
+    if (line.startsWith('[')) return false
+    if (/^developer_instructions\s*=/.test(line)) return true
+  }
+  return false
+}
+
+/**
+ * 새 셸에 넣는 안내 변수 — 셸 통합(zsh)의 claude · codex 함수가 그 실행의 인자로만 붙인다.
+ * enabled: 설정 '에이전트에게 Taskminal 명령 알려 주기'. codexToml: 사용자 codex config.toml 글(없으면 빈 글).
+ */
+export function agentGuideEnv(enabled: boolean, codexToml: string): Record<string, string> {
+  if (!enabled) return {}
+  return { TASKMINAL_AGENT_GUIDE: GUIDE, ...(codexHasDeveloperInstructions(codexToml) ? {} : { TASKMINAL_CODEX_GUIDE: codexGuideArg() }) }
 }

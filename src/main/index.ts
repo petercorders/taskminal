@@ -18,6 +18,7 @@ import { MAX_LINK, webUrl } from '../shared/links'
 import { rendererFromEnv, type RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
 import { isOtherHostTarget } from '../shared/host-scan'
+import { agentGuideEnv, codexHasDeveloperInstructions } from '../shared/agent-guide'
 import { controlPathFits, isRemotePath, isSshHost, parseSshConfigHosts, sshArgs } from '../shared/remote'
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onCliInstall, onQuitAll } from './menu'
@@ -120,23 +121,28 @@ const accountsRoot = () => join(app.getPath('userData'), 'accounts')
 function putUsage(configDir: string | undefined, snap: ReturnType<typeof usageFromStatusLine>): void {
   if (snap) usageStore?.put(claudeAccountId(configDir, accountsRoot()), snap)
 }
+/** 사용자 codex config.toml 글 — 없으면 빈 글(사용자 notify · developer_instructions 도 없다). home: 그 실행의 CODEX_HOME */
+function codexToml(home = process.env['CODEX_HOME'] || join(homedir(), '.codex')): string {
+  try {
+    return readFileSync(join(home, 'config.toml'), 'utf8').slice(0, 1_000_000)
+  } catch {
+    return ''
+  }
+}
 /** 새 셸에 넣는 에이전트 훅 변수. 설정이 켜져 있고 훅 파일이 있을 때만. 새 셸마다 지금 설정 · 사용자 codex notify 를 본다(처음 한 번만 읽지 않는다) */
 function agentEnv(paneId: string): Record<string, string> {
+  const toml = codexToml()
+  // 63단계: 안내 변수는 상태 훅 설정과 따로 — '에이전트에게 Taskminal 명령 알려 주기' 가 켜져 있으면 준다
+  const guide = agentGuideEnv(lastState?.settings.agentGuide !== false, toml)
   const file = agentEvents?.fileFor(paneId)
-  if (!hookFiles || !file || lastState?.settings.agentHooks === false) return {}
+  if (!hookFiles || !file || lastState?.settings.agentHooks === false) return guide
   // 52단계: 사용자 statusLine 을 지금 값으로(바뀌었으면) — 앱 statusLine 스크립트가 잇는다
   try {
     syncUserStatusLine(dirname(hookFiles.claudeSettings), process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude'))
   } catch (e) {
     report('error', 'agent-statusline', '사용자 statusLine 을 읽지 못했어요', e)
   }
-  const env: Record<string, string> = { TASKMINAL_AGENT_EVENTS: file, TASKMINAL_CLAUDE_SETTINGS: hookFiles.claudeSettings }
-  let toml = ''
-  try {
-    toml = readFileSync(join(process.env['CODEX_HOME'] || join(homedir(), '.codex'), 'config.toml'), 'utf8').slice(0, 1_000_000)
-  } catch {
-    toml = '' // 없으면 사용자 notify 도 없다
-  }
+  const env: Record<string, string> = { ...guide, TASKMINAL_AGENT_EVENTS: file, TASKMINAL_CLAUDE_SETTINGS: hookFiles.claudeSettings }
   // 사용자가 notify 를 두었으면 -c 로 덮지 않는다
   if (!codexHasNotify(toml)) env['TASKMINAL_CODEX_NOTIFY'] = codexNotifyArg(hookFiles.codexNotify)
   return env
@@ -317,6 +323,8 @@ const chats = () =>
     permission: () => chatPermission,
     // 58b: claude 를 띄울 때마다 지금 설정을 본다(처음 한 번만 읽지 않는다) — 끈 것이 아니면 켬
     agentGuide: () => lastState?.settings.agentGuide !== false,
+    // 추가 계정의 codex 는 자기 CODEX_HOME 의 설정을 읽는다 — 그 폴더의 config.toml 을 본다
+    codexGuide: (env) => lastState?.settings.agentGuide !== false && !codexHasDeveloperInstructions(codexToml(env['CODEX_HOME'] || undefined)),
     channel: IPC.chatEvent,
     appVersion: app.getVersion(),
   }))

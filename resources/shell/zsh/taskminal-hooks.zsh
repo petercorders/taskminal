@@ -36,6 +36,9 @@ __taskminal_precmd() {
 # 51단계: 터미널에서 띄운 claude · codex 의 상태 훅. 앱이 변수를 줄 때만(설정 '에이전트 상태 알아내기') 감싼다.
 # claude 는 이 실행에만 --settings(훅 → pane 기록 파일), codex 는 -c notify(턴 끝). 사용자 전역 설정은 건드리지 않는다.
 # 사용자가 같은 이름의 alias · 함수를 두었으면 덮지 않는다. 하위 명령 · 이미 --settings 를 준 실행은 그대로 넘긴다.
+# 63단계: 설정 '에이전트에게 Taskminal 명령 알려 주기' 가 켜져 있으면 같은 함수가 안내도 그 실행의 인자로 붙인다 —
+# claude 는 --append-system-prompt(사용자가 system-prompt 인자를 줬으면 그대로), codex 는 -c developer_instructions.
+# 두 변수(상태 훅 · 안내)는 따로 온다: 하나만 있어도 감싸고, 있는 것만 붙인다. 세션 끝 기록은 상태 훅이 있을 때만.
 # `function 이름 {` 으로 정의한다 — `이름() {` 은 읽을 때 사용자 alias 로 펼쳐져 구문 오류가 난다(조건이 거짓이어도 읽는다).
 __taskminal_agent_exit() {
   [[ -n ${TASKMINAL_AGENT_EVENTS-} ]] || return 0
@@ -47,7 +50,7 @@ __taskminal_agent_wrappable() {
   case $(builtin whence -w $1) in (*alias|*function) return 1 ;; esac
   return 0
 }
-if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}"; then
+if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}${TASKMINAL_AGENT_GUIDE-}"; then
   # 52단계 리뷰: 실행 위치(현재 폴더 · git 최상위)의 프로젝트 설정에 statusLine 이 있으면 훅만 든 설정을 고른다 —
   # --settings 의 statusLine 이 Claude 설정 우선순위에서 프로젝트 statusLine 을 덮지 않게(그곳에선 터미널 한도 값을 받지 않는다)
   function __taskminal_claude_settings {
@@ -62,30 +65,37 @@ if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}"; then
     builtin print -r -- $TASKMINAL_CLAUDE_SETTINGS
   }
   function claude {
-    local a ret
+    local a ret hooks=${TASKMINAL_CLAUDE_SETTINGS-} guide=${TASKMINAL_AGENT_GUIDE-}
+    local -a extra
     case ${1-} in
       (agents|attach|auth|auto-mode|config|doctor|gateway|import|install|kill|logs|mcp|migrate-installer|plugin|plugins|purge|respawn|rm|setup-token|stop|ultrareview|update|upgrade|-h|--help|-v|--version)
         command claude "$@"; return ;;
     esac
     for a in "$@"; do
-      [[ $a == --settings || $a == --settings=* ]] && { command claude "$@"; return; }
+      if [[ $a == --settings || $a == --settings=* ]]; then hooks=; fi
+      if [[ $a == --system-prompt* || $a == --append-system-prompt* ]]; then guide=; fi
     done
-    command claude --settings "$(__taskminal_claude_settings)" "$@"
+    if [[ -n $hooks ]]; then extra+=(--settings "$(__taskminal_claude_settings)"); fi
+    if [[ -n $guide ]]; then extra+=(--append-system-prompt "$guide"); fi
+    command claude "${extra[@]}" "$@"
     ret=$?
-    __taskminal_agent_exit claude
+    if [[ -n $hooks ]]; then __taskminal_agent_exit claude; fi
     return $ret
   }
 fi
-if __taskminal_agent_wrappable codex "${TASKMINAL_CODEX_NOTIFY-}"; then
+if __taskminal_agent_wrappable codex "${TASKMINAL_CODEX_NOTIFY-}${TASKMINAL_CODEX_GUIDE-}"; then
   function codex {
     local ret
+    local -a extra
     case ${1-} in
       (agents|app|app-server|apply|archive|cloud|completion|debug|delete|doctor|exec-server|features|help|login|logout|mcp|mcp-server|migrate-nfs-db|migrate-rollouts|plugin|queue|remote-control|sandbox|unarchive|update|-h|--help|-V|--version)
         command codex "$@"; return ;;
     esac
-    command codex -c "$TASKMINAL_CODEX_NOTIFY" "$@"
+    if [[ -n ${TASKMINAL_CODEX_NOTIFY-} ]]; then extra+=(-c "$TASKMINAL_CODEX_NOTIFY"); fi
+    if [[ -n ${TASKMINAL_CODEX_GUIDE-} ]]; then extra+=(-c "$TASKMINAL_CODEX_GUIDE"); fi
+    command codex "${extra[@]}" "$@"
     ret=$?
-    __taskminal_agent_exit codex
+    if [[ -n ${TASKMINAL_CODEX_NOTIFY-} ]]; then __taskminal_agent_exit codex; fi
     return $ret
   }
 fi
