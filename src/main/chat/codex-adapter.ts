@@ -11,6 +11,7 @@ import {
   type ChatImage,
   type ChatPermission,
 } from '../../shared/chat'
+import { agentGuide } from '../../shared/agent-guide'
 import { isObj, type Obj } from '../../shared/guards'
 import type { ChildLike, SpawnFn } from './claude-adapter'
 import type { AgentSession } from './session'
@@ -32,6 +33,8 @@ export interface CodexSessionOptions {
   onEvent(ev: ChatEvent): void
   onExit(): void
   clientVersion?: string
+  /** 63단계: Taskminal 명령 안내를 줄까 — 스레드를 열 때마다 읽는다(설정 끔 · 사용자 developer_instructions 가 있으면 false) */
+  agentGuide?(): boolean
 }
 
 interface Call {
@@ -257,7 +260,9 @@ export class CodexSession implements AgentSession {
           return
         }
         const pol = codexPolicy(this.o.permission)
-        const base = { ...(this.o.model?{model:this.o.model}:{}),cwd: this.o.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox }
+        // 63단계: 안내는 이 스레드를 여는 요청에만 — 새 스레드 · 이어 하기 · 갈라 띄우기 모두 여기서 연다
+        const guide = this.o.agentGuide?.() ? { developerInstructions: agentGuide() } : {}
+        const base = { ...(this.o.model?{model:this.o.model}:{}),cwd: this.o.cwd, approvalPolicy: pol.approvalPolicy, sandbox: pol.sandbox, ...guide }
         let r: Obj
         if (this.o.sessionId && this.o.forkAt) r = await this.call('thread/fork', { threadId: this.o.sessionId, lastTurnId: this.o.forkAt, ...base, excludeTurns: true })
         else if (this.o.sessionId) r = await this.call('thread/resume', { threadId: this.o.sessionId, ...base, excludeTurns: true })

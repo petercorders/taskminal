@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { open,lstat,realpath,mkdir } from 'node:fs/promises'
+import { open,lstat,realpath,mkdir,symlink } from 'node:fs/promises'
 import { join,isAbsolute,dirname } from 'node:path'
 import { execFile,spawn,type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -9,22 +9,24 @@ import type { EnvironmentPlan,Preparation,ExtensionManifest,ExtensionPreview,Ins
 const hash=(v:string|Buffer)=>createHash('sha256').update(v).digest('hex')
 const key=(v:unknown):v is string=>typeof v==='string'&&/^[\w-]{1,100}$/.test(v)
 const string=(v:unknown,max:number):v is string=>typeof v==='string'&&v.length<=max&&!v.includes('\0')
-interface Config {copies:string[];commands:Array<{file:string;args:string[]}>}
+interface Config {copies:string[];links?:string[];commands:Array<{file:string;args:string[]}>}
 interface Journal {preparations:Preparation[];extensions:Array<InstalledExtension&{root:string}>}
-/** Reject symlinks at every component, including an existing destination. */
-async function path(root:string,relative:string,missing=false){
+/** Reject symlinks at every component, including an existing destination. leaf=false leaves the last component unchecked: a link destination may already be a link. */
+async function path(root:string,relative:string,missing=false,leaf=true){
  if(!string(relative,4096)||!relative||isAbsolute(relative)||relative.includes('\\')||relative.split('/').some(p=>!p||p==='.'||p==='..'||p==='.git'))throw Error('허용되지 않은 상대 경로예요')
  const canonical=await realpath(root);if(canonical!==root)throw Error('작업 폴더 경계가 바뀌었어요')
- let current=root
- for(const part of relative.split('/')){current=join(current,part);try{if((await lstat(current)).isSymbolicLink())throw Error('심볼릭 링크는 준비할 수 없어요')}catch(e){if(!missing||(e as NodeJS.ErrnoException).code!=='ENOENT')throw e}}
- return current
+ let current=root;const parts=relative.split('/'),last=leaf?undefined:parts.pop()
+ for(const part of parts){current=join(current,part);try{if((await lstat(current)).isSymbolicLink())throw Error('심볼릭 링크는 준비할 수 없어요')}catch(e){if(!missing||(e as NodeJS.ErrnoException).code!=='ENOENT')throw e}}
+ return last===undefined?current:join(current,last)
 }
+/** 62단계: 이 폴더에 미리보기가 읽을 환경 설정 파일이 있는지 — 워크트리를 만든 직후 환경 준비로 이어 갈지 정할 때 쓴다. */
+export async function configured(source:string){try{return (await lstat(await path(await realpath(source),'.taskminal/environment.json'))).isFile()}catch{return false}}
 async function read(root:string,relative:string,max=65536){
  const p=await path(root,relative),fd=await open(p,constants.O_RDONLY|constants.O_NOFOLLOW)
  try{const s=await fd.stat();if(!s.isFile()||s.size>max)throw Error('파일 형식 또는 크기 한도');const data=Buffer.alloc(max+1),n=(await fd.read(data,0,data.length,0)).bytesRead;const now=await lstat(await path(root,relative));if(n>max||s.dev!==now.dev||s.ino!==now.ino)throw Error('읽는 동안 파일이 바뀌었어요');return data.subarray(0,n)}finally{await fd.close()}
 }
 function git(root:string,args:string[]){return new Promise<{code:number;out:string}>((done)=>execFile('git',args,{cwd:root,encoding:'utf8',timeout:15000,maxBuffer:2_000_000,env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('GIT_')))},(e,out)=>done({code:e?1:0,out:out??''})))}
-function config(v:unknown):v is Config {if(!v||typeof v!=='object')return false;const c=v as Config;return Object.keys(c).every(k=>['copies','commands'].includes(k))&&Array.isArray(c.copies)&&c.copies.length<=30&&new Set(c.copies).size===c.copies.length&&c.copies.every(p=>string(p,4096))&&Array.isArray(c.commands)&&c.commands.length<=10&&c.commands.every(c=>c&&string(c.file,4096)&&!!c.file&&Array.isArray(c.args)&&c.args.length<=50&&c.args.every(a=>string(a,4096)))}
+function config(v:unknown):v is Config {if(!v||typeof v!=='object')return false;const c=v as Config;return Object.keys(c).every(k=>['copies','links','commands'].includes(k))&&Array.isArray(c.copies)&&c.copies.length<=30&&new Set(c.copies).size===c.copies.length&&c.copies.every(p=>string(p,4096))&&(c.links===undefined||Array.isArray(c.links)&&c.links.length<=10&&new Set(c.links).size===c.links.length&&c.links.every(p=>string(p,4096)))&&Array.isArray(c.commands)&&c.commands.length<=10&&c.commands.every(c=>c&&string(c.file,4096)&&!!c.file&&Array.isArray(c.args)&&c.args.length<=50&&c.args.every(a=>string(a,4096)))}
 function manifest(v:unknown):v is ExtensionManifest{
  if(!v||typeof v!=='object')return false;const m=v as ExtensionManifest
  return Object.keys(m).every(k=>['id','name','version','panels','commands'].includes(k))&&key(m.id)&&string(m.name,100)&&!!m.name&&string(m.version,100)&&!!m.version&&Array.isArray(m.panels)&&m.panels.length<=10&&Array.isArray(m.commands)&&m.commands.length<=20&&new Set([...m.panels,...m.commands].map(x=>x.id)).size===m.panels.length+m.commands.length&&m.panels.every(p=>p&&Object.keys(p).every(k=>['id','title','body'].includes(k))&&key(p.id)&&string(p.title,100)&&string(p.body,20000))&&m.commands.every(c=>{if(!c||!Object.keys(c).every(k=>['id','title','url'].includes(k))||!key(c.id)||!string(c.title,100)||!string(c.url,4096))return false;try{const u=new URL(c.url);return u.protocol==='https:'&&!u.username&&!u.password}catch{return false}})
@@ -44,6 +46,8 @@ export class DevelopmentTools {
   const root=await realpath(source),target=await realpath(destination)
   const trees=await git(root,['worktree','list','--porcelain']);if(trees.code||!trees.out.split('\n').includes('worktree '+target)||root===target)throw Error('같은 저장소의 별도 worktree를 골라 주세요')
   const raw=await read(root,'.taskminal/environment.json');const c:unknown=JSON.parse(raw.toString('utf8'));if(!config(c))throw Error('환경 설정 형식을 확인해 주세요')
+  // 복사할 경로와 연결할 경로가 겹치면 하나가 다른 하나의 안에 쓰게 된다 — 미리보기에서 거절한다
+  const overlap=(c.links??[]).find(l=>c.copies.some(p=>p===l||p.startsWith(l+'/')||l.startsWith(p+'/')));if(overlap)throw Error('복사할 경로와 연결할 경로가 겹쳐요: '+overlap)
   const copies:EnvironmentPlan['copies']=[],signatures:string[]=[],contents=new Map<string,Buffer>()
   for(const relative of c.copies){
    const ignored=await git(root,['check-ignore','-q','--',relative]),tracked=await git(target,['ls-files','--error-unmatch','--',relative])
@@ -52,8 +56,20 @@ export class DevelopmentTools {
    try{const s=await lstat(dest);if(!s.isFile())throw Error('대상은 일반 파일이어야 해요');exists=true}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e}
    copies.push({path:relative,size:bytes.length,exists});signatures.push(hash(bytes));contents.set(relative,bytes)
   }
-  const signature=hash(JSON.stringify([root,target,raw.toString('utf8'),signatures,copies]))
-  const plan:EnvironmentPlan={root,target,signature,copies,commands:c.commands.map(c=>({file:this.mask(c.file),args:c.args.map(a=>this.mask(a))}))}
+  const links:EnvironmentPlan['links']=[]
+  for(const relative of c.links??[]){
+   let source='';try{source=await path(root,relative);const s=await lstat(source);if(!s.isDirectory()&&!s.isFile())throw Error('폴더나 일반 파일만 연결할 수 있어요')}catch(e){throw (e as NodeJS.ErrnoException).code==='ENOENT'?Error('연결할 원본이 없어요: '+relative):e}
+   const ignored=await git(root,['check-ignore','-q','--',relative]),tracked=await git(target,['ls-files','--error-unmatch','--',relative])
+   if(ignored.code!==0||tracked.code===0)throw Error('gitignored이며 추적하지 않는 폴더·파일만 연결할 수 있어요')
+   const dest=await path(target,relative,true,false);let state:'linked'|'kept'|undefined
+   // An existing destination is never touched; only a link that resolves to this source counts as linked.
+   try{state=(await lstat(dest)).isSymbolicLink()&&await realpath(dest).catch(()=>'')===source?'linked':'kept'}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e}
+   // 대상 워크트리에서 Git 이 이 경로를 무시하지 않으면(.gitignore 의 `이름/` 은 폴더만 — 링크는 폴더가 아니다) 링크가 `git add -A` 에 섞인다 → 미리보기에 알린다
+   const unignored=state!=='kept'&&(await git(target,['check-ignore','-q','--',relative])).code!==0
+   links.push({path:relative,exists:!!state,...(state?{state}:{}),...(unignored?{unignored:true}:{})})
+  }
+  const signature=hash(JSON.stringify([root,target,raw.toString('utf8'),signatures,copies,links]))
+  const plan:EnvironmentPlan={root,target,signature,copies,links,commands:c.commands.map(c=>({file:this.mask(c.file),args:c.args.map(a=>this.mask(a))}))}
   return {plan,config:c,contents}
  }
  preparations(root:string){return structuredClone(this.data.preparations.filter(p=>p.root===root))}
@@ -83,6 +99,16 @@ export class DevelopmentTools {
     // Detect an ancestor replacement after the atomic open; never overwrite another file.
     if(await path(plan.target,copy.path)!==dest)throw Error('복사 대상 경계가 바뀌었어요')
     r.log+=copy.path+' — 복사 완료\n';this.persist()
+   }
+   // 62단계: links run after copies and before commands, so a command can use a linked folder.
+   for(const link of plan.links){if(!this.authorized(plan.root))throw Error('일감이 닫혔어요');if(this.cancelled.has(r.id))throw Error('준비를 중단했어요');if(link.exists){r.log+=link.path+(link.state==='linked'?' — 이미 연결됨\n':' — 기존 것 보존\n');continue}
+    const source=await path(plan.root,link.path),dest=await path(plan.target,link.path,true,false)
+    await mkdir(dirname(dest),{recursive:true,mode:0o700});await path(plan.target,link.path,true,false)
+    // symlink never replaces an existing entry. Windows folders use a junction (no privilege needed); a refused link fails the whole preparation.
+    try{await symlink(source,dest,(await lstat(source)).isDirectory()?'junction':'file')}catch(e){r.log+=link.path+' — 연결 실패\n';throw Error('원본에 연결하지 못했어요: '+((e as NodeJS.ErrnoException).code??'알 수 없는 오류'))}
+    // Detect an ancestor replacement after the link was made.
+    if(await path(plan.target,link.path,false,false)!==dest)throw Error('연결 대상 경계가 바뀌었어요')
+    r.log+=link.path+' — 원본에 연결\n';this.persist()
    }
    for(const command of c.commands){if(!this.authorized(plan.root))throw Error('일감이 닫혔어요');if(this.cancelled.has(r.id))throw Error('준비를 중단했어요');if(await realpath(plan.target)!==plan.target)throw Error('준비 폴더가 바뀌었어요')
     await this.command(r,command);this.persist()

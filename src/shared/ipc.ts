@@ -27,6 +27,8 @@ export const IPC = {
   workspaceEdit: 'workspace:edit',
   workspaceSave: 'workspace:save',
   workspaceExternal: 'workspace:external',
+  workspaceFileList: 'workspace:file-list', // invoke(root) → string[] — 일감 폴더의 파일들(⌘P 파일 범위, 65단계)
+  workspaceGrep: 'workspace:grep', // invoke(root, 글) → GrepResult — 파일 내용 찾기
   browserShow: 'browser:show',
   browserNavigate: 'browser:navigate',
   browserAction: 'browser:action',
@@ -71,6 +73,8 @@ export const IPC = {
   hostTail: 'host:tail', // invoke(paneId) → 마지막 20줄
   hostKill: 'host:kill', // send(paneId[]) — 주인 없는 셸 끝내기
   hostAction: 'host:action', // send(HostAction)
+  hostOthers: 'host:others', // invoke → OtherHost[] — 이 Mac 의 다른 지킴이 (61단계)
+  hostOthersEnd: 'host:others-end', // invoke(OtherHostTarget) → EndOtherHostResult — 다시 찾아 그대로일 때만 끝낸다
   // 17단계 데이터 안전
   backupList: 'backup:list', // invoke → BackupInfo[]
   backupRead: 'backup:read', // invoke(이름) → AppState (검증한 것)
@@ -122,6 +126,12 @@ export const IPC = {
   cliReply: 'cli:reply', // send(번호, UiReply) — 5초 안에, 늦은 답은 main 이 버린다
   // 55단계 Jira 읽기 — 토큰은 save 로 들어가기만 하고 status 는 '있음' 만 돌려준다
   jiraStatus: 'jira:status', jiraSave: 'jira:save', jiraClear: 'jira:clear', jiraAttach: 'jira:attach',
+  // 64단계 Jira 쓰기 — 전환 · 댓글은 요청 번호마다 한 번만 보낸다(main 의 쓰기 기록). 결과는 됨 · 안 됨 · 됐는지 모름
+  jiraTransitions: 'jira:transitions', // invoke(key) → JiraTransition[]
+  jiraTransition: 'jira:transition', // invoke({key, transitionId, requestId}) → JiraWriteState
+  jiraComment: 'jira:comment', // invoke({key, text, requestId}) → JiraWriteState
+  jiraWriteState: 'jira:write-state', // invoke(requestId) → JiraWriteState | null
+  jiraRefresh: 'jira:refresh', // invoke({taskId, key}) → IssueLink — 상태를 바꾼 뒤 연결한 이슈를 다시 읽어 남긴다
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

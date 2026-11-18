@@ -158,7 +158,8 @@ export class HostCore {
         return
       }
       case 'stats':
-        return void reply({ version: this.o.version, pid: this.o.pid, startedAt: this.startedAt, rss: this.o.rss(), sessions: this.liveCount })
+        // clients: 지금 이어진 연결 수(묻는 연결 포함) — 다른 앱이 이 지킴이를 쓰는 중인지 (61단계, 옛 지킴이는 이 칸이 없다)
+        return void reply({ version: this.o.version, pid: this.o.pid, startedAt: this.startedAt, rss: this.o.rss(), sessions: this.liveCount, clients: this.conns.size })
       case 'shutdown':
         reply({})
         return this.shutdown()

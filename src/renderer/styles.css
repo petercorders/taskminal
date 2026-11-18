@@ -1730,6 +1730,19 @@ input[type='checkbox'] {
 .host-confirm span {
   flex: 1;
 }
+/* 61단계: 이 Mac 의 다른 지킴이 — 긴 데이터 폴더 경로는 줄이고(전체는 title), 결과 글은 목록 위에 */
+.host-other-folder {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-other-note {
+  margin: var(--space-1) 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
 
 /* ─── 17단계 데이터 안전: 알림 · 백업 · 비밀값 가리기 ─── */
 .link {
@@ -4739,6 +4752,9 @@ input[type='checkbox'] {
 .work-file-list { overflow: auto; border-right: 1px solid var(--line); padding: var(--space-2); }
 .work-file-entry { display: block; width: 100%; border: 0; background: transparent; color: var(--fg); text-align: left; padding: var(--space-2); overflow-wrap: anywhere; min-height: 32px; border-radius: var(--r-sm); }
 .work-file-entry:hover { background: var(--raised); }
+/* 65단계: 내용 찾기 결과 — 위에 `경로:줄`, 아래에 그 줄 */
+.work-grep-hit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-grep-where { display: block; color: var(--muted); font: 11px/1.4 ui-monospace,monospace; overflow: hidden; text-overflow: ellipsis; }
 .work-file-preview { overflow: auto; padding: var(--space-3); }
 .work-source { font: 12px/1.5 ui-monospace,monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-radius: var(--r-md); padding: var(--space-3); max-height: 50vh; overflow: auto; }
 .work-line-number { color: var(--muted); display: inline-block; min-width: 32px; user-select: none; }

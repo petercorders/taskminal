@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { agentGuide } from '../../src/shared/agent-guide'
+import { agentGuide, agentGuideEnv, codexGuideArg, codexHasDeveloperInstructions } from '../../src/shared/agent-guide'
 import { isCliRequest, parseArgs } from '../../src/shared/cli'
 import { redact } from '../../src/shared/redact'
 
@@ -56,5 +56,29 @@ describe('agentGuide (58b)', () => {
     expect(guide).not.toContain('~')
     expect(guide).not.toContain('$HOME')
     expect(redact(guide)).toBe(guide)
+  })
+})
+
+describe('안내를 Codex · 터미널까지 (63)', () => {
+  it('codex -c 값은 한 줄이고, TOML 기본 문자열(= JSON 이스케이프)을 풀면 안내 그대로다', () => {
+    const arg = codexGuideArg()
+    expect(arg.startsWith('developer_instructions="')).toBe(true)
+    expect(arg).not.toContain('\n')
+    expect(JSON.parse(arg.slice('developer_instructions='.length))).toBe(agentGuide())
+  })
+
+  it('사용자 config.toml 맨 위에 developer_instructions 가 있을 때만 있다고 본다', () => {
+    expect(codexHasDeveloperInstructions('')).toBe(false)
+    expect(codexHasDeveloperInstructions('model = "x"\ndeveloper_instructions = "내 지침"\n')).toBe(true)
+    expect(codexHasDeveloperInstructions('  developer_instructions="x"')).toBe(true)
+    expect(codexHasDeveloperInstructions('# developer_instructions = "주석"\nmodel = "x"')).toBe(false)
+    expect(codexHasDeveloperInstructions('model = "x"\n[profiles.a]\ndeveloper_instructions = "표 안"')).toBe(false)
+    expect(codexHasDeveloperInstructions('my_developer_instructions = "다른 키"')).toBe(false)
+  })
+
+  it('셸 변수: 켜면 claude 안내 · codex 인자, 사용자가 developer_instructions 를 두었으면 codex 는 뺀다, 끄면 없다', () => {
+    expect(agentGuideEnv(true, '')).toEqual({ TASKMINAL_AGENT_GUIDE: agentGuide(), TASKMINAL_CODEX_GUIDE: codexGuideArg() })
+    expect(agentGuideEnv(true, 'developer_instructions = "내 지침"')).toEqual({ TASKMINAL_AGENT_GUIDE: agentGuide() })
+    expect(agentGuideEnv(false, '')).toEqual({})
   })
 })

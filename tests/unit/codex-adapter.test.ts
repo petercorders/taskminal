@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ChildLike } from '../../src/main/chat/claude-adapter'
 import { CodexSession } from '../../src/main/chat/codex-adapter'
+import { agentGuide } from '../../src/shared/agent-guide'
 import type { ChatEvent } from '../../src/shared/chat'
 
 type Msg = { id?: number | string; method?: string; params?: Record<string, unknown>; result?: unknown; error?: unknown }
@@ -62,7 +63,7 @@ class FakeServer extends EventEmitter implements ChildLike {
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean; stall?: string; model?:string;effort?:'low'|'medium'|'high' } = {}) {
+function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; failResume?: boolean; stall?: string; model?:string;effort?:'low'|'medium'|'high'; agentGuide?: () => boolean } = {}) {
   const servers: FakeServer[] = []
   const events: ChatEvent[] = []
   const saved: string[] = []
@@ -74,6 +75,7 @@ function setup(o: { sessionId?: string; forkAt?: string; loggedIn?: boolean; fai
     ...(o.model?{model:o.model}:{}),...(o.effort?{effort:o.effort}:{}),
     ...(o.sessionId ? { sessionId: o.sessionId } : {}),
     ...(o.forkAt ? { forkAt: o.forkAt } : {}),
+    ...(o.agentGuide ? { agentGuide: o.agentGuide } : {}),
     spawn: (_b, args) => {
       expect(args).toEqual(['app-server'])
       const c = new FakeServer()
@@ -232,6 +234,22 @@ describe('CodexSession', () => {
     await tick()
     expect(b.servers[0]!.got.find((m) => m.method === 'thread/fork')!.params).toMatchObject({ threadId: 'thr-old', lastTurnId: 'turn-3' })
     expect(b.events[0]).toMatchObject({ t: 'session', id: 'thr-1' })
+  })
+
+  // 63단계: 대화 pane 의 Codex 도 Taskminal 명령 안내를 받는다 — 스레드를 여는 요청의 developerInstructions
+  it('안내를 켜면 thread/start · resume · fork 에 developerInstructions 가 실리고, 끄거나 없으면 그 칸이 없다', async () => {
+    const opened = async (o: Parameters<typeof setup>[0], method: string) => {
+      const t = setup(o)
+      t.s.send('x')
+      await tick()
+      await tick()
+      return t.servers[0]!.got.find((m) => m.method === method)!.params!
+    }
+    expect((await opened({ agentGuide: () => true }, 'thread/start'))['developerInstructions']).toBe(agentGuide())
+    expect((await opened({ agentGuide: () => true, sessionId: 'thr-old' }, 'thread/resume'))['developerInstructions']).toBe(agentGuide())
+    expect((await opened({ agentGuide: () => true, sessionId: 'thr-old', forkAt: 'turn-3' }, 'thread/fork'))['developerInstructions']).toBe(agentGuide())
+    expect(await opened({ agentGuide: () => false }, 'thread/start')).not.toHaveProperty('developerInstructions')
+    expect(await opened({}, 'thread/start')).not.toHaveProperty('developerInstructions')
   })
 
   it('fork(): 떠 있는 프로세스를 떼어 내고, 다음 보내기가 갈라진 스레드로', async () => {

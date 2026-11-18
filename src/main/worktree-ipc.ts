@@ -8,6 +8,7 @@ import type { AppState } from '../shared/types'
 import { validWorktreeJournal, type WorktreeJournalState } from '../shared/worktree-management'
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
+import { configured } from './development-tools'
 interface Dependencies { state():AppState|null; revision():number; pendingPaths():string[]; liveCwds():Promise<string[]> }
 const expand=(value:string)=>resolve(expandHome(value,homedir()))
 const inside=(parent:string,child:string)=>{const path=relative(parent,child);return path===''||(!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep))}
@@ -28,7 +29,8 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
     const tasks=await Promise.all((d.state()?.tasks.filter(t=>!t.host)??[]).map(async task=>({id:task.id,name:task.name,paths:await Promise.all([task.cwd,...Object.values(task.panes).map(p=>p.cwd)].map(p=>realpath(expand(p)).catch(()=>expand(p))))})))
     return {...result,entries:result.entries.map(entry=>({...entry,tasks:tasks.filter(t=>t.paths.some(path=>inside(entry.path,path))).map(({id,name})=>({id,name})),...(warning?{removable:false,reasons:[...entry.reasons,warning]}:{})}))}
   })
-  ipcMain.handle(IPC.worktreesCreate,(event,dir,input)=>service.create(root(event,dir),input))
+  // 62단계: 만든 것이 확인됐고 그 일감 폴더에 환경 설정이 있으면 답에 실어, 패널이 환경 준비 미리보기로 잇는다
+  ipcMain.handle(IPC.worktreesCreate,async(event,dir,input)=>{const authorized=root(event,dir),result=await service.create(authorized,input);return result.state==='created'&&await configured(authorized)?{...result,environment:true}:result})
   ipcMain.handle(IPC.worktreesTargets,(event,dir)=>service.targets(root(event,dir)))
   ipcMain.handle(IPC.worktreesOpen,async(event,dir,target)=>{
     const result=await service.open(root(event,dir),target)

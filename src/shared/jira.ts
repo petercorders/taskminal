@@ -1,5 +1,6 @@
-// 55단계 Jira 읽기 연동 — main · renderer 가 함께 쓰는 순수 규칙. 쓰기(상태 전환 · 댓글)는 없다.
+// 55단계 Jira 읽기 연동 — main · renderer 가 함께 쓰는 순수 규칙. 쓰기(상태 전환 · 댓글, 64단계)의 규칙은 jira-write.ts.
 import type { IssueLink, IssueRecord } from './issues'
+import type { JiraCommentInput, JiraRefreshInput, JiraTransition, JiraTransitionInput, JiraWriteState } from './jira-write'
 import { redact } from './redact'
 
 export const JIRA_DEFAULT_JQL = 'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC'
@@ -31,6 +32,15 @@ export interface JiraApi {
   clear(): Promise<JiraStatus>
   /** 기존 일감에 Jira 이슈 연결 */
   attach(input: JiraAttachInput): Promise<IssueLink>
+  /** 64단계: 이 이슈에서 지금 할 수 있는 상태 전환 */
+  transitions(key: string): Promise<JiraTransition[]>
+  /** 상태 전환 · 댓글 — 요청 번호마다 한 번만 보낸다. 같은 번호를 다시 부르면 저장된 결과(됐는지 모르면 확인한 뒤)를 돌려준다 */
+  transition(input: JiraTransitionInput): Promise<JiraWriteState>
+  comment(input: JiraCommentInput): Promise<JiraWriteState>
+  /** 보낸 쓰기의 지금 상태 — 이번 실행의 기록에 없으면 null */
+  writeState(requestId: string): Promise<JiraWriteState | null>
+  /** 상태를 바꾼 뒤 연결한 이슈를 다시 읽어 남긴다 — 연결이 그 사이 다른 이슈로 바뀌었으면 거절 */
+  refresh(input: JiraRefreshInput): Promise<IssueLink>
 }
 
 const fail = (text: string) => new Error(`${JIRA_ERROR} ${text}`)
@@ -47,6 +57,8 @@ export function jiraSite(value: unknown, allowLoopback: boolean): string {
 }
 
 const KEY = /^[A-Za-z][A-Za-z0-9_]{0,49}-[1-9]\d{0,9}$/
+/** 이슈 키 모양 — 요청 경로에 넣기 전에 본다 (64단계 쓰기) */
+export const isJiraKey = (v: unknown): v is string => typeof v === 'string' && KEY.test(v)
 const text = (v: unknown, max = 200) => (typeof v === 'string' ? redact(v).replace(/[\r\n]+/g, ' ').slice(0, max) : '')
 
 /** 검색 · 이슈 응답의 행 → IssueRecord. 제목 · 이름은 비신뢰 자료라 가린 뒤 글자로만 쓴다 */

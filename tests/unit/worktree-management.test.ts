@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseWorktrees, prepareTarget, validWorktreeJournal, type WorktreeSnapshot, type WorktreeJournalState } from '../../src/shared/worktree-management'
+import { parseWorktrees, prepareAfterCreate, prepareTarget, validWorktreeJournal, type WorktreeSnapshot, type WorktreeJournalState } from '../../src/shared/worktree-management'
 import { WorktreeManagement, makeWorktreeGit, type WorktreeGit } from '../../src/main/worktree-management'
 import { AtomicJournal } from '../../src/main/atomic-journal'
 
@@ -66,6 +66,20 @@ describe('worktree porcelain -z parser', () => {
     const rows = parseWorktrees(raw)
     expect(rows).toHaveLength(100)
     expect(rows[99].unknownAttributes).toEqual(['future'])
+  })
+})
+
+// 62단계: 워크트리를 만든 직후 환경 준비 미리보기로 이어 갈지 — 만든 것이 확인됐고 저장소에 환경 설정이 있을 때만
+describe('prepareAfterCreate', () => {
+  const path = '/repos/new-checkout'
+  it('continues to the created worktree only when the repository has an environment file', () => {
+    expect(prepareAfterCreate({ state: 'created', path, environment: true })).toBe(path)
+    expect(prepareAfterCreate({ state: 'created', path })).toBeNull()
+    expect(prepareAfterCreate({ state: 'created', path, environment: false })).toBeNull()
+  })
+  it('does not continue while the result is unknown or failed, even with an environment file', () => {
+    expect(prepareAfterCreate({ state: 'unknown', path, environment: true })).toBeNull()
+    expect(prepareAfterCreate({ state: 'failed', path, environment: true })).toBeNull()
   })
 })
 

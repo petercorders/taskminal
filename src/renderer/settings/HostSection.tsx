@@ -1,6 +1,7 @@
 // 설정 › 셸 지킴이 (16단계) — 앱 밖에서 셸을 갖고 있는 프로세스의 상태 · 주인 없는 셸 · 다시 시작.
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatDuration } from '../../shared/activity'
+import { endOtherHostError, endOtherHostText, endSentNote, otherHostLine, type OtherHost, type OtherHostTarget } from '../../shared/host-scan'
 import { PTYHOST_PROTOCOL, orphanSessions, type SessionInfo } from '../../shared/ptyhost'
 import type { AppState } from '../../shared/types'
 import { mb, useHostView } from '../host-ui'
@@ -25,6 +26,75 @@ export function HostSection({ state, busy, Row }: Props) {
     void window.taskminal.host.sessions().then(setSessions, () => setSessions([]))
   }, [])
   useEffect(refresh, [refresh, view?.pid])
+
+  // 61단계: 이 Mac 의 다른 지킴이 — 칸을 열 때 · '다시 읽기' · 끝내기 뒤에만 읽는다(주기 없음)
+  const [others, setOthers] = useState<OtherHost[] | 'error' | null>(null)
+  const [othersBusy, setOthersBusy] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const [otherNote, setOtherNote] = useState<string | null>(null)
+  // 확인을 연 순간의 대상을 떠 둔다 — 그 사이 목록이 바뀌어도 다른 지킴이를 끝내지 않는다(main 이 다시 찾는다)
+  const [endTarget, setEndTarget] = useState<OtherHost | null>(null)
+  const [home, setHome] = useState('')
+  const otherSeq = useRef(0)
+  const laterRead = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 읽기마다 번호 — 늦게 온 옛 목록이 새 목록을 덮지 않는다. 앞 읽기가 도는 중이어도 건너뛰지 않고 새로 읽는다 */
+  const readOthers = useCallback((sent?: { target: OtherHostTarget; settled: boolean }) => {
+    const seq = ++otherSeq.current
+    setOthersBusy(true)
+    void window.taskminal.host.others().then(
+      (list) => {
+        if (seq !== otherSeq.current) return
+        setOthersBusy(false)
+        setOthers(list)
+        if (sent) setOtherNote(endSentNote(sent.target, list, sent.settled))
+      },
+      () => {
+        if (seq !== otherSeq.current) return
+        setOthersBusy(false)
+        setOthers('error')
+      },
+    )
+  }, [])
+  useEffect(() => {
+    let alive = true
+    void window.taskminal.appInfo().then(
+      (info) => alive && setHome(info.home),
+      () => {},
+    )
+    readOthers()
+    return () => {
+      alive = false
+      otherSeq.current++ // 닫힌 뒤에 온 답은 버린다
+      if (laterRead.current) clearTimeout(laterRead.current)
+    }
+  }, [readOthers])
+  const endOther = (h: OtherHost) => {
+    const target: OtherHostTarget = { pid: h.pid, startedAt: h.startedAt, sockPath: h.sockPath }
+    setAsking(null)
+    setEndTarget(null)
+    setOtherNote(null)
+    setEnding(true)
+    void window.taskminal.host
+      .endOther(target)
+      .then(
+        (r) => {
+          if (!r.ok) {
+            setOtherNote(endOtherHostError(r.reason))
+            return readOthers()
+          }
+          readOthers({ target, settled: false })
+          // 셸은 SIGHUP 뒤 2초에 SIGKILL — 그 뒤에 한 번 더 읽어 남아 있으면 알린다
+          if (laterRead.current) clearTimeout(laterRead.current)
+          laterRead.current = setTimeout(() => readOthers({ target, settled: true }), 3000)
+        },
+        () => {
+          setOtherNote('끝내지 못했어요. 다시 읽어 확인해 주세요.')
+          readOthers()
+        },
+      )
+      .finally(() => setEnding(false))
+  }
+  const otherList = Array.isArray(others) ? others : []
 
   const statePanes = state.tasks.flatMap((t) => Object.keys(t.panes))
   const live = sessions?.filter((s) => !s.exited) ?? []
@@ -112,6 +182,65 @@ export function HostSection({ state, busy, Row }: Props) {
               )}
             </li>
           ))}
+        </ul>
+      </Row>
+      <Row
+        title={`이 Mac 의 다른 지킴이${Array.isArray(others) ? ` ${others.length}` : ''}`}
+        desc="다른 데이터 폴더나 옛 판의 Taskminal 이 남긴 지킴이예요. 앱을 꺼도 셸이 있는 동안 남아요. 자동으로 끄지 않아요."
+        keywords="다른 지킴이 남은 셸 정리 프로세스 개발 시험 데이터 폴더"
+        control={
+          <span className="setting-controls">
+            {othersBusy && (
+              <span className="host-status" data-testid="host-others-busy">
+                확인 중…
+              </span>
+            )}
+            <button type="button" className="button" disabled={ending} onClick={() => readOthers()}>
+              다시 읽기
+            </button>
+          </span>
+        }
+      >
+        {others === 'error' && (
+          <p className="host-other-note" role="alert">
+            목록을 읽지 못했어요. 다시 읽어 보세요.
+          </p>
+        )}
+        {otherNote && (
+          <p className="host-other-note" role="status" data-testid="host-other-note">
+            {otherNote}
+          </p>
+        )}
+        <ul className="host-orphans" data-testid="host-others">
+          {otherList.map((h) => {
+            const line = otherHostLine(h, Date.now(), home)
+            const key = `other:${h.pid}:${h.startedAt}`
+            return (
+              <li key={key} className="host-orphan" data-testid={`other-host-${h.pid}`}>
+                <div className="host-orphan-row">
+                  <span className="host-orphan-name host-other-folder" title={h.userData}>
+                    {line.folder}
+                  </span>
+                  <span className="host-orphan-cmd">{line.detail}</span>
+                  <span className="host-orphan-age">{line.summary}</span>
+                  {line.canEnd && (
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={ending}
+                      onClick={() => {
+                        setEndTarget(h)
+                        setAsking(key)
+                      }}
+                    >
+                      셸까지 끝내기…
+                    </button>
+                  )}
+                </div>
+                {asking === key && endTarget && <Confirm text={endOtherHostText(endTarget)} yes="끝내기" onYes={() => endOther(endTarget)} onNo={() => setAsking(null)} />}
+              </li>
+            )
+          })}
         </ul>
       </Row>
       <Row

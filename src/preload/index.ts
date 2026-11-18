@@ -8,6 +8,7 @@ import type { ChatEvent } from '../shared/chat'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
+import type { EndOtherHostResult, OtherHost } from '../shared/host-scan'
 import type { AgentSignal } from '../shared/agent-hooks'
 import type { UsageMap } from '../shared/usage'
 import type { WorktreeResult } from '../shared/worktree'
@@ -65,6 +66,8 @@ const api: TaskminalApi = {
     list: (root, path) => ipcRenderer.invoke(IPC.workspaceList, root, path),
     read: (root, path) => ipcRenderer.invoke(IPC.workspaceRead, root, path),
     external: (root, path) => ipcRenderer.invoke(IPC.workspaceExternal, root, path),
+    fileList: (root) => ipcRenderer.invoke(IPC.workspaceFileList, root),
+    grep: (root, query) => ipcRenderer.invoke(IPC.workspaceGrep, root, query),
     browserTabs:id=>ipcRenderer.invoke(IPC.browserTabs,id),
     browserCreateTab:id=>ipcRenderer.invoke(IPC.browserCreateTab,id),
     browserSelectTab:(id,tabId)=>ipcRenderer.invoke(IPC.browserSelectTab,id,tabId),
@@ -144,6 +147,8 @@ const api: TaskminalApi = {
     tail: (paneId) => ipcRenderer.invoke(IPC.hostTail, paneId) as Promise<string>,
     kill: (paneIds) => ipcRenderer.send(IPC.hostKill, paneIds),
     action: (action) => ipcRenderer.send(IPC.hostAction, action),
+    others: () => ipcRenderer.invoke(IPC.hostOthers) as Promise<OtherHost[]>,
+    endOther: (target) => ipcRenderer.invoke(IPC.hostOthersEnd, target) as Promise<EndOtherHostResult>,
   },
   update: {
     view: () => ipcRenderer.invoke(IPC.updateView) as Promise<UpdateView>,
@@ -194,7 +199,11 @@ const api: TaskminalApi = {
     probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,
     kill: (paneId, port, pid) => ipcRenderer.invoke(IPC.portsKill, paneId, port, pid) as Promise<'killed' | 'gone' | 'failed'>,
   },
-  jira: { status: () => ipcRenderer.invoke(IPC.jiraStatus), save: input => ipcRenderer.invoke(IPC.jiraSave, input), clear: () => ipcRenderer.invoke(IPC.jiraClear), attach: input => ipcRenderer.invoke(IPC.jiraAttach, input) },
+  jira: {
+    status: () => ipcRenderer.invoke(IPC.jiraStatus), save: input => ipcRenderer.invoke(IPC.jiraSave, input), clear: () => ipcRenderer.invoke(IPC.jiraClear), attach: input => ipcRenderer.invoke(IPC.jiraAttach, input),
+    transitions: key => ipcRenderer.invoke(IPC.jiraTransitions, key), transition: input => ipcRenderer.invoke(IPC.jiraTransition, input), comment: input => ipcRenderer.invoke(IPC.jiraComment, input),
+    writeState: requestId => ipcRenderer.invoke(IPC.jiraWriteState, requestId), refresh: input => ipcRenderer.invoke(IPC.jiraRefresh, input),
+  },
 }
 
 contextBridge.exposeInMainWorld('taskminal', api)

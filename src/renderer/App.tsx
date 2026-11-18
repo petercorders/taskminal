@@ -229,7 +229,7 @@ export function App() {
   // 55단계: 사이드바 · 일감 머리의 Jira 키 · 마감 — 앱을 열 때 한 번, 이슈 패널이 읽을 때마다 갱신
   const issueLinks = useIssueLinks()
   useEffect(() => { loadIssueLinks(window.taskminal.issues) }, [])
-  const [workTool,setWorkTool] = useState<{taskId:string;kind:WorkToolKind;url?:string;runId?:string;target?:string}|null>(null)
+  const [workTool,setWorkTool] = useState<{taskId:string;kind:WorkToolKind;url?:string;runId?:string;target?:string;file?:{path:string;n:number};preview?:boolean}|null>(null)
   // 56단계: 위 도구 줄의 '일감 도구 ▾' · '찾기 ▾' 메뉴와, 찾는 곳을 바꿀 때 가져가는 검색어
   const [toolMenu,setToolMenu] = useState<{kind:'task'|'find';x:number;y:number}|null>(null)
   const toolMenuTrigger = useRef<HTMLButtonElement|null>(null)
@@ -1932,6 +1932,13 @@ export function App() {
         window.taskminal.openLink(portUrl(port))
         return refocus()
       }
+      case 'file': {
+        // 65단계: 지금 일감의 파일 보기에서 연다 — 팔레트가 읽은 목록은 지금 일감의 것(팔레트가 열린 동안 일감은 바뀌지 않는다)
+        const taskId = stateRef.current.activeTaskId
+        if (!taskId) return refocus()
+        setOverviewOpen(false)
+        return setWorkTool((old) => ({ taskId, kind: 'files', file: { path: item.id, n: (old?.file?.n ?? 0) + 1 } }))
+      }
       case 'find-all':
         findMemo.current = { ...findMemo.current, query, selected: null }
         return setGlobalFind(true)
@@ -2138,11 +2145,11 @@ export function App() {
           {workTool && workToolShown && <aside ref={workToolPanel} tabIndex={-1} className="work-tool-panel" aria-label="작업 보조 화면" onKeyDown={onWorkToolKey}>
             <header className="work-tools-row"><strong>{commandLabel(toolByKind(workTool.kind)!.command)}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
-              {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd} {...(workTool.target?{initialTarget:workTool.target}:{})} onOpenWorktrees={()=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='development'&&old.taskId===id?{taskId:id,kind:'worktree'}:old)}}/>}
-              {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
+              {workTool.kind==='development'&&<DevelopmentPanel key={activeTask.id} root={activeTask.cwd} {...(workTool.target?{initialTarget:workTool.target,initialPreview:workTool.preview===true}:{})} onOpenWorktrees={()=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='development'&&old.taskId===id?{taskId:id,kind:'worktree'}:old)}}/>}
+              {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} {...(workTool.file?{openFile:workTool.file}:{})} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)} onSendToChat={text=>{const id=activeTask.id;if(!stateRef.current.tasks.some(task=>task.id===id&&task.archivedAt===undefined))return showToast({text:'일감이 사라졌어요.'});askChat(id,text);setWorkTool(null);refocus()}} onOpenReview={()=>{setWorkTool(null);openReview(activeTask.id,'diff')}}/>}
-              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onPrepare={path=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
+              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onPrepare={(path,preview)=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path,...(preview?{preview:true}:{})}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
                 if(signal?.aborted||workToolRef.current!==workTool||stateRef.current.activeTaskId!==activeTask.id)return
                 const current=stateRef.current
                 if(taskId){const existing=current.tasks.find(t=>t.id===taskId&&!t.host&&t.archivedAt===undefined);if(!existing||existing.cwd!==expectedCwd)return showToast({text:'연결된 일감이 바뀌었어요. 다시 열어 주세요.'});dispatch({type:'task/select',id:taskId})}
@@ -2166,7 +2173,7 @@ export function App() {
                 data-task-name={task.name}
                 aria-hidden={!taskActive}
               >
-                {(() => { const link = issueLinks.find((item) => item.taskId === task.id && item.issue.provider === 'jira'); return link ? <JiraTaskHead link={link} /> : null })()}
+                {(() => { const link = issueLinks.find((item) => item.taskId === task.id && item.issue.provider === 'jira'); return link ? <JiraTaskHead link={link} active={taskActive} /> : null })()}
                 {(() => {
                   const { shown, more } = quickButtons(task, state.settings.quickCommands)
                   // 27단계: 대화 탭에서 빈 '빠른 명령' 안내 띠는 셸 명령 안내라 자리만 차지한다 — 단추가 생기면 그때 보인다

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isAbsolutePath } from '../shared/platform'
 import {
-  prepareTarget,
+  prepareAfterCreate, prepareTarget,
   type CreateWorktree, type ManagedWorktree, type WorktreeApi, type WorktreeSnapshot, type WorktreeView,
 } from '../shared/worktree-management'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -12,8 +12,9 @@ interface Props {
   /** Recheck the source task before creating/selecting it; respect signal after any await. */
   onOpen(path: string, taskId?: string, signal?: AbortSignal, expectedCwd?: string): void | Promise<void>
   api?: WorktreeApi
-  /** 56단계: 이 워크트리에 환경 준비 — 환경 패널을 그 경로를 고른 채로 연다 */
-  onPrepare?(path: string): void
+  /** 56단계: 이 워크트리에 환경 준비 — 환경 패널을 그 경로를 고른 채로 연다.
+   *  preview(62단계): 방금 만든 워크트리 — 미리보기까지 읽어 보인다(실행은 미리보기에서 확인한 뒤에만) */
+  onPrepare?(path: string, preview?: boolean): void
 }
 
 interface Draft { branch: string; base: string; path: string }
@@ -129,6 +130,9 @@ export function WorktreePanel({ root, onOpen, onPrepare, api = window.taskminal.
       if (result.state === 'created') {
         setDraft(emptyDraft())
         setNotice(`${result.message} 목록에서 일감으로 열 수 있어요.`)
+        // 62단계: 저장소에 환경 설정이 있으면 만든 워크트리의 환경 준비 미리보기로 잇는다 — 카드의 '환경 준비…' 와 같은 길
+        const target = prepareAfterCreate(result)
+        if (target) onPrepare?.(target, true)
       }
       else setError(`${result.message} 경로: ${result.path}`)
     })

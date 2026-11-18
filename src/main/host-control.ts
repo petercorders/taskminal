@@ -2,12 +2,15 @@
 // 메모리 점검 · 옛 버전 지킴이 찾기 · 끝내기(⌘Q 처음 안내 · ⌥⌘Q 모두 끝내기)를 맡는다.
 
 import { app, BrowserWindow, dialog, shell } from 'electron'
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { HOST_PS_ARGS, type EndOtherHostResult, type OtherHost, type OtherHostTarget } from '../shared/host-scan'
 import { IPC, type HostAction, type HostView } from '../shared/ipc'
 import { memoryWarning, PTYHOST_PROTOCOL, socketPath, socketVersion, WARN_RSS_MB, type SessionInfo } from '../shared/ptyhost'
+import { endOtherHost, listOtherHosts, type HostScanDeps } from './host-scan'
 import { HostClient, oneShot, type HostStatus } from './ptyhost/client'
 import { PtyManager } from './pty-manager'
 
@@ -28,6 +31,10 @@ export interface HostControl {
   action(a: HostAction): Promise<void>
   tail(paneId: string, lines?: number): Promise<string>
   sessions(clearUnseen: boolean): Promise<SessionInfo[]>
+  /** 이 Mac 에 떠 있는 다른 지킴이들 (61단계) — 지금 앱의 것은 뺀다 */
+  others(): Promise<OtherHost[]>
+  /** 고른 다른 지킴이를 셸까지 끝낸다 — 다시 찾아 그대로일 때만 */
+  endOther(target: OtherHostTarget): Promise<EndOtherHostResult>
   /** 앱이 끝날 때 — 연결만 놓는다(셸은 남는다) */
   dispose(): void
 }
@@ -45,10 +52,13 @@ export function createHostControl(
   onDown: (error?: string) => void = () => {},
   paneEnv: (paneId: string) => Record<string, string> = () => ({}),
   tap: HostTap | null = null,
+  /** 화면에 보일 글(다른 지킴이의 실행 중인 명령)을 가린다 */
+  mask: (text: string) => string = (text) => text,
 ): HostControl {
   const userData = app.getPath('userData')
   const protocol = envInt('TASKMINAL_PTYHOST_PROTOCOL') ?? PTYHOST_PROTOCOL // 시험: 옛 버전 흉내
-  const sockPath = socketPath(userData, protocol, tmpdir(), (s) => createHash('sha1').update(s).digest('hex'), process.platform)
+  const hash = (s: string) => createHash('sha1').update(s).digest('hex')
+  const sockPath = socketPath(userData, protocol, tmpdir(), hash, process.platform)
   const hostScript = process.env['TASKMINAL_PTYHOST_SCRIPT'] ?? join(__dirname, 'host.js')
   const noticeFile = join(userData, 'quit-notice-seen')
   const logFile = join(userData, 'ptyhost.log')
@@ -148,6 +158,26 @@ export function createHostControl(
     return win && !win.isDestroyed() ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options)
   }
 
+  // 61단계: 이 Mac 의 다른 지킴이. 훑기와 끝내기는 차례로 — 끝내기 직전의 '붙은 연결' 확인에 내 다른 연결이 세어지지 않게
+  const scanDeps: HostScanDeps = {
+    ps: () =>
+      new Promise((resolve, reject) =>
+        execFile('ps', [...HOST_PS_ARGS], { env: { ...process.env, LC_ALL: 'C' }, timeout: 5000, maxBuffer: 16 * 1024 * 1024 }, (e, out) => (e ? reject(e) : resolve(out))),
+      ),
+    ask: (path, reqs) => oneShot(path, reqs),
+    selfSock: sockPath,
+    uid: process.getuid?.() ?? null,
+    hash,
+    mask,
+    protocol,
+  }
+  let scanTurn: Promise<unknown> = Promise.resolve()
+  const inTurn = <T>(job: () => Promise<T>): Promise<T> => {
+    const run = scanTurn.then(job, job)
+    scanTurn = run.catch(() => {})
+    return run
+  }
+
   let quittingAll = false
   return {
     ptys,
@@ -222,6 +252,10 @@ export function createHostControl(
       return typeof r?.['text'] === 'string' ? r['text'] : ''
     },
     sessions: (clearUnseen) => ptys.sessions(clearUnseen),
+    // Windows 의 지킴이는 named pipe 라 프로세스 목록으로 찾지 않는다
+    others: () => (process.platform === 'win32' ? Promise.resolve([]) : inTurn(() => listOtherHosts(scanDeps))),
+    // Windows 는 다른 지킴이를 찾지 않는다(others 가 빈 목록) — 끝낼 대상도 없다
+    endOther: (target) => (process.platform === 'win32' ? Promise.resolve({ ok: false, reason: 'gone' } as const) : inTurn(() => endOtherHost(scanDeps, target))),
     dispose: () => host.dispose(),
   }
 }

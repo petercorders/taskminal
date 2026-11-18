@@ -11,6 +11,8 @@ const sensitive = (p: string) =>
   p
     .split(/[\\/]/)
     .some((n) => /^(\.env(?:\..*)?|\.git|\.ssh|\.aws|credentials(?:\.json)?|auth\.json|id_(rsa|ed25519)(?:\.pub)?|.*\.(?:pem|key|p12|pfx))$/i.test(n))
+/** 민감 파일(.env · 키 등)의 경로인가 — 파일 빨리 열기 · 내용 찾기(65단계)도 같은 규칙으로 뺀다 */
+export const sensitivePath = sensitive
 export class WorkspaceFiles {
   constructor(private readonly secretOptions: () => SecretOptions = () => ({})) {}
   async path(root: string, path: string): Promise<string> {

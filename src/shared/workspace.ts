@@ -38,6 +38,10 @@ export interface WorkspaceApi {
   list(root: string, path: string): Promise<WorkspaceEntry[]>
   read(root: string, path: string): Promise<WorkspaceFile>
   external(root: string, path: string): Promise<void>
+  /** 일감 폴더의 파일들 — git 이 아는 것만, 폴더 기준 상대 경로 (65단계 ⌘P 파일 범위) */
+  fileList(root: string): Promise<string[]>
+  /** 파일 내용 찾기 — 글자 그대로 · 대소문자 무시 · 500줄까지 */
+  grep(root: string, query: string): Promise<import('./workspace-search').GrepResult>
   browserTabs(id: string): Promise<import('./browser-tabs').BrowserTaskState>
   browserCreateTab(id: string): Promise<import('./browser-tabs').BrowserTaskState>
   browserSelectTab(id: string, tabId: string): Promise<import('./browser-tabs').BrowserTaskState>
