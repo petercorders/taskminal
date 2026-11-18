@@ -83,12 +83,12 @@ Windows의 포트 자동 감지, 엄격한 실행 폴더 확인이 필요한 wor
 git clone https://github.com/petercorders/taskminal.git
 cd taskminal
 git fetch --tags
-git checkout v0.1.2
+git checkout v0.2.0
 npm ci
 npm run dev
 ```
 
-다른 출시 버전을 확인하려면 `v0.1.2`를 해당 릴리스의 태그로 바꿉니다. 개발 환경은 Node.js 24와 해당 OS의 네이티브 빌드 도구를 사용합니다. 설치 파일은 대상 OS에서 빌드하세요.
+다른 출시 버전을 확인하려면 `v0.2.0`을 해당 릴리스의 태그로 바꿉니다. 개발 환경은 Node.js 24와 해당 OS의 네이티브 빌드 도구를 사용합니다. 설치 파일은 대상 OS에서 빌드하세요.
 
 ```sh
 npm run typecheck        # TypeScript 검사
