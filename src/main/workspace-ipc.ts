@@ -19,6 +19,7 @@ import { AgentSessions, sessionRoots } from './agent-sessions'
 import { resumeCommand, type AgentSessionOpen } from '../shared/agent-sessions'
 import { openTextEditor } from './text-editor'
 import { WorkspaceEditor } from './workspace-editor'
+import { WorkspaceSearch } from './workspace-search'
 
 export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean, state: () => AppState | null) {
   const secretOptions = () => {
@@ -27,6 +28,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   }
   const conversations = new ConversationSearch(join(app.getPath('userData'),'chat'),state,secretOptions)
   const editor = new WorkspaceEditor()
+  const search = new WorkspaceSearch(secretOptions)
   const files = new WorkspaceFiles(secretOptions),
     browser = new WorkspaceBrowser(secretOptions,new BrowserTabsStore(new AtomicJournal<BrowserTabsJournal>(join(app.getPath('userData'),'browser-tabs','journal.json'),validBrowserTabsJournal),{id:randomUUID,validTask:id=>!!state()?.tasks.some(t=>t.id===id&&!t.host),redact:value=>redact(value,secretOptions())}),id=>!!state()?.tasks.some(t=>t.id===id&&!t.host&&t.archivedAt===undefined),join(app.getPath('userData'),'browser-captures')),
     // 54단계: 시험(TASKMINAL_USER_DATA)만 피드백 읽기 한도를 줄인다
@@ -109,6 +111,9 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   ipcMain.handle(IPC.workspaceList, (e, dir, p) => files.list(root(e, dir), path(p)))
   ipcMain.handle(IPC.workspaceRead, (e, dir, p) => files.read(root(e, dir), path(p)))
   ipcMain.handle(IPC.workspaceEdit, (e, dir, p) => editor.read(root(e, dir), path(p)))
+  // 65단계: 파일 빨리 열기 · 내용 찾기 — 일감 폴더만(root 가 검사), 찾을 글은 WorkspaceSearch 가 검사
+  ipcMain.handle(IPC.workspaceFileList, (e, dir) => search.files(root(e, dir)))
+  ipcMain.handle(IPC.workspaceGrep, (e, dir, q) => search.grep(root(e, dir), q))
   ipcMain.handle(IPC.workspaceSave, (e, dir, p, input) => editor.save(root(e, dir), path(p), input))
   ipcMain.handle(IPC.workspaceExternal, async (e, dir, p) => {
     const full = await files.path(root(e, dir), path(p))
@@ -187,6 +192,7 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
   app.on('will-quit', () => {
     browser.dispose()
     accounts.dispose()
+    search.dispose()
   })
   return {accounts,browser}
 }

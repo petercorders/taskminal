@@ -1,10 +1,11 @@
 // 명령 팔레트(⌘P)의 찾기 · 순위. 순수 함수 — 무엇을 찾을지(일감 · 명령 · 템플릿 · 출력)는 부르는 쪽이 모아 넘긴다.
 
-export type PaletteKind = 'task' | 'command' | 'quick' | 'port' | 'template' | 'history' | 'output' | 'find-all' | 'create'
-export type PaletteScope = 'all' | 'task' | 'command' | 'template' | 'output'
+export type PaletteKind = 'task' | 'command' | 'quick' | 'port' | 'template' | 'history' | 'file' | 'output' | 'find-all' | 'create'
+export type PaletteScope = 'all' | 'task' | 'command' | 'template' | 'output' | 'file'
 
-export const SCOPES: readonly PaletteScope[] = ['all', 'task', 'command', 'template', 'output']
-export const SCOPE_LABEL: Record<PaletteScope, string> = { all: '전체', task: '일감', command: '명령', template: '템플릿', output: '출력' }
+// '파일'(65단계)은 맨 끝 — ⇥ 를 누르는 횟수로 앞 범위들에 가던 손이 그대로다
+export const SCOPES: readonly PaletteScope[] = ['all', 'task', 'command', 'template', 'output', 'file']
+export const SCOPE_LABEL: Record<PaletteScope, string> = { all: '전체', task: '일감', command: '명령', template: '템플릿', output: '출력', file: '파일' }
 
 export interface PaletteInput {
   tasks: Array<{ id: string; name: string; detail: string }>
@@ -18,6 +19,8 @@ export interface PaletteInput {
   quick?: Array<{ id: string; label: string; command: string; taskName: string; hint: string }>
   /** 듣는 포트 (20단계) — id 는 `paneId:포트` */
   ports?: Array<{ id: string; port: number; taskName: string; proc: string }>
+  /** 지금 일감 폴더의 파일들 (65단계) — 폴더 기준 상대 경로. 고르면 파일 보기에서 연다 */
+  files?: readonly string[]
   query: string
   scope: PaletteScope
 }
@@ -39,6 +42,9 @@ export interface PaletteItem {
 const OUTPUT_MIN_QUERY = 2
 const OUTPUT_LIMIT = 20
 const HISTORY_LIMIT = 8
+/** 전체 범위에 섞어 보이는 파일 수 · 파일 범위에서 보이는 수 */
+const FILE_LIMIT_ALL = 8
+const FILE_LIMIT = 50
 
 const range = (from: number, n: number) => Array.from({ length: n }, (_, i) => from + i)
 
@@ -118,6 +124,20 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
     }
   }
 
+  // 파일(65단계): 이름이 맞은 것을 경로만 맞은 것보다 위에. 전체 범위에서는 글자 그대로 맞은 것만 몇 개(퍼지는 수만 개 경로의 거의 전부에 맞는다),
+  // 파일 범위에서는 퍼지까지. 다른 묶음 뒤에 둔다 — 일감 · 명령을 밀어내지 않게
+  if (want('file') && input.files && (query !== '' || input.scope === 'file')) {
+    const all = input.scope === 'all'
+    const found: PaletteItem[] = []
+    for (const path of input.files) {
+      const hit = fileMatch(path, query, !all)
+      if (hit) found.push({ kind: 'file', id: path, label: path, marks: hit.marks, score: hit.score })
+    }
+    // 같은 점수면 짧은 경로 먼저(sort 는 안정 정렬 — 그다음은 받은 순서)
+    found.sort((a, b) => b.score - a.score || a.label.length - b.label.length)
+    items.push(...found.slice(0, all ? FILE_LIMIT_ALL : FILE_LIMIT))
+  }
+
   // 출력은 다른 것 뒤에 — 찾은 줄의 맞은 자리를 강조한다. 찾은 줄이 있으면 맨 아래 '모두 보기 ⇧⌘F' (같은 낱말로 모든 출력 찾기)
   if (want('output') && query.length >= OUTPUT_MIN_QUERY) {
     const q = query.toLowerCase()
@@ -136,6 +156,17 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
     items.push({ kind: 'create', id: query, label: query, marks: [], score: 0 })
   }
   return items
+}
+
+/** 파일 경로 맞춤 — 이름(마지막 마디)에 맞으면 높게, 경로에만 맞으면 낮게. fuzzy 가 아니면 글자 그대로 든 것만 */
+function fileMatch(path: string, query: string, fuzzy: boolean): { score: number; marks: number[] } | null {
+  if (query === '') return { score: 0, marks: [] }
+  const q = query.toLowerCase()
+  const nameAt = path.lastIndexOf('/') + 1
+  const name = matchScore(path.slice(nameAt), query)
+  if (name && (fuzzy || path.slice(nameAt).toLowerCase().includes(q))) return { score: name.score + 1000, marks: name.marks.map((i) => i + nameAt) }
+  const whole = matchScore(path, query)
+  return whole && (fuzzy || path.toLowerCase().includes(q)) ? whole : null
 }
 
 /**

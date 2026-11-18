@@ -27,6 +27,8 @@ export const IPC = {
   workspaceEdit: 'workspace:edit',
   workspaceSave: 'workspace:save',
   workspaceExternal: 'workspace:external',
+  workspaceFileList: 'workspace:file-list', // invoke(root) → string[] — 일감 폴더의 파일들(⌘P 파일 범위, 65단계)
+  workspaceGrep: 'workspace:grep', // invoke(root, 글) → GrepResult — 파일 내용 찾기
   browserShow: 'browser:show',
   browserNavigate: 'browser:navigate',
   browserAction: 'browser:action',

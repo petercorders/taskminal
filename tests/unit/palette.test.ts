@@ -151,10 +151,51 @@ describe('markSegments', () => {
 })
 
 describe('nextScope', () => {
-  it('전체 → 일감 → 명령 → 템플릿 → 출력 → 전체, 거꾸로도', () => {
+  it('전체 → 일감 → 명령 → 템플릿 → 출력 → 파일 → 전체, 거꾸로도 (파일은 맨 끝 — 앞 범위까지의 ⇥ 횟수가 그대로)', () => {
     expect(nextScope('all', 1)).toBe('task')
-    expect(nextScope('output', 1)).toBe('all')
-    expect(nextScope('all', -1)).toBe('output')
+    expect(nextScope('template', 1)).toBe('output')
+    expect(nextScope('output', 1)).toBe('file')
+    expect(nextScope('file', 1)).toBe('all')
+    expect(nextScope('all', -1)).toBe('file')
+  })
+})
+
+describe('paletteItems — 파일 (65단계)', () => {
+  const files = ['src/main/index.ts', 'src/renderer/App.tsx', 'docs/app-notes.md', 'README.md', 'src/shared/palette.ts', 'tests/unit/palette.test.ts']
+  const base = { tasks: [{ id: 't1', name: 'app 일감', detail: '~/x' }], commands: [], templates: [], outputs: [] }
+  const run = (query: string, scope: PaletteInput['scope']) => paletteItems({ ...base, files, query, scope })
+  const paths = (query: string, scope: PaletteInput['scope']) => run(query, scope).filter((i) => i.kind === 'file').map((i) => i.id)
+
+  it('이름이 맞은 파일이 경로만 맞은 파일보다 위 · 맞은 자리는 경로 안의 위치', () => {
+    expect(paths('app', 'file')).toEqual(['src/renderer/App.tsx', 'docs/app-notes.md'])
+    expect(paths('src', 'file').slice(0, 3)).toEqual(['src/main/index.ts', 'src/renderer/App.tsx', 'src/shared/palette.ts']) // 경로만 맞음 — 짧은 경로 먼저
+    const hit = run('palette', 'file')[0]!
+    expect(hit).toMatchObject({ kind: 'file', id: 'src/shared/palette.ts', label: 'src/shared/palette.ts' })
+    expect(hit.marks).toEqual([11, 12, 13, 14, 15, 16, 17]) // 'src/shared/' 뒤의 palette
+  })
+
+  it('전체 범위에서는 글자 그대로 든 것만(퍼지 없음) · 일감 뒤에 · 빈 찾기에는 없다', () => {
+    expect(paths('idx', 'all')).toEqual([]) // index 의 퍼지 맞춤
+    expect(paths('idx', 'file')).toEqual(['src/main/index.ts'])
+    const kinds = run('app', 'all').map((i) => i.kind)
+    expect(kinds.indexOf('task')).toBeLessThan(kinds.indexOf('file'))
+    expect(kinds.at(-1)).toBe('create')
+    expect(paths('', 'all')).toEqual([])
+  })
+
+  it('파일 범위는 빈 찾기에도 목록을 보이고, 다른 종류 · 새 일감 줄은 없다', () => {
+    expect(paths('', 'file')).toHaveLength(files.length)
+    expect(run('app', 'file').every((i) => i.kind === 'file')).toBe(true)
+  })
+
+  it('많아도 전체 범위 8개 · 파일 범위 50개까지', () => {
+    const many = Array.from({ length: 300 }, (_, i) => `pkg/mod${i}/file${i}.ts`)
+    expect(paletteItems({ ...base, files: many, query: 'file', scope: 'all' }).filter((i) => i.kind === 'file')).toHaveLength(8)
+    expect(paletteItems({ ...base, files: many, query: 'file', scope: 'file' })).toHaveLength(50)
+  })
+
+  it('파일 목록이 없으면(원격 일감 · git 아님) 파일 줄이 없다', () => {
+    expect(paletteItems({ ...base, query: 'app', scope: 'file' })).toEqual([])
   })
 })
 

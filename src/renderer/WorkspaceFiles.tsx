@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { WorkspaceEntry, WorkspaceFile } from '../shared/workspace'
+import { dirOf, grepNotes, grepQuery, rangeAt, type GrepResult } from '../shared/workspace-search'
 import type { ChatImage } from '../shared/chat'
 import { PdfPreview } from './PdfPreview'
 import { WorkspaceEditor } from './WorkspaceEditor'
 
-export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text: string, images?: ChatImage[]): void }) {
+/** openFile: ⌘P 에서 고른 파일(65단계) — n 이 바뀔 때마다 그 파일을 연다 */
+export function WorkspaceFiles({ root, onAttach, openFile }: { root: string; onAttach(text: string, images?: ChatImage[]): void; openFile?: { path: string; n: number } }) {
   const [path, setPath] = useState(''),
     [query, setQuery] = useState('')
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]),
@@ -16,11 +18,52 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
     [rendered, setRendered] = useState(true)
   const [editing, setEditing] = useState(false)
   const generation = useRef(0)
+  // 65단계: 다른 폴더의 파일을 열 때 — 폴더 목록을 먼저 읽고(그 효과가 file 을 비운다) 이어서 이 파일을 읽는다
+  const pendingOpen = useRef<{ path: string; line?: number } | null>(null)
+  // 내용 찾기 — 입력이 멈춘 뒤(200ms) 한 번, 번호로 마지막 요청의 답만 받는다
+  const [grepText, setGrepText] = useState(''),
+    [grep, setGrep] = useState<GrepResult | null>(null),
+    [grepBusy, setGrepBusy] = useState(false),
+    [grepFailed, setGrepFailed] = useState(false)
+  const grepSeq = useRef(0)
+  const grepping = grepQuery(grepText) !== null
   useEffect(() => {
     setPath('')
     setFile(null)
     setEditing(false)
+    pendingOpen.current = null
+    setGrepText('')
   }, [root])
+  useEffect(() => {
+    const q = grepQuery(grepText)
+    const seq = ++grepSeq.current
+    setGrepFailed(false)
+    if (!q) {
+      setGrep(null)
+      setGrepBusy(false)
+      return
+    }
+    setGrepBusy(true)
+    const timer = setTimeout(() => {
+      void window.taskminal.workspace.grep(root, q).then(
+        (r) => {
+          if (grepSeq.current !== seq) return
+          setGrep(r)
+          setGrepBusy(false)
+        },
+        () => {
+          if (grepSeq.current !== seq) return
+          setGrep(null)
+          setGrepBusy(false)
+          setGrepFailed(true)
+        },
+      )
+    }, 200)
+    return () => {
+      clearTimeout(timer)
+      grepSeq.current++ // 이미 떠난 요청의 답은 버린다
+    }
+  }, [grepText, root])
   useEffect(() => {
     const n = ++generation.current
     setLoading(true)
@@ -30,10 +73,16 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
       .list(root, path)
       .then(
         (rows) => {
-          if (generation.current === n) setEntries(rows)
+          if (generation.current !== n) return
+          setEntries(rows)
+          const want = pendingOpen.current
+          pendingOpen.current = null
+          if (want && dirOf(want.path) === path) void readFile(want.path, want.line)
         },
         () => {
-          if (generation.current === n) setError('폴더를 읽지 못했어요. 권한과 경로를 확인해 주세요.')
+          if (generation.current !== n) return
+          pendingOpen.current = null
+          setError('폴더를 읽지 못했어요. 권한과 경로를 확인해 주세요.')
         },
       )
       .finally(() => {
@@ -49,14 +98,30 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
       setPath(entry.path)
       return
     }
+    await readFile(entry.path)
+  }
+  /** 경로로 바로 열기(⌘P 파일 · 내용 찾기 결과) — 그 파일의 폴더로 옮기고, line 이 있으면 그 줄부터 보인다 */
+  const openAt = (filePath: string, line?: number) => {
+    setEditing(false)
+    // 파일 읽기는 도는 중인 폴더 읽기를 버린다(번호가 하나다) — 그래서 늘 폴더 목록을 읽은 뒤에 파일을 읽는다. 같은 폴더면 목록을 다시 읽게 한다
+    pendingOpen.current = line === undefined ? { path: filePath } : { path: filePath, line }
+    if (dirOf(filePath) === path) setRetry((n) => n + 1)
+    else setPath(dirOf(filePath))
+  }
+  useEffect(() => {
+    if (openFile) openAt(openFile.path)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 고를 때마다(n) 한 번
+  }, [openFile?.n])
+  const readFile = async (filePath: string, line?: number) => {
     const n = ++generation.current
     setLoading(true)
     setError('')
     try {
-      const f = await window.taskminal.workspace.read(root, entry.path)
+      const f = await window.taskminal.workspace.read(root, filePath)
       if (generation.current === n) {
         setFile(f)
-        setRange({ from: 1, to: Math.min(100, f.text?.split('\n').length ?? 1) })
+        setRange(rangeAt(line, f.text?.split('\n').length ?? 1))
+        if (line !== undefined) setRendered(false) // 줄 번호로 왔으면 소스로 보인다
       }
     } catch {
       if (generation.current === n) setError('파일을 읽지 못했어요. 민감 파일·폴더 밖 경로·크기 제한을 확인해 주세요.')
@@ -121,9 +186,30 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
         파일 이름 찾기
         <input value={query} onChange={(e) => setQuery(e.target.value)} />
       </label>
+      <label className="work-tools-row">
+        내용 찾기
+        <input value={grepText} placeholder="두 글자 이상 · 글자 그대로" spellCheck={false} data-testid="workspace-grep" onChange={(e) => setGrepText(e.target.value)} />
+      </label>
       {error && <p role="alert">{error}</p>}
       {loading && <p role="status">읽는 중…</p>}
       <div className="work-files-layout">
+        {grepping ? (
+          <div className="work-file-list" aria-label="내용 찾기 결과" data-testid="workspace-grep-results">
+            {(grep?.hits ?? []).map((h) => (
+              <button className="work-file-entry work-grep-hit" key={`${h.path}:${h.line}`} title={`${h.path}:${h.line}`} onClick={() => openAt(h.path, h.line)}>
+                <span className="work-grep-where">
+                  {h.path}:{h.line}
+                </span>
+                {h.text.trim()}
+              </button>
+            ))}
+            {grepNotes(grep, grepBusy, grepFailed).map((note) => (
+              <p key={note} className="dim small" role="status">
+                {note}
+              </p>
+            ))}
+          </div>
+        ) : (
         <div className="work-file-list" aria-label="파일 목록">
           {entries
             .filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
@@ -141,6 +227,7 @@ export function WorkspaceFiles({ root, onAttach }: { root: string; onAttach(text
             ))}
           {!loading && entries.filter((e) => e.name.toLowerCase().includes(query.toLowerCase())).length === 0 && <p>맞는 파일이 없어요.</p>}
         </div>
+        )}
         <div className="work-file-preview">
           {file && editing ? (
             <WorkspaceEditor key={JSON.stringify([root, file.path])} root={root} path={file.path} onClose={() => void open({ name: file.path.split('/').pop()!, path: file.path, directory: false })} />

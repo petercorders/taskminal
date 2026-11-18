@@ -31,7 +31,7 @@ const commandsOf = (shortcuts: readonly Shortcut[]) =>
 const OUTPUT_BUDGET = 20
 export const ARCHIVED_PREFIX = 'archived:'
 
-const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '명령 기록', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
+const KIND_LABEL: Record<PaletteItem['kind'], string> = { task: '일감', command: '명령', quick: '빠른 명령', port: '포트', template: '템플릿', history: '명령 기록', file: '파일', output: '출력', 'find-all': '모두 보기', create: '새 일감' }
 
 /** 명령 팔레트(⌘P): 일감 · 명령 · 템플릿 · 터미널 출력을 한 번에 찾는다. ↑↓ 고르기 · ↩ 실행 · ⌘↩ 새 탭으로 · ⇥ 범위 · Esc 닫기. */
 export function Palette({ state, shortcuts, history = [], ports = [], onRun, onClose, archived = [] }: Props) {
@@ -46,6 +46,21 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
   }, [query])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  // 65단계: 지금 일감 폴더의 파일들 — 팔레트를 열 때마다 다시 읽는다(로컬 일감만). 닫힌 뒤에 온 답은 버린다
+  const [files, setFiles] = useState<readonly string[]>([])
+  const fileTask = state.tasks.find((t) => t.id === state.activeTaskId)
+  const fileRoot = fileTask && !fileTask.host ? fileTask.cwd : null
+  useEffect(() => {
+    if (fileRoot === null) return
+    let alive = true
+    void window.taskminal.workspace.fileList(fileRoot).then(
+      (list) => alive && setFiles(list),
+      () => {},
+    )
+    return () => {
+      alive = false
+    }
+  }, [fileRoot])
 
   useEffect(() => inputRef.current?.focus(), [])
 
@@ -73,10 +88,11 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
       history: historyMatches(history, state, query),
       quick: quickOf(state, ordered),
       ports,
+      files,
       query,
       scope,
     })
-  }, [state, shortcuts, query, scope, outputQuery, history, ports, archived])
+  }, [state, shortcuts, query, scope, outputQuery, history, ports, archived, files])
 
   useEffect(() => setSelected(0), [query, scope])
   useEffect(() => {
@@ -127,7 +143,7 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
             aria-activedescendant={items.length ? optionId(selected) : undefined}
             aria-autocomplete="list"
             value={query}
-            placeholder="일감 · 명령 · 템플릿 · 기록 · 터미널 출력 찾기"
+            placeholder="일감 · 명령 · 템플릿 · 기록 · 파일 · 터미널 출력 찾기"
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
