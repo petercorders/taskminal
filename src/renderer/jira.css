@@ -8,3 +8,12 @@
 /* 짧은 글이라 줄지 않는다 — 폴더(.task-where)가 먼저 줄어든다 */
 .task-issue { flex: none; font-family: 'JetBrains Mono', Menlo, monospace; }
 .issues-panel .jira-state-line { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+/* 64단계 일감 머리의 Jira 쓰기 — 단추는 키 단추(.jira-key)와 같은 높이 · 글자, 결과 한 줄, 그 아래 댓글 칸 */
+.jira-head .jira-act, .jira-compose .jira-act { flex: none; min-height: 24px; height: auto; padding: 0 var(--space-2); font-size: 12px; color: var(--fg); }
+.jira-head .jira-result { min-width: 0; overflow-wrap: anywhere; color: var(--fg); }
+.jira-head .jira-result[role='alert'] { color: var(--danger); }
+.jira-compose { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.jira-compose textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 64px; max-height: 30vh; resize: vertical; padding: var(--space-2); font: inherit; color: var(--fg); background: var(--raised); border: 1px solid var(--line); }
+.jira-compose-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* 확인 글의 줄바꿈(이슈 키 다음 줄 · 댓글 앞부분)을 그대로 보인다 */
+.jira-confirm .dialog-message { white-space: pre-wrap; overflow-wrap: anywhere; }

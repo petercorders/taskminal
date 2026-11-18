@@ -126,6 +126,12 @@ export const IPC = {
   cliReply: 'cli:reply', // send(번호, UiReply) — 5초 안에, 늦은 답은 main 이 버린다
   // 55단계 Jira 읽기 — 토큰은 save 로 들어가기만 하고 status 는 '있음' 만 돌려준다
   jiraStatus: 'jira:status', jiraSave: 'jira:save', jiraClear: 'jira:clear', jiraAttach: 'jira:attach',
+  // 64단계 Jira 쓰기 — 전환 · 댓글은 요청 번호마다 한 번만 보낸다(main 의 쓰기 기록). 결과는 됨 · 안 됨 · 됐는지 모름
+  jiraTransitions: 'jira:transitions', // invoke(key) → JiraTransition[]
+  jiraTransition: 'jira:transition', // invoke({key, transitionId, requestId}) → JiraWriteState
+  jiraComment: 'jira:comment', // invoke({key, text, requestId}) → JiraWriteState
+  jiraWriteState: 'jira:write-state', // invoke(requestId) → JiraWriteState | null
+  jiraRefresh: 'jira:refresh', // invoke({taskId, key}) → IssueLink — 상태를 바꾼 뒤 연결한 이슈를 다시 읽어 남긴다
 } as const
 
 export const UPDATE_ACTIONS = ['check', 'download', 'install', 'move'] as const

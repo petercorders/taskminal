@@ -212,7 +212,7 @@ export interface TaskminalApi {
   review: ReviewApi
   /** taskminal 명령 (24단계) — main 이 묻는 화면 쪽 일 */
   cli: CliApi
-  /** 55단계 Jira 읽기 연동 */
+  /** 55단계 Jira 읽기 연동 · 64단계 쓰기(상태 전환 · 댓글) */
   jira: import('../shared/jira').JiraApi
 }
 

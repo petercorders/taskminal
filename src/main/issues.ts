@@ -204,6 +204,22 @@ export class Issues {
       return structuredClone(link)
     })
   }
+  /** 64단계: Jira 상태를 바꾼 뒤 연결한 이슈를 다시 읽어 남긴다 — 그 사이 연결이 다른 이슈로 바뀌었으면(떠 둔 키와 다름) 읽지도 고치지도 않는다 */
+  refresh(taskId: string, issueKey: string): Promise<IssueLink> {
+    this.ready()
+    if (!key(taskId) || typeof issueKey !== 'string' || issueKey.length > 100) return Promise.reject(new Error('[jira] 연결한 이슈를 확인해 주세요'))
+    const current = () => this.d.exists(taskId) ? this.data.links.find(l => l.taskId === taskId && l.issue.provider === 'jira' && l.issue.key === issueKey) : undefined
+    const changed = () => new Error('[jira] 이 일감의 Jira 연결이 바뀌었어요. 일감 머리의 상태는 그대로 뒀어요.')
+    return this.enqueue(async () => {
+      const link = current()
+      if (!link) throw changed()
+      const issue = await this.get('jira', '', link.issue.id)
+      if (!current()) throw changed()
+      const next: IssueLink = { ...link, issue }
+      this.persist({ ...this.data, links: this.data.links.map(l => l.taskId === taskId ? next : l) })
+      return structuredClone(next)
+    })
+  }
   linkPr(taskId: string, url: string): Promise<void> {
     return this.enqueue(() => {
       const link = this.data.links.find(l => l.taskId === taskId)

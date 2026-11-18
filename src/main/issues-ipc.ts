@@ -63,5 +63,12 @@ export function installIssuesIpc(trusted: (event: IpcMainInvokeEvent) => boolean
     if (!input || typeof input !== 'object') throw new Error('연결할 이슈와 일감을 확인해 주세요')
     return service.attach({ requestId: input.requestId, provider: 'jira', id: input.id, source: '', taskId: id(input.taskId) })
   })
+  // 64단계 Jira 쓰기 — 키 · 전환 id · 글 · 요청 번호의 모양은 Jira 가 검사한다(어긋나면 보내기 전에 거절)
+  const fields = (input: unknown): Record<string, unknown> => { if (!input || typeof input !== 'object') throw new Error('[jira] 요청을 확인해 주세요'); return input as Record<string, unknown> }
+  ipcMain.handle(IPC.jiraTransitions, (event, key) => { check(event); return jira.transitions(key) })
+  ipcMain.handle(IPC.jiraTransition, (event, input) => { check(event); const i = fields(input); return jira.transition(i['key'] as string, i['transitionId'] as string, i['requestId'] as string) })
+  ipcMain.handle(IPC.jiraComment, (event, input) => { check(event); const i = fields(input); return jira.comment(i['key'] as string, i['text'] as string, i['requestId'] as string) })
+  ipcMain.handle(IPC.jiraWriteState, (event, requestId) => { check(event); return jira.writeState(requestId) })
+  ipcMain.handle(IPC.jiraRefresh, (event, input) => { check(event); const i = fields(input); return service.refresh(id(i['taskId']), i['key'] as string) })
   return service
 }
