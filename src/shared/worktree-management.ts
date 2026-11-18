@@ -74,7 +74,14 @@ export interface WorktreeCreateResult {
   path: string
   existing: boolean
   message: string
+  /** 62단계: 만들기를 요청한 일감 폴더에 환경 설정(.taskminal/environment.json)이 있다 — 워크트리 관리 패널의 만들기 답에만, 있을 때만 실린다 */
+  environment?: boolean
 }
+
+/** 62단계: 워크트리를 만든 직후 환경 준비 미리보기로 이어 갈 대상 — 만든 것이 확인됐고(created) 환경 설정이 있을 때만.
+ *  결과를 모르거나 실패했으면 없는 폴더를 준비하게 되므로 잇지 않는다. 같은 요청을 다시 보내 확인된 것(existing)도 만든 흐름의 끝이라 잇는다 */
+export const prepareAfterCreate = (result: Pick<WorktreeCreateResult, 'state' | 'path' | 'environment'>): string | null =>
+  result.state === 'created' && result.environment === true ? result.path : null
 
 export interface WorktreeRemoveResult {
   state: 'removed' | 'unchanged' | 'unknown'

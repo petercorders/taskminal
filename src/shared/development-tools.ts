@@ -1,4 +1,5 @@
-export interface EnvironmentPlan {root:string;target:string;signature:string;copies:Array<{path:string;size:number;exists:boolean}>;commands:Array<{file:string;args:string[]}>}
+/** links(62단계): 복사하지 않고 원본을 가리키는 링크로 만들 경로 — exists 면 건드리지 않는다(state: 같은 원본을 가리키는 링크 linked · 다른 것 kept) */
+export interface EnvironmentPlan {root:string;target:string;signature:string;copies:Array<{path:string;size:number;exists:boolean}>;links:Array<{path:string;exists:boolean;state?:'linked'|'kept'}>;commands:Array<{file:string;args:string[]}>}
 export interface Preparation {id:string;root:string;target:string;signature:string;state:'running'|'done'|'failed'|'unknown'|'stopped';log:string}
 export interface ExtensionManifest {id:string;name:string;version:string;panels:Array<{id:string;title:string;body:string}>;commands:Array<{id:string;title:string;url:string}>}
 export interface InstalledExtension {manifest:ExtensionManifest;signature:string;enabled:boolean}
@@ -26,4 +27,11 @@ function shownWord(raw: string): string {
 }
 export function commandLine(command: { file: string; args: readonly string[] }): string {
   return [command.file, ...command.args].map(shownWord).join(' ')
+}
+
+/** 62단계: 환경 준비 미리보기의 링크 한 줄 — 링크는 워크트리에서 고치면 원본도 바뀐다는 것을 상태 옆에 보인다.
+ *  대상에 다른 것이 이미 있으면 건드리지 않아 원본과 무관하므로 그 말을 붙이지 않는다 */
+export function linkLine(link: EnvironmentPlan['links'][number]): string {
+  if (!link.exists) return `${link.path} · 원본에 연결 · 원본과 함께 바뀌어요`
+  return link.state === 'linked' ? `${link.path} · 이미 연결됨 · 원본과 함께 바뀌어요` : `${link.path} · 기존 것 보존`
 }
