@@ -89,7 +89,7 @@ test('executes the exact approved snapshot when source bytes change just before 
 // 62단계 links: 원본의 무시된 폴더 shared(값 파일 하나)를 워크트리에 링크로 — 설정은 configure 로 바꾼다
 function linked(config:object={copies:[],links:['shared'],commands:[]},ignore='.env\nshared\n'){
  const f=fixture(),configure=(c:object)=>writeFileSync(join(f.root,'.taskminal/environment.json'),JSON.stringify(c))
- writeFileSync(join(f.root,'.gitignore'),ignore);mkdirSync(join(f.root,'shared'));writeFileSync(join(f.root,'shared/value.txt'),'from-source');configure(config)
+ writeFileSync(join(f.root,'.gitignore'),ignore);writeFileSync(join(f.target,'.gitignore'),ignore);mkdirSync(join(f.root,'shared'));writeFileSync(join(f.root,'shared/value.txt'),'from-source');configure(config)
  return {...f,configure}
 }
 const refuse=async(f:ReturnType<typeof linked>,links:unknown,why:string)=>{f.configure({copies:[],links,commands:[]});await expect(f.service.preview(f.root,f.target)).rejects.toThrow(why)}
@@ -186,4 +186,17 @@ test('a link line says it changes together with the source unless something else
  expect(linkLine({path:'node_modules',exists:false})).toBe('node_modules · 원본에 연결 · 원본과 함께 바뀌어요')
  expect(linkLine({path:'node_modules',exists:true,state:'linked'})).toBe('node_modules · 이미 연결됨 · 원본과 함께 바뀌어요')
  expect(linkLine({path:'node_modules',exists:true,state:'kept'})).toBe('node_modules · 기존 것 보존')
+})
+test('links warn when the worktree would not ignore the link (a folder-only pattern)',async()=>{
+ const f=linked({copies:[],links:['shared'],commands:[]},'.env\nshared/\n')
+ const p=await f.service.preview(f.root,f.target);expect(p.links).toEqual([{path:'shared',exists:false,unignored:true}]);expect(linkLine(p.links[0]!)).toContain('무시하지 않아요')
+ expect((await f.service.prepare(f.root,p,'warned')).state).toBe('done')
+ expect((await f.service.preview(f.root,f.target)).links).toEqual([{path:'shared',exists:true,state:'linked',unignored:true}])
+ // 끝의 / 없이 적으면 링크도 무시된다
+ writeFileSync(join(f.target,'.gitignore'),'.env\nshared\n');const quiet=(await f.service.preview(f.root,f.target)).links
+ expect(quiet).toEqual([{path:'shared',exists:true,state:'linked'}]);expect(linkLine(quiet[0]!)).not.toContain('무시하지 않아요')
+})
+test('a copy inside a linked folder is refused before anything is made',async()=>{
+ const f=linked({copies:['shared/value.txt'],links:['shared'],commands:[]});await expect(f.service.preview(f.root,f.target)).rejects.toThrow('겹쳐요')
+ f.configure({copies:['.env'],links:['shared'],commands:[]});expect((await f.service.preview(f.root,f.target)).links).toHaveLength(1)
 })

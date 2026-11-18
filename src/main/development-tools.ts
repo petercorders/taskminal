@@ -46,6 +46,8 @@ export class DevelopmentTools {
   const root=await realpath(source),target=await realpath(destination)
   const trees=await git(root,['worktree','list','--porcelain']);if(trees.code||!trees.out.split('\n').includes('worktree '+target)||root===target)throw Error('같은 저장소의 별도 worktree를 골라 주세요')
   const raw=await read(root,'.taskminal/environment.json');const c:unknown=JSON.parse(raw.toString('utf8'));if(!config(c))throw Error('환경 설정 형식을 확인해 주세요')
+  // 복사할 경로와 연결할 경로가 겹치면 하나가 다른 하나의 안에 쓰게 된다 — 미리보기에서 거절한다
+  const overlap=(c.links??[]).find(l=>c.copies.some(p=>p===l||p.startsWith(l+'/')||l.startsWith(p+'/')));if(overlap)throw Error('복사할 경로와 연결할 경로가 겹쳐요: '+overlap)
   const copies:EnvironmentPlan['copies']=[],signatures:string[]=[],contents=new Map<string,Buffer>()
   for(const relative of c.copies){
    const ignored=await git(root,['check-ignore','-q','--',relative]),tracked=await git(target,['ls-files','--error-unmatch','--',relative])
@@ -62,7 +64,9 @@ export class DevelopmentTools {
    const dest=await path(target,relative,true,false);let state:'linked'|'kept'|undefined
    // An existing destination is never touched; only a link that resolves to this source counts as linked.
    try{state=(await lstat(dest)).isSymbolicLink()&&await realpath(dest).catch(()=>'')===source?'linked':'kept'}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e}
-   links.push(state?{path:relative,exists:true,state}:{path:relative,exists:false})
+   // 대상 워크트리에서 Git 이 이 경로를 무시하지 않으면(.gitignore 의 `이름/` 은 폴더만 — 링크는 폴더가 아니다) 링크가 `git add -A` 에 섞인다 → 미리보기에 알린다
+   const unignored=state!=='kept'&&(await git(target,['check-ignore','-q','--',relative])).code!==0
+   links.push({path:relative,exists:!!state,...(state?{state}:{}),...(unignored?{unignored:true}:{})})
   }
   const signature=hash(JSON.stringify([root,target,raw.toString('utf8'),signatures,copies,links]))
   const plan:EnvironmentPlan={root,target,signature,copies,links,commands:c.commands.map(c=>({file:this.mask(c.file),args:c.args.map(a=>this.mask(a))}))}
