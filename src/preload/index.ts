@@ -194,7 +194,11 @@ const api: TaskminalApi = {
     probe: (paneIds) => ipcRenderer.invoke(IPC.portsProbe, paneIds) as Promise<ProbeResult>,
     kill: (paneId, port, pid) => ipcRenderer.invoke(IPC.portsKill, paneId, port, pid) as Promise<'killed' | 'gone' | 'failed'>,
   },
-  jira: { status: () => ipcRenderer.invoke(IPC.jiraStatus), save: input => ipcRenderer.invoke(IPC.jiraSave, input), clear: () => ipcRenderer.invoke(IPC.jiraClear), attach: input => ipcRenderer.invoke(IPC.jiraAttach, input) },
+  jira: {
+    status: () => ipcRenderer.invoke(IPC.jiraStatus), save: input => ipcRenderer.invoke(IPC.jiraSave, input), clear: () => ipcRenderer.invoke(IPC.jiraClear), attach: input => ipcRenderer.invoke(IPC.jiraAttach, input),
+    transitions: key => ipcRenderer.invoke(IPC.jiraTransitions, key), transition: input => ipcRenderer.invoke(IPC.jiraTransition, input), comment: input => ipcRenderer.invoke(IPC.jiraComment, input),
+    writeState: requestId => ipcRenderer.invoke(IPC.jiraWriteState, requestId), refresh: input => ipcRenderer.invoke(IPC.jiraRefresh, input),
+  },
 }
 
 contextBridge.exposeInMainWorld('taskminal', api)

@@ -1,10 +1,12 @@
 // 55단계 Jira 읽기 — 인증 저장(safeStorage 암호화 파일 · 못 쓰면 이번 실행 메모리 · 환경 변수)과 REST 읽기.
-// 토큰은 이 파일 밖(renderer · state.json · 오류 글 · 로그)으로 나가지 않는다. 쓰는 요청은 없다.
+// 토큰은 이 파일 밖(renderer · state.json · 오류 글 · 로그)으로 나가지 않는다.
+// 64단계: 쓰는 요청은 상태 전환 · 댓글 둘뿐이고, 요청 번호마다 한 번만 보낸다(아래 '쓰기 기록').
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeSync, chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { IssuePage, IssueRecord } from '../shared/issues'
-import { JIRA_ERROR, JIRA_FIELDS, JIRA_LIST_CAP, JIRA_PAGE_SIZE, JIRA_TIMEOUT_MS, jiraHttpError, jiraIssue, jiraSite, type JiraCheck, type JiraSaveInput, type JiraStatus } from '../shared/jira'
+import { JIRA_ERROR, JIRA_FIELDS, JIRA_LIST_CAP, JIRA_PAGE_SIZE, JIRA_TIMEOUT_MS, isJiraKey, jiraHttpError, jiraIssue, jiraSite, type JiraCheck, type JiraSaveInput, type JiraStatus } from '../shared/jira'
+import { JIRA_COMMENT_CHECK, JIRA_WRITE_LOG, isJiraRequestId, isJiraTransitionId, jiraAdf, jiraCommentPosted, jiraCommentText, jiraIssueError, jiraTransitions, type JiraTransition, type JiraWriteKind, type JiraWriteState } from '../shared/jira-write'
 import { redact } from '../shared/redact'
 
 /** Electron safeStorage 를 감싼 것 — 시험은 가짜를 넣는다 */
@@ -21,6 +23,28 @@ interface Options {
 const fail = (text: string) => new Error(`${JIRA_ERROR} ${text}`)
 const MAX_BODY = 4_000_000
 const LOST = '응답이 중간에 끊겼어요. 다시 시도해 주세요.'
+const NO_AUTH = 'Jira 사이트 · 이메일 · API 토큰을 먼저 저장해 주세요.'
+/** 전환 목표를 기억해 두는 이슈 수 */
+const TARGET_CAP = 100
+
+/** 쓰기 하나를 어떻게 보내고, 다시 보내기 전에 이미 됐는지를 어떻게 확인하는가 */
+interface WritePlan {
+  path: string
+  body: unknown
+  /** 성공 상태 코드 — 전환 204 · 댓글 201 */
+  ok: number
+  landed(c: Credentials, signal: AbortSignal): Promise<boolean>
+}
+/** 쓰기 기록 한 줄 — 요청 번호마다 하나. 인증 값은 담지 않는다(세대 번호만) */
+interface WriteRecord {
+  state: JiraWriteState
+  /** 종류 · 키 · 전환 id(또는 글) — 같은 번호에 다른 내용이 오면 거절한다 */
+  content: string
+  gen: number
+  plan: WritePlan
+  /** 보내는 중(또는 다시 확인하는 중)이면 그 요청 */
+  run: Promise<JiraWriteState> | null
+}
 
 function email(v: unknown): string {
   if (typeof v !== 'string' || !/^[^\s@]{1,200}@[^\s@]{1,200}$/.test(v.trim())) throw fail('이메일을 확인해 주세요')
@@ -40,6 +64,10 @@ export class Jira {
   /** 인증이 바뀔 때마다 올린다 — 옛 인증으로 시작한 읽기에 새 읽기가 합쳐지지 않게 */
   private gen = 0
   private readonly inflight = new Map<string, Promise<IssuePage>>()
+  /** 64단계 쓰기 기록 — 이번 실행 동안 · 최근 JIRA_WRITE_LOG 개. 상태 전환 · 댓글 둘만 쓴다. 인증이 바뀌어도 비우지 않는다 */
+  private readonly writes = new Map<string, WriteRecord>()
+  /** 마지막으로 읽은 전환 목록의 목표 상태(`세대\n이슈 키` → 전환 id → 상태) — 다시 시도 전 확인에 쓴다 */
+  private readonly targets = new Map<string, Map<string, JiraTransition['to']>>()
   private readonly file: string
   private readonly timeout: number
   constructor(private readonly o: Options) {
@@ -86,7 +114,7 @@ export class Jira {
     try { renameSync(tmp, this.file); chmodSync(this.file, 0o600) }
     catch (e) { try { unlinkSync(tmp) } catch { /* 이미 없음 */ } throw e }
   }
-  private changed() { this.gen++; this.inflight.clear() }
+  private changed() { this.gen++; this.inflight.clear(); this.targets.clear() }
   async save(input: JiraSaveInput): Promise<{ status: JiraStatus; check: JiraCheck }> {
     const c: Credentials = { site: jiraSite(input?.site, !!this.o.allowLoopback), email: email(input?.email), token: token(input?.token) }
     if (this.o.cipher.available()) {
@@ -156,7 +184,124 @@ export class Jira {
     if (!now) throw fail('Jira 사이트 · 이메일 · API 토큰을 먼저 저장해 주세요.')
     return jiraIssue(await this.request(now.c, 'GET', `/rest/api/3/issue/${id}?fields=${JIRA_FIELDS.join(',')}`, undefined, AbortSignal.timeout(this.timeout)), now.c.site)
   }
-  private async request(c: Credentials, method: 'GET' | 'POST', path: string, body: unknown, signal: AbortSignal): Promise<any> {
+  /** 64단계: 이 이슈에서 지금 할 수 있는 상태 전환 — 주기로 읽지 않는다(메뉴를 열 때) */
+  async transitions(key: string): Promise<JiraTransition[]> {
+    if (!isJiraKey(key)) throw fail('Jira 이슈 키를 확인해 주세요')
+    const now = this.credentials()
+    if (!now) throw fail(NO_AUTH)
+    const gen = this.gen
+    const list = jiraTransitions(await this.request(now.c, 'GET', `/rest/api/3/issue/${key}/transitions`, undefined, AbortSignal.timeout(this.timeout), 'issue'))
+    // 읽는 사이 인증이 바뀌었으면 옛 계정의 목록이다 — 목표로 기억하지 않는다
+    if (gen === this.gen) {
+      const at = `${gen}\n${key}`
+      this.targets.delete(at)
+      if (this.targets.size >= TARGET_CAP) this.targets.delete(this.targets.keys().next().value!)
+      this.targets.set(at, new Map(list.map((t) => [t.id, t.to])))
+    }
+    return list
+  }
+  /** 상태 전환 — POST …/transitions (성공 204). 방금 읽은 전환 목록에 있던 것만 보낸다 */
+  transition(key: string, transitionId: string, requestId: string): Promise<JiraWriteState> {
+    if (!isJiraKey(key) || !isJiraTransitionId(transitionId) || !isJiraRequestId(requestId)) return Promise.reject(fail('Jira 이슈 키 · 전환 · 요청 번호를 확인해 주세요'))
+    return this.once('transition', key, requestId, JSON.stringify(['transition', key, transitionId]), () => {
+      const to = this.targets.get(`${this.gen}\n${key}`)?.get(transitionId)
+      if (!to) throw fail('전환 목록을 다시 읽은 뒤 골라 주세요.')
+      return {
+        path: `/rest/api/3/issue/${key}/transitions`, body: { transition: { id: transitionId } }, ok: 204,
+        // 다시 보내기 전 확인: 이슈 상태가 이미 이 전환의 목표인가
+        landed: async (c, signal) => {
+          const data = await this.request(c, 'GET', `/rest/api/3/issue/${key}?fields=status`, undefined, signal, 'issue')
+          const status = data?.fields?.status?.id
+          if (typeof status !== 'string') throw fail('Jira 이슈 상태를 확인하지 못했어요.')
+          return status === to.id
+        },
+      }
+    })
+  }
+  /** 댓글 — POST …/comment 에 ADF 로 (성공 201) */
+  comment(key: string, text: string, requestId: string): Promise<JiraWriteState> {
+    if (!isJiraKey(key) || !isJiraRequestId(requestId)) return Promise.reject(fail('Jira 이슈 키 · 요청 번호를 확인해 주세요'))
+    let clean: string
+    try { clean = jiraCommentText(text) } catch (reason) { return Promise.reject(reason) }
+    const startedAt = Date.now()
+    return this.once('comment', key, requestId, JSON.stringify(['comment', key, clean]), () => ({
+      path: `/rest/api/3/issue/${key}/comment`, body: { body: jiraAdf(clean) }, ok: 201,
+      // 다시 보내기 전 확인: 최근 댓글에 내 계정이 요청 시작 뒤에 쓴 같은 글이 있는가
+      landed: async (c, signal) => {
+        const me = await this.request(c, 'GET', '/rest/api/3/myself', undefined, signal)
+        if (typeof me?.accountId !== 'string' || !me.accountId) throw fail('Jira 계정을 확인하지 못했어요.')
+        return jiraCommentPosted(await this.request(c, 'GET', `/rest/api/3/issue/${key}/comment?orderBy=-created&maxResults=${JIRA_COMMENT_CHECK}`, undefined, signal, 'issue'), me.accountId, clean, startedAt)
+      },
+    }))
+  }
+  /** 보낸 쓰기의 지금 상태 — 이번 실행의 기록에 없으면 null */
+  writeState(requestId: string): JiraWriteState | null {
+    if (!isJiraRequestId(requestId)) throw fail('Jira 요청 번호를 확인해 주세요')
+    const record = this.writes.get(requestId)
+    return record ? { ...record.state } : null
+  }
+  /**
+   * 요청 번호로 한 번만 — Jira REST 에는 멱등 키가 없어 이 기록이 지킨다.
+   * 진행 중이면 그 요청에 합치고, 끝났으면(됨 · 안 됨) 저장한 결과를 돌려주고, 됐는지 모르면 먼저 확인한 뒤 안 됐을 때만 다시 보낸다.
+   */
+  private once(kind: JiraWriteKind, key: string, requestId: string, content: string, plan: () => WritePlan): Promise<JiraWriteState> {
+    try {
+      const prior = this.writes.get(requestId)
+      if (prior) {
+        if (prior.content !== content) throw fail('다른 요청에 쓴 번호예요. 새로 골라 다시 보내 주세요.')
+        if (prior.state.status === 'done' || prior.state.status === 'failed') return Promise.resolve({ ...prior.state })
+        // 옛 인증으로 보낸 요청은 그 인증으로 끝까지 가고(진행 중), 새 인증의 호출과 합치거나 새 인증으로 다시 확인하지 않는다
+        if (prior.gen !== this.gen) throw fail('Jira 인증이 바뀌어 이 요청은 이어서 확인할 수 없어요. Jira 에서 직접 확인해 주세요.')
+        if (prior.run) return prior.run
+      }
+      const now = this.credentials()
+      if (!now) throw fail(NO_AUTH)
+      // 됐는지 모름 — 같은 번호로 다시 누름: 먼저 이미 됐는지 확인한다
+      if (prior) return this.start(prior, now.c, true)
+      const record: WriteRecord = { state: { requestId, kind, key, status: 'pending', message: '' }, content, gen: this.gen, plan: plan(), run: null }
+      this.room()
+      this.writes.set(requestId, record)
+      return this.start(record, now.c, false)
+    } catch (reason) { return Promise.reject(reason) }
+  }
+  /** 기록 상한 — 오래된 끝난 것(됨 · 안 됨)부터, 없으면 오래된 '모름' 을 지운다. 진행 중은 지우지 않는다 */
+  private room() {
+    if (this.writes.size < JIRA_WRITE_LOG) return
+    for (const settled of [true, false]) {
+      for (const [id, record] of this.writes) {
+        const status = record.state.status
+        if (settled ? status === 'done' || status === 'failed' : status === 'unknown') { this.writes.delete(id); return }
+      }
+    }
+    throw fail('보내는 중인 Jira 요청이 너무 많아요. 끝난 뒤 다시 시도해 주세요.')
+  }
+  private start(record: WriteRecord, c: Credentials, verify: boolean): Promise<JiraWriteState> {
+    record.state = { ...record.state, status: 'pending', message: '' }
+    const run = this.send(record, c, verify).then((result) => {
+      record.state = { ...record.state, ...result }
+      record.run = null
+      return { ...record.state }
+    })
+    record.run = run
+    return run
+  }
+  /** 한 번 보낸다. 응답을 못 받았거나(끊김 · 한도) 5xx 면 '됐는지 모름' — 여기서 다시 보내지 않는다. 4xx 만 '안 됨' 으로 확정한다 */
+  private async send(record: WriteRecord, c: Credentials, verify: boolean): Promise<Pick<JiraWriteState, 'status' | 'message'>> {
+    const text = (reason: unknown) => (reason instanceof Error ? reason.message.replace(JIRA_ERROR, '').trim() : '') || '결과를 확인하지 못했어요.'
+    if (verify) {
+      try { if (await record.plan.landed(c, AbortSignal.timeout(this.timeout))) return { status: 'done', message: '' } }
+      catch (reason) { return { status: 'unknown', message: text(reason) } }
+    }
+    try {
+      const status = await this.request(c, 'POST', record.plan.path, record.plan.body, AbortSignal.timeout(this.timeout), record.state.kind)
+      return status === record.plan.ok ? { status: 'done', message: '' } : { status: 'unknown', message: `Jira 가 예상과 다른 답을 보냈어요(${status}).` }
+    } catch (reason) {
+      const status = (reason as { status?: unknown } | null)?.status
+      return { status: typeof status === 'number' && status >= 400 && status < 500 ? 'failed' : 'unknown', message: text(reason) }
+    }
+  }
+  /** about: 이슈 하나에 보내는 요청이면 그 종류 — 거절 글이 달라지고, 쓰기('transition' · 'comment')는 본문을 읽지 않고 상태 코드를 돌려준다 */
+  private async request(c: Credentials, method: 'GET' | 'POST', path: string, body: unknown, signal: AbortSignal, about?: 'issue' | JiraWriteKind): Promise<any> {
     let response: Response
     try {
       response = await fetch(c.site + path, {
@@ -170,7 +315,13 @@ export class Jira {
     } catch (reason) { throw this.network(reason, signal, false) }
     if (!response.ok) {
       await response.body?.cancel().catch(() => {})
-      throw fail(jiraHttpError(response.status, response.headers.get('retry-after')))
+      const retry = response.headers.get('retry-after')
+      throw Object.assign(fail(about ? jiraIssueError(about, response.status, retry) : jiraHttpError(response.status, retry)), { status: response.status })
+    }
+    // 쓰기는 상태 코드로 정한다 — 본문(204 는 없음)을 받다 끊겨도 이미 된 일이다
+    if (about === 'transition' || about === 'comment') {
+      await response.body?.cancel().catch(() => {})
+      return response.status
     }
     const reader = response.body?.getReader()
     if (!reader) throw fail(LOST)

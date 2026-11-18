@@ -56,6 +56,23 @@ describe('Jira 공급자를 이슈 연결에 잇기', () => {
     await expect(s.attach({ ...attach, id: '10008', requestId: 'att-3', taskId: 'other' })).rejects.toThrow(ISSUE_TASK_DELETED)
     expect(s.links().map((l) => l.taskId)).toEqual(['existing'])
   })
+  it('상태 다시 읽기(64단계) — 연결한 이슈를 다시 읽어 남기고, 연결이 다른 이슈로 바뀌었으면 읽지 않는다', async () => {
+    const f = fixture()
+    const s = f.service()
+    await s.attach({ requestId: 'att-1', provider: 'jira', id: '10007', source: '', taskId: 'existing' })
+    f.jira.issue.mockImplementationOnce(async (id: string) => record(id, { state: 'closed (Done)' }))
+    expect((await s.refresh('existing', 'PROJ-7')).issue.state).toBe('closed (Done)')
+    expect(f.service().links()[0]!.issue.state).toBe('closed (Done)')
+    expect(f.jira.issue).toHaveBeenCalledTimes(2)
+    // 떠 둔 키가 지금 연결과 다르다 — 새 이슈를 읽거나 고치지 않는다
+    await expect(s.refresh('existing', 'PROJ-8')).rejects.toThrow(/\[jira\].*바뀌었어요/)
+    await expect(s.refresh('nobody', 'PROJ-7')).rejects.toThrow(/\[jira\]/)
+    // 읽는 사이 일감이 사라지면 남기지 않는다
+    f.jira.issue.mockImplementationOnce(async (id: string) => { f.tasks.delete('existing'); return record(id, { state: 'In Progress' }) })
+    await expect(s.refresh('existing', 'PROJ-7')).rejects.toThrow(/\[jira\]/)
+    expect(f.jira.issue).toHaveBeenCalledTimes(3)
+    expect(s.links()[0]!.issue.state).toBe('closed (Done)')
+  })
   it('Jira 는 읽기만 — 외부 닫기를 거절하고 요청을 보내지 않는다', async () => {
     const f = fixture()
     const s = f.service()

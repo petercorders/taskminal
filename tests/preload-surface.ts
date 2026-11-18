@@ -9,7 +9,7 @@ export const PRELOAD_SURFACE = {
   development: ['preview','prepare','preparations','cancel','inspect','install','extensions','enable','uninstall'],
   issues: ['list','configure','links','prepare','linkPr','close','repo'],
   worktrees: ['list','targets','create','open','remove'],
-  jira: ['status','save','clear','attach'],
+  jira: ['status','save','clear','attach','transitions','transition','comment','writeState','refresh'],
 }
 
 /** 키 목록까지 보는 묶음 이름 (apiKeys 를 뺀 것) */

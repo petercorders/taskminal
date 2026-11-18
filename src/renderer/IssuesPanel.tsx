@@ -4,6 +4,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { JiraList } from '../shared/jira-list'
 import { JIRA_DEFAULT_JQL, jiraDue, jiraMessage, type JiraStatus } from '../shared/jira'
 import { trackIssueLinks } from './issue-links'
+import { trackJiraStatus } from './jira-token'
 import './IssuesPanel.css'
 import './jira.css'
 
@@ -172,7 +173,9 @@ export function IssuesPanel(p: Props) {
   useEffect(() => {
     if (draft.provider !== 'jira') return
     let live = true
-    window.taskminal.jira.status().then((status) => {
+    const read = window.taskminal.jira.status()
+    trackJiraStatus(read)
+    read.then((status) => {
       if (!live) return
       setJiraAuth(status)
       setJiraOpen((open) => open ?? !status.token)
@@ -190,7 +193,10 @@ export function IssuesPanel(p: Props) {
     jiraList.reset()
     update(key, { selected: undefined })
     try {
-      const { status, check } = await window.taskminal.jira.save(input)
+      const saving = window.taskminal.jira.save(input)
+      // 64단계: 일감 머리의 쓰기 단추가 새 토큰 여부를 따라가게
+      trackJiraStatus(saving.then((saved) => saved.status))
+      const { status, check } = await saving
       if (active.current !== key) return
       setJiraAuth(status)
       setJiraNote(check.ok ? { ok: true, text: check.message } : { ok: false, text: `토큰은 저장했어요. 연결 확인은 실패했어요: ${check.message}` })
@@ -203,7 +209,9 @@ export function IssuesPanel(p: Props) {
     jiraList.reset()
     update(key, { selected: undefined })
     try {
-      const status = await window.taskminal.jira.clear()
+      const clearing = window.taskminal.jira.clear()
+      trackJiraStatus(clearing)
+      const status = await clearing
       if (active.current !== key) return
       setJiraAuth(status)
       setJiraNote({ ok: true, text: status.token ? '저장한 토큰을 지웠어요. 환경 변수 인증은 계속 쓰여요.' : '저장한 토큰을 지웠어요.' })
@@ -281,7 +289,7 @@ export function IssuesPanel(p: Props) {
     {draft.provider === 'jira' && <details open={jiraOpen ?? false} onToggle={(event) => setJiraOpen(event.currentTarget.open)} data-testid="jira-auth"><summary>Jira 인증</summary>
       <p className="dim small">{jiraAuth ? (jiraAuth.token ? `토큰 저장됨 · ${JIRA_STORAGE[jiraAuth.storage]}${jiraAuth.site ? ` · ${jiraAuth.site}` : ''}` : '저장한 토큰이 없어요. JIRA_SITE · JIRA_EMAIL · JIRA_API_TOKEN 환경 변수도 쓸 수 있어요.') : 'Jira 인증 상태를 읽는 중…'}</p>
       {jiraAuth?.notice && <p className="dim small">{jiraAuth.notice}</p>}
-      <p className="dim small">토큰은 화면 · 일감 기록에 넣지 않고, 이 컴퓨터가 지원하면 암호화해 저장해요. Jira 에는 읽기 요청만 보내요.</p>
+      <p className="dim small">토큰은 화면 · 일감 기록에 넣지 않고, 이 컴퓨터가 지원하면 암호화해 저장해요. 이 패널은 Jira 를 읽기만 하고, 쓰는 것은 일감 머리의 '상태 바꾸기' · '댓글' 을 확인한 뒤뿐이에요.</p>
       <label className="field"><span>Jira 사이트</span><input type="url" value={jiraForm.site} maxLength={512} disabled={jiraSaving} placeholder="https://회사.atlassian.net" onChange={(event) => setJiraForm({ ...jiraForm, site: event.target.value })} /></label>
       <label className="field"><span>Jira 이메일</span><input type="email" value={jiraForm.email} maxLength={320} disabled={jiraSaving} onChange={(event) => setJiraForm({ ...jiraForm, email: event.target.value })} /></label>
       <label className="field"><span>Jira API 토큰</span><input type="password" autoComplete="off" value={jiraToken} maxLength={4096} disabled={jiraSaving} onChange={(event) => setJiraToken(event.target.value)} /></label>
