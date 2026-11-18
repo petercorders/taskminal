@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { commandLine, type EnvironmentPlan, type ExtensionPreview, type InstalledExtension, type Preparation } from '../shared/development-tools'
+import { commandLine, linkLine, type EnvironmentPlan, type ExtensionPreview, type InstalledExtension, type Preparation } from '../shared/development-tools'
 import { prepareTarget } from '../shared/worktree-management'
 import './DevelopmentPanel.css'
 
 const states:Record<Preparation['state'],string>={running:'실행 중',done:'완료',failed:'실패',unknown:'결과 확인 필요',stopped:'중단'}
 // 56단계: 형식 설명은 접어 두고 예시로 — 펼친 raw 스키마 문단이 첫 화면을 차지했다
-const FORMAT_EXAMPLE=JSON.stringify({copies:['.env'],commands:[{file:'npm',args:['ci']}]},null,2)
+// 62단계: links 예시 — 연결한 node_modules 를 지우는 설치 명령(npm ci)과 한 예시에 두지 않는다
+const FORMAT_EXAMPLE=JSON.stringify({copies:['.env'],links:['node_modules'],commands:[{file:'npm',args:['run','build']}]},null,2)
 // 고르기 칸의 '직접 입력…' 값 — 경로는 늘 / 로 시작해 겹치지 않는다
 const TYPE='#type'
 /** 고르기 칸은 앞부분만 보이므로 워크트리를 가르는 폴더 이름을 앞에 */
 const pathLabel=(path:string)=>`${path.split('/').filter(Boolean).pop()??path} — ${path}`
-/** initialTarget: 워크트리 관리의 '환경 준비…' 에서 고른 경로 · onOpenWorktrees: 고를 워크트리가 없을 때 만들러 가기 */
-export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:string;initialTarget?:string;onOpenWorktrees?():void}) {
+/** initialTarget: 워크트리 관리의 '환경 준비…' 에서 고른 경로 · onOpenWorktrees: 고를 워크트리가 없을 때 만들러 가기
+ *  initialPreview(62단계): 워크트리를 만든 직후에 열 때 — 그 경로의 미리보기까지 읽어 보인다(읽기만, 실행은 확인을 눌러야) */
+export function DevelopmentPanel({root,initialTarget,initialPreview,onOpenWorktrees}:{root:string;initialTarget?:string;initialPreview?:boolean;onOpenWorktrees?():void}) {
  const [target,setTarget]=useState(''),[manifestPath,setManifestPath]=useState('')
  const [plan,setPlan]=useState<EnvironmentPlan|null>(null),[extension,setExtension]=useState<ExtensionPreview|null>(null)
  const [records,setRecords]=useState<Preparation[]>([]),[extensions,setExtensions]=useState<InstalledExtension[]>([])
@@ -27,6 +29,7 @@ export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:stri
  const api=window.taskminal.development
  useEffect(()=>{
   mounted.current=true;lock.current=false;setBusy(false);setTarget(initialTarget??'');setCheckouts(null);setCheckoutError(false);setTyping(false);void readCheckouts(root,true);setManifestPath('');setPlan(null);setExtension(null);setPending(null);setRecords([]);setExtensions([]);setError('')
+  if(initialPreview&&initialTarget)void action(async(snapshot)=>{const next=await api.preview(snapshot,initialTarget);if(alive(snapshot))setPlan(next)})
   let stopped=false,timer:ReturnType<typeof setTimeout>|undefined
   const load=async()=>{
    if(stopped)return
@@ -68,10 +71,10 @@ export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:stri
  }
  return <section className="development-panel" aria-label="환경 준비·확장" data-testid="development-panel">
   <h3>환경 준비</h3>
-  <p className="dim small">저장소의 <code>.taskminal/environment.json</code> 에 복사할 파일과 실행할 명령을 적어 두면, 고른 워크트리에 파일을 복사하고 명령을 실행해요. 파일 내용은 미리보기에 보이지 않아요.</p>
+  <p className="dim small">저장소의 <code>.taskminal/environment.json</code> 에 복사할 파일 · 원본에 연결할 폴더 · 실행할 명령을 적어 두면, 고른 워크트리에 파일을 복사하고 폴더를 연결한 뒤 명령을 실행해요. 파일 내용은 미리보기에 보이지 않아요.</p>
   <details className="development-format"><summary>파일 형식 보기</summary>
    <pre>{FORMAT_EXAMPLE}</pre>
-   <p className="dim small"><code>copies</code>: Git 이 무시하고 추적하지 않는 파일만 · <code>commands</code>: 셸 없이 실행할 프로그램(<code>file</code>)과 인자(<code>args</code>). 의존성은 워크트리마다 따로 설치해요.</p>
+   <p className="dim small"><code>copies</code>: Git 이 무시하고 추적하지 않는 파일만 · <code>links</code>(선택, 10개까지): Git 이 무시하고 추적하지 않는 폴더 · 파일을 복사하지 않고 원본에 연결 — 워크트리에서 고치면 원본도 바뀌어요 · <code>commands</code>: 셸 없이 실행할 프로그램(<code>file</code>)과 인자(<code>args</code>). 의존성은 워크트리마다 따로 설치하거나 <code>links</code> 로 원본 것을 함께 써요.</p>
   </details>
   {checkouts===null?<p className="dim small" role="status">워크트리 목록을 읽는 중…</p>:<>
    {checkouts.length>0&&<label>준비할 워크트리<select aria-label="준비할 워크트리" value={typing?TYPE:target} disabled={busy} onChange={e=>{const v=e.target.value;setPlan(null);if(v===TYPE)setTyping(true);else{setTyping(false);setTarget(v)}}}>
@@ -87,7 +90,8 @@ export function DevelopmentPanel({root,initialTarget,onOpenWorktrees}:{root:stri
   {plan&&<div className="development-preview" data-testid="environment-preview">
    <strong>{plan.target}</strong>
    <ul>{plan.copies.map(copy=><li key={copy.path}>{copy.path} · {copy.size} bytes · {copy.exists?'기존 파일 보존':'독립 복사'}</li>)}</ul>
-   <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. 의존성은 대상 워크트리에서 따로 설치하며 node_modules를 공유하지 않습니다.</p>
+   {plan.links.length>0&&<ul aria-label="원본에 연결">{plan.links.map(link=><li key={link.path}>{linkLine(link)}</li>)}</ul>}
+   <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. {plan.links.length?'연결한 경로는 복사본이 아니라 원본과 함께 쓰여, 워크트리에서 고치거나 지우면 원본도 바뀝니다.':'의존성은 대상 워크트리에서 따로 설치하며 node_modules를 공유하지 않습니다.'}</p>
    {plan.commands.length?plan.commands.map((command,index)=><pre key={index}>{commandLine(command)}</pre>):<p>실행할 초기화 명령 없음</p>}
    <div className="work-tools-row"><button className="button primary" disabled={busy} onClick={()=>prepare({plan,id:crypto.randomUUID()})}>확인하고 환경 준비</button><button className="button" disabled={busy} onClick={()=>setPlan(null)}>미리보기 취소</button></div>
   </div>}
