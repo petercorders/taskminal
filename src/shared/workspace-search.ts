@@ -82,12 +82,12 @@ export function parseGrepLine(line: string): GrepHit | null {
   return { path: line.slice(0, a), line: n, text: line.slice(b + 1, b + 1 + GREP_LINE_CHARS) }
 }
 
-/** `git ls-files -z` 출력 → 경로들(상한까지). keep 이 거른 것(민감 파일)은 뺀다 */
+/** `git ls-files -z` 출력 → 경로들(상한까지). keep 이 거른 것(민감 파일)은 뺀다. 충돌 중인 파일은 단계마다 한 번씩 나오므로 한 번만 */
 export function parseFileList(out: string, keep: (path: string) => boolean, max = FILES_MAX): string[] {
-  const files: string[] = []
+  const files = new Set<string>()
   for (const p of out.split('\0')) {
-    if (files.length >= max) break
-    if (p && keep(p)) files.push(p)
+    if (files.size >= max) break
+    if (p && keep(p)) files.add(p)
   }
-  return files
+  return [...files]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { JiraHead, jiraCommentIntent, jiraConfirm, jiraListError, jiraListing, jiraMenu, jiraResult, jiraSending, jiraTransitionIntent, jiraTransitionLabel, type JiraHeadApi } from '../../src/shared/jira-head'
+import { JiraHead, jiraCommentIntent, jiraConfirm, jiraListError, jiraListing, jiraLocked, jiraMenu, jiraResult, jiraSending, jiraTransitionIntent, jiraTransitionLabel, type JiraHeadApi } from '../../src/shared/jira-head'
 import type { JiraTransition, JiraWriteState, JiraWriteStatus } from '../../src/shared/jira-write'
 
 // 일감 머리의 Jira 쓰기 판단 — main · Jira 없이, 답을 손으로 늦춰(gate) 순서를 뒤집어 본다.
@@ -111,7 +111,7 @@ describe('Jira 일감 머리 — 확인 뒤 보내기', () => {
     calls.transition[0]!.resolve(state('req-1', 'unknown', '응답이 중간에 끊겼어요.'))
     await tick(); await tick()
     expect(calls.transition).toHaveLength(1)
-    expect(jiraResult(head.view, 'PROJ-7')).toEqual({ text: '됐는지 모름 — 응답이 중간에 끊겼어요.', tone: 'alert', actions: [{ kind: 'write', label: '다시 확인' }] })
+    expect(jiraResult(head.view, 'PROJ-7')).toEqual({ text: '됐는지 모름 — 응답이 중간에 끊겼어요.', tone: 'alert', actions: [{ kind: 'write', label: '다시 확인' }, { kind: 'dismiss', label: '결과 지우기' }] })
     expect(jiraSending(head.view, 'PROJ-7')).toBe(false)
     void head.retry()
     expect(calls.transition[1]!.args).toEqual(calls.transition[0]!.args)
@@ -132,7 +132,7 @@ describe('Jira 일감 머리 — 확인 뒤 보내기', () => {
     void head.send(move('req-2'))
     calls.transition[1]!.reject(new Error('reply was never sent'))
     await tick()
-    expect(jiraResult(head.view, 'PROJ-7')).toMatchObject({ text: expect.stringContaining('됐는지 모름'), actions: [{ kind: 'write' }] })
+    expect(jiraResult(head.view, 'PROJ-7')).toMatchObject({ text: expect.stringContaining('됐는지 모름'), actions: [{ kind: 'write' }, { kind: 'dismiss' }] })
     void head.retry()
     calls.transition[2]!.reject(new Error('Error: [jira] Jira 인증이 바뀌어 이 요청은 이어서 확인할 수 없어요.'))
     await tick()
@@ -266,6 +266,33 @@ describe('Jira 일감 머리 — 전환 뒤 상태 다시 읽기 · 돌아옴', 
     await tick()
     void head.openMenu('PROJ-7')
     head.compose(true)
-    expect(jiraResult(head.view, 'PROJ-7')).toEqual({ text: '됐는지 모름', tone: 'alert', actions: [{ kind: 'write', label: '다시 확인' }] })
+    expect(jiraResult(head.view, 'PROJ-7')).toEqual({ text: '됐는지 모름', tone: 'alert', actions: [{ kind: 'write', label: '다시 확인' }, { kind: 'dismiss', label: '결과 지우기' }] })
+    // 됐는지 모르는 동안은 메뉴도 읽지 않는다(새 전환을 고를 수 없다)
+    expect(calls.transitions).toHaveLength(1)
+  })
+  it('됐는지 모르는 쓰기가 남으면 그 이슈의 새 쓰기를 막는다 — 다시 확인으로 정해지거나 결과 지우기 뒤에만 새 번호로 보낸다', async () => {
+    const { calls, head } = gated()
+    head.compose(true)
+    head.setDraft('확인했어요')
+    void head.send(jiraCommentIntent('req-1', 'PROJ-7', '확인했어요'))
+    calls.comment[0]!.resolve(state('req-1', 'unknown', '', 'comment'))
+    await tick()
+    expect(jiraLocked(head.view, 'PROJ-7')).toBe(true)
+    expect(jiraLocked(head.view, 'PROJ-8')).toBe(false)
+    // 같은 글을 새 번호로 다시 남기려 해도 · 전환을 보내려 해도 보내지 않는다(Jira 에 두 번 갈 수 있다)
+    void head.send(jiraCommentIntent('req-2', 'PROJ-7', '확인했어요'))
+    void head.send(move('req-3'))
+    expect(calls.comment).toHaveLength(1)
+    expect(calls.transition).toHaveLength(0)
+    expect(head.view.write?.intent.requestId).toBe('req-1')
+    // 결과 지우기 — 사용자가 넘긴 뒤에는 새 번호로 보낸다
+    head.dismiss()
+    expect(jiraResult(head.view, 'PROJ-7')).toBeNull()
+    expect(jiraLocked(head.view, 'PROJ-7')).toBe(false)
+    void head.send(move('req-3'))
+    expect(calls.transition).toHaveLength(1)
+    // 됨 · 안 됨 · 보내는 중에는 결과 지우기가 아무것도 하지 않는다
+    head.dismiss()
+    expect(head.view.write?.status).toBe('pending')
   })
 })

@@ -83,6 +83,18 @@ if __taskminal_agent_wrappable claude "${TASKMINAL_CLAUDE_SETTINGS-}${TASKMINAL_
     return $ret
   }
 fi
+# 이 셸의 codex 설정(CODEX_HOME 은 사용자 rc 가 정했을 수 있다 — 앱이 본 것과 다를 수 있다)에 맨 위 developer_instructions 가 있는가.
+# 있으면 안내를 붙이지 않는다(-c 가 사용자 값을 덮는다). 첫 [표] 앞까지만 본다 — shared/agent-guide.ts 의 codexHasDeveloperInstructions 와 같은 규칙
+function __taskminal_codex_has_instructions {
+  local f=${CODEX_HOME:-$HOME/.codex}/config.toml line
+  [[ -r $f ]] || return 1
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line#"${line%%[![:space:]]*}"}
+    [[ $line == '['* ]] && return 1
+    [[ $line =~ '^developer_instructions[[:space:]]*=' ]] && return 0
+  done < $f
+  return 1
+}
 if __taskminal_agent_wrappable codex "${TASKMINAL_CODEX_NOTIFY-}${TASKMINAL_CODEX_GUIDE-}"; then
   function codex {
     local ret
@@ -92,7 +104,7 @@ if __taskminal_agent_wrappable codex "${TASKMINAL_CODEX_NOTIFY-}${TASKMINAL_CODE
         command codex "$@"; return ;;
     esac
     if [[ -n ${TASKMINAL_CODEX_NOTIFY-} ]]; then extra+=(-c "$TASKMINAL_CODEX_NOTIFY"); fi
-    if [[ -n ${TASKMINAL_CODEX_GUIDE-} ]]; then extra+=(-c "$TASKMINAL_CODEX_GUIDE"); fi
+    if [[ -n ${TASKMINAL_CODEX_GUIDE-} ]] && ! __taskminal_codex_has_instructions; then extra+=(-c "$TASKMINAL_CODEX_GUIDE"); fi
     command codex "${extra[@]}" "$@"
     ret=$?
     if [[ -n ${TASKMINAL_CODEX_NOTIFY-} ]]; then __taskminal_agent_exit codex; fi

@@ -193,7 +193,8 @@ describe('Jira 쓰기 — 요청 번호로 한 번만', () => {
     expect(j.writeState('req-1')).toMatchObject({ status: 'pending' })
     w.release()
     expect(await Promise.all([a, b, c, d])).toMatchObject([{ status: 'done' }, { status: 'done' }, { status: 'done' }, { status: 'done' }])
-    expect(posts().map((r) => r.path)).toEqual(['/rest/api/3/issue/PROJ-7/transitions', '/rest/api/3/issue/PROJ-7/comment'])
+    // 전환은 보내기 전에 상태를 한 번 읽으므로 두 POST 의 도착 순서는 정해져 있지 않다
+    expect(posts().map((r) => r.path).sort()).toEqual(['/rest/api/3/issue/PROJ-7/comment', '/rest/api/3/issue/PROJ-7/transitions'])
   })
   it('끝난 번호를 다시 부르면 저장된 결과만 돌려주고 서버에 가지 않는다 · 내용이 다르면 거절', async () => {
     const { f, j } = await world()
@@ -282,11 +283,12 @@ describe('Jira 쓰기 — 됐는지 모를 때 같은 번호로 다시', () => {
     expect(w.comments).toHaveLength(4)
   })
   it('확인 요청이 실패하면 unknown 그대로 — 보내지 않는다. 확인이 되면 그때 정한다', async () => {
-    let broken: Read = 'drop'
+    let broken: Read = 'ok'
     const { j, posts } = await world({ post: (n) => (n <= 2 ? 'landed-drop' : 'ok'), read: (path) => (path.includes('fields=status') || path.includes('/comment?') ? broken : 'ok') })
     await j.transitions('PROJ-7')
     expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'unknown' })
     expect(await j.comment('PROJ-7', '글', 'req-2')).toMatchObject({ status: 'unknown' })
+    broken = 'drop'
     expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'unknown', message: expect.stringMatching(/끊겼어요/) })
     broken = 404
     expect(await j.comment('PROJ-7', '글', 'req-2')).toMatchObject({ status: 'unknown', message: expect.stringContaining('404') })
@@ -295,6 +297,20 @@ describe('Jira 쓰기 — 됐는지 모를 때 같은 번호로 다시', () => {
     expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'done' })
     expect(await j.comment('PROJ-7', '글', 'req-2')).toMatchObject({ status: 'done' })
     expect(posts()).toHaveLength(2)
+  })
+  it('전환: 보내기 직전 상태가 이미 목표(같은 상태로 도는 전환)면 다시 확인은 됨으로 단정하지 않고 모름 · 다시 보내지 않는다', async () => {
+    const { j, w, posts } = await world({ post: (n) => (n === 1 ? 'landed-drop' : 'ok') })
+    w.status = '30'
+    await j.transitions('PROJ-7')
+    expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'unknown' })
+    expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'unknown', message: expect.stringMatching(/상태가 그대로인 전환/) })
+    expect(posts()).toHaveLength(1)
+  })
+  it('전환: 보내기 직전 상태를 못 읽으면 보내지 않고 안 됨', async () => {
+    const { j, posts } = await world({ read: (path) => (path.includes('fields=status') ? 'drop' : 'ok') })
+    await j.transitions('PROJ-7')
+    expect(await j.transition('PROJ-7', '31', 'req-1')).toMatchObject({ status: 'failed', message: expect.stringMatching(/끊겼어요/) })
+    expect(posts()).toHaveLength(0)
   })
   it('다시 시도가 도는 중에 같은 번호가 또 오면 그 확인에 합친다', async () => {
     const { f, j, posts } = await world({ post: (n) => (n === 1 ? 'landed-drop' : 'ok') })

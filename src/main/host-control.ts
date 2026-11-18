@@ -254,7 +254,8 @@ export function createHostControl(
     sessions: (clearUnseen) => ptys.sessions(clearUnseen),
     // Windows 의 지킴이는 named pipe 라 프로세스 목록으로 찾지 않는다
     others: () => (process.platform === 'win32' ? Promise.resolve([]) : inTurn(() => listOtherHosts(scanDeps))),
-    endOther: (target) => inTurn(() => endOtherHost(scanDeps, target)),
+    // Windows 는 다른 지킴이를 찾지 않는다(others 가 빈 목록) — 끝낼 대상도 없다
+    endOther: (target) => (process.platform === 'win32' ? Promise.resolve({ ok: false, reason: 'gone' } as const) : inTurn(() => endOtherHost(scanDeps, target))),
     dispose: () => host.dispose(),
   }
 }

@@ -121,7 +121,7 @@ export function WorkspaceFiles({ root, onAttach, openFile }: { root: string; onA
       if (generation.current === n) {
         setFile(f)
         setRange(rangeAt(line, f.text?.split('\n').length ?? 1))
-        if (line !== undefined) setRendered(false) // 줄 번호로 왔으면 소스로 보인다
+        setRendered(line === undefined) // 줄 번호로 왔으면 소스로, 그냥 열면 다시 미리보기로
       }
     } catch {
       if (generation.current === n) setError('파일을 읽지 못했어요. 민감 파일·폴더 밖 경로·크기 제한을 확인해 주세요.')

@@ -46,21 +46,31 @@ export function Palette({ state, shortcuts, history = [], ports = [], onRun, onC
   }, [query])
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
-  // 65단계: 지금 일감 폴더의 파일들 — 팔레트를 열 때마다 다시 읽는다(로컬 일감만). 닫힌 뒤에 온 답은 버린다
+  // 65단계: 지금 일감 폴더의 파일들 — 파일이 필요해질 때(글을 치거나 파일 범위) 팔레트를 연 동안 한 번 읽는다(로컬 일감만).
+  // 일감 이동 · 명령만 하려고 열 때는 git 을 부르지 않는다. 닫힌 뒤에 온 답은 버린다
   const [files, setFiles] = useState<readonly string[]>([])
   const fileTask = state.tasks.find((t) => t.id === state.activeTaskId)
   const fileRoot = fileTask && !fileTask.host ? fileTask.cwd : null
+  const wantFiles = scope === 'file' || query.trim() !== ''
+  const filesFor = useRef<string | null>(null)
   useEffect(() => {
-    if (fileRoot === null) return
+    if (fileRoot === null || !wantFiles || filesFor.current === fileRoot) return
+    filesFor.current = fileRoot
     let alive = true
+    let got = false
     void window.taskminal.workspace.fileList(fileRoot).then(
-      (list) => alive && setFiles(list),
+      (list) => {
+        got = true
+        if (alive) setFiles(list)
+      },
       () => {},
     )
     return () => {
       alive = false
+      // 답이 오기 전에 버렸으면(글을 지움 · 일감 바뀜) 다음에 다시 읽는다
+      if (!got) filesFor.current = null
     }
-  }, [fileRoot])
+  }, [fileRoot, wantFiles])
 
   useEffect(() => inputRef.current?.focus(), [])
 

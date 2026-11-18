@@ -162,6 +162,8 @@ export function paletteItems(input: PaletteInput): PaletteItem[] {
 function fileMatch(path: string, query: string, fuzzy: boolean): { score: number; marks: number[] } | null {
   if (query === '') return { score: 0, marks: [] }
   const q = query.toLowerCase()
+  // 퍼지가 아니면 글자 그대로 들어 있어야 한다 — 수만 경로를 점수 매기기 전에 거른다(이름 · 경로 어느 쪽이든 경로에 들어 있어야 맞는다)
+  if (!fuzzy && !path.toLowerCase().includes(q)) return null
   const nameAt = path.lastIndexOf('/') + 1
   const name = matchScore(path.slice(nameAt), query)
   if (name && (fuzzy || path.slice(nameAt).toLowerCase().includes(q))) return { score: name.score + 1000, marks: name.marks.map((i) => i + nameAt) }

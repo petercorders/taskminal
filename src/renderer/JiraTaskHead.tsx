@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { IssueLink } from '../shared/issues'
 import { jiraDue } from '../shared/jira'
-import { JiraHead, jiraCommentIntent, jiraConfirm, jiraListError, jiraListing, jiraMenu, jiraResult, jiraSending, jiraTransitionIntent, jiraTransitionLabel, type JiraIntent } from '../shared/jira-head'
+import { JiraHead, jiraCommentIntent, jiraConfirm, jiraListError, jiraListing, jiraLocked, jiraMenu, jiraResult, jiraTransitionIntent, jiraTransitionLabel, type JiraIntent } from '../shared/jira-head'
 import { JIRA_COMMENT_MAX } from '../shared/jira-write'
 import { ConfirmDialog } from './ConfirmDialog'
 import { PopupMenu } from './PopupMenu'
@@ -32,17 +32,21 @@ export function JiraTaskHead({ link, active }: { link: IssueLink; active: boolea
   const view = useSyncExternalStore(head.subscribe, () => head.view)
   const token = useJiraToken()
   useEffect(() => { loadJiraToken(window.taskminal.jira) }, [])
+  // 확인 창을 연 순간 떠 둔 이슈 키 · 전환 · 글 · 요청 번호 — 그 사이 연결이 바뀌어도 이것으로만 보낸다
+  const [confirming, setConfirming] = useState<JiraIntent | null>(null)
   useEffect(() => {
     // 다른 일감에 갔다 돌아옴 — 보내는 중이던 쓰기가 그 사이 끝났는지 다시 묻는다
     if (active) void head.resume()
-    // 메뉴는 body 에 그려 일감 화면과 함께 숨지 않는다 — 다른 일감으로 가면 닫는다
-    else if (head.view.menu || head.view.listing) head.closeMenu()
+    // 메뉴 · 확인 창은 body 에 그려 일감 화면과 함께 숨지 않는다 — 다른 일감으로 가면 닫는다(확인 창은 취소)
+    else {
+      if (head.view.menu || head.view.listing) head.closeMenu()
+      setConfirming(null)
+    }
   }, [active, head])
   const trigger = useRef<HTMLButtonElement>(null)
   const menuAt = useRef({ x: 0, y: 0 })
-  // 확인 창을 연 순간 떠 둔 이슈 키 · 전환 · 글 · 요청 번호 — 그 사이 연결이 바뀌어도 이것으로만 보낸다
-  const [confirming, setConfirming] = useState<JiraIntent | null>(null)
-  const sending = jiraSending(view, key)
+  // 보내는 중 · 됐는지 모르는 쓰기가 남았으면 새 쓰기를 막는다
+  const sending = jiraLocked(view, key)
   const menu = jiraMenu(view, key)
   const listError = jiraListError(view, key)
   const result = jiraResult(view, key)
@@ -77,7 +81,7 @@ export function JiraTaskHead({ link, active }: { link: IssueLink; active: boolea
         {listError && <span className="jira-result" role="alert" data-testid="jira-list-error">{listError}</span>}
         {result && <span className="jira-result" role={result.tone} data-testid="jira-result">{result.text}</span>}
         {result?.actions.map((action) => (
-          <button key={action.kind} type="button" className="button jira-act" onClick={() => void (action.kind === 'write' ? head.retry() : head.rereadState())}>{action.label}</button>
+          <button key={action.kind} type="button" className="button jira-act" onClick={() => void (action.kind === 'write' ? head.retry() : action.kind === 'dismiss' ? head.dismiss() : head.rereadState())}>{action.label}</button>
         ))}
       </div>
       {token && view.composing && (
@@ -104,10 +108,12 @@ export function JiraTaskHead({ link, active }: { link: IssueLink; active: boolea
         />,
         document.body,
       )}
-      {confirming && confirm && (
+      {/* 확인 창도 body 에 — .task-view(container) 안의 fixed 배경은 일감 영역만 덮어 사이드바가 눌린다 */}
+      {active && confirming && confirm && createPortal(
         <div className="jira-confirm">
           <ConfirmDialog title={confirm.title} message={confirm.message} confirmLabel={confirm.confirmLabel} onConfirm={() => { setConfirming(null); void head.send(confirming) }} onCancel={() => setConfirming(null)} />
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

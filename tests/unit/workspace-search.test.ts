@@ -32,6 +32,8 @@ describe('순수: 찾을 글 · git 출력 해석', () => {
   it('파일 목록은 NUL 로 나누고, 거른 것은 빼고, 상한에서 멈춘다', () => {
     expect(parseFileList('a.ts\x00.env\x00b c.ts\x00', (p) => p !== '.env')).toEqual(['a.ts', 'b c.ts'])
     expect(parseFileList('a\x00b\x00c\x00d', () => true, 2)).toEqual(['a', 'b'])
+    // 충돌 중인 파일은 ls-files 가 단계마다(1 · 2 · 3) 한 번씩 낸다 — 한 줄로, 상한도 다른 경로 수로 센다
+    expect(parseFileList('a\x00c.ts\x00c.ts\x00c.ts\x00b\x00', () => true, 3)).toEqual(['a', 'c.ts', 'b'])
     expect(parseFileList('', () => true)).toEqual([])
   })
 })

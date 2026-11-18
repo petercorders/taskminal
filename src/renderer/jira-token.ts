@@ -6,12 +6,16 @@ import type { JiraStatus } from '../shared/jira'
 let token: boolean | null = null
 let started = 0
 let applied = 0
+/** 끝나지 않은 읽기 수 — 처음 읽기가 실패했으면(답 없음) 다음 머리가 그려질 때 다시 읽는다 */
+let reading = 0
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 
 /** 인증 상태 읽기 · 저장 · 지움 하나를 싣는다 — 늦게 끝난 옛 답이 더 새 답을 덮지 않게 시작 순서로 거른다 */
 export function trackJiraStatus(read: Promise<JiraStatus>): void {
   const seq = ++started
+  reading++
+  read.finally(() => { reading-- }).catch(() => {})
   read.then((status) => {
     if (seq < applied) return
     applied = seq
@@ -20,9 +24,10 @@ export function trackJiraStatus(read: Promise<JiraStatus>): void {
     listeners.forEach((notify) => notify())
   }, () => {})
 }
-/** 일감 머리가 처음 그려질 때 한 번 */
+/** 일감 머리가 그려질 때 — 아직 답을 받은 적이 없고 읽는 중도 아니면(처음 · 앞 읽기 실패) 읽는다 */
 export function loadJiraToken(api: { status(): Promise<JiraStatus> }): void {
-  if (started === 0) trackJiraStatus(api.status())
+  if (applied === 0 && reading === 0) trackJiraStatus(api.status())
 }
 /** null 은 아직 모름 */
-export const useJiraToken = (): boolean | null => useSyncExternalStore(subscribe, () => token)
+export const jiraToken = (): boolean | null => token
+export const useJiraToken = (): boolean | null => useSyncExternalStore(subscribe, jiraToken)

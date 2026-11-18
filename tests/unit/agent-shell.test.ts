@@ -110,6 +110,22 @@ describe('zsh claude · codex 감싸기', () => {
     expect(out).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|-c|developer_instructions="a b $HOME"|resume|id1', 'codex:login'])
   })
 
+  it('이 셸의 CODEX_HOME(rc 가 정한 것) 설정에 developer_instructions 가 있으면 codex 에 안내를 붙이지 않는다 — 표 안의 같은 이름은 세지 않는다', () => {
+    const mine = join(home, 'work-codex')
+    mkdirSync(mine)
+    writeFileSync(join(mine, 'config.toml'), 'model = "x"\n  developer_instructions = "내 지시"\n')
+    writeFileSync(join(home, '.zshrc'), `export CODEX_HOME=${mine}\n`)
+    expect(zsh({ ...ON, ...GUIDE }, 'codex a')).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|a'])
+    // 표([profiles.x]) 안에만 있으면 맨 위 설정이 아니다 — 붙인다. CODEX_HOME 이 없으면 ~/.codex 를 본다
+    writeFileSync(join(mine, 'config.toml'), '[profiles.x]\ndeveloper_instructions = "표 안"\n')
+    expect(zsh({ ...ON, ...GUIDE }, 'codex a')).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|-c|developer_instructions="a b $HOME"|a'])
+    writeFileSync(join(home, '.zshrc'), '')
+    mkdirSync(join(home, '.codex'))
+    writeFileSync(join(home, '.codex', 'config.toml'), 'developer_instructions = "기본 위치"')
+    expect(zsh({ ...ON, ...GUIDE }, 'codex a')).toEqual(['codex:-c|notify=["/x/codex-notify.sh"]|a'])
+    expect(stderr).toBe('')
+  })
+
   it('상태 훅이 꺼져 있어도(안내 변수만) 안내는 붙이고, 세션 끝 기록은 남기지 않는다', () => {
     const out = zsh(GUIDE, 'claude -r abc; print "rc=$?"; codex fail; print "rc=$?"')
     expect(stderr).toBe('')

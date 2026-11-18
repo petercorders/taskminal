@@ -28,7 +28,7 @@ export interface JiraHeadView {
   draft: string
   composing: boolean
 }
-export interface JiraResultLine { text: string; tone: 'status' | 'alert'; actions: Array<{ kind: 'write' | 'read'; label: string }> }
+export interface JiraResultLine { text: string; tone: 'status' | 'alert'; actions: Array<{ kind: 'write' | 'read' | 'dismiss'; label: string }> }
 
 const EMPTY: JiraHeadView = { listing: null, menu: null, listError: null, write: null, reread: null, draft: '', composing: false }
 const PREVIEW = 200
@@ -47,6 +47,12 @@ export function jiraConfirm(intent: JiraIntent): { title: string; message: strin
 // 아래 넷은 '지금 연결한 이슈 키' 와 견준다 — 다른 이슈에 보낸 것 · 읽은 것은 이 머리에 보이지 않는다.
 /** 보내는 중 — 두 단추를 막는다 */
 export const jiraSending = (view: JiraHeadView, key: string): boolean => view.write?.status === 'pending' && view.write.intent.key === key
+/**
+ * 새 쓰기를 막는다 — 보내는 중이거나, 됐는지 모르는 쓰기가 남아 있다.
+ * 모르는 채로 새 요청 번호로 다시 보내면 Jira 에 두 번 갈 수 있고, 새 쓰기가 칸을 덮어 앞 쓰기를 다시 확인할 길도 잃는다.
+ * '다시 확인' 으로 정해지거나, 사용자가 '결과 지우기' 로 직접 넘길 때까지.
+ */
+export const jiraLocked = (view: JiraHeadView, key: string): boolean => jiraSending(view, key) || (view.write?.status === 'unknown' && view.write.intent.key === key)
 export const jiraListing = (view: JiraHeadView, key: string): boolean => view.listing === key
 export const jiraMenu = (view: JiraHeadView, key: string): JiraTransition[] | null => (view.menu?.key === key ? view.menu.items : null)
 export const jiraListError = (view: JiraHeadView, key: string): string => (view.listError?.key === key ? view.listError.text : '')
@@ -59,7 +65,7 @@ export function jiraResult(view: JiraHeadView, key: string): JiraResultLine | nu
   let tone: JiraResultLine['tone'] = 'status'
   if (write?.status === 'done') parts.push(write.intent.kind === 'transition' ? '바꿨어요' : '댓글을 남겼어요')
   if (write?.status === 'failed') { parts.push(`안 됐어요: ${write.message}`); tone = 'alert' }
-  if (write?.status === 'unknown') { parts.push(write.message ? `됐는지 모름 — ${write.message}` : '됐는지 모름'); tone = 'alert'; actions.push({ kind: 'write', label: '다시 확인' }) }
+  if (write?.status === 'unknown') { parts.push(write.message ? `됐는지 모름 — ${write.message}` : '됐는지 모름'); tone = 'alert'; actions.push({ kind: 'write', label: '다시 확인' }, { kind: 'dismiss', label: '결과 지우기' }) }
   if (view.reread?.key === key && view.reread.state === 'failed') { parts.push('상태를 다시 읽지 못했어요'); tone = 'alert'; actions.push({ kind: 'read', label: '상태 다시 읽기' }) }
   return parts.length ? { text: parts.join(' · '), tone, actions } : null
 }
@@ -86,7 +92,7 @@ export class JiraHead {
   }
   /** '상태 바꾸기 ▾' — 누른 순간의 연결 키로 전환 목록을 읽는다. 주기로 읽지 않고 메뉴를 열 때마다 새로 읽는다 */
   openMenu(key: string): Promise<void> {
-    if (jiraSending(this.view, key) || jiraListing(this.view, key)) return Promise.resolve()
+    if (jiraLocked(this.view, key) || jiraListing(this.view, key)) return Promise.resolve()
     const seq = ++this.listSeq
     this.set({ ...this.fresh(), listing: key, menu: null, listError: null })
     return this.api.transitions(key).then((items) => {
@@ -103,8 +109,12 @@ export class JiraHead {
   setDraft(text: string): void { this.set({ draft: text }) }
   /** 확인 뒤 보내기 — 떠 둔 것 그대로. 그 이슈에 보내는 중이면 받지 않는다(같은 프레임에 두 번 눌러도 한 번) */
   send(intent: JiraIntent): Promise<void> {
-    if (jiraSending(this.view, intent.key)) return Promise.resolve()
+    if (jiraLocked(this.view, intent.key)) return Promise.resolve()
     return this.run(intent, false)
+  }
+  /** '결과 지우기' — 됐는지 모르는 쓰기를 사용자가 넘긴다(Jira 에서 직접 확인). 그 뒤 새 쓰기는 새 번호로 보낸다 */
+  dismiss(): void {
+    if (this.view.write?.status === 'unknown') this.set({ write: null })
   }
   /** '됐는지 모름' 의 다시 확인 — 같은 번호 · 같은 내용으로. main 이 먼저 됐는지 확인하고 안 됐을 때만 다시 보낸다 */
   retry(): Promise<void> {

@@ -33,6 +33,8 @@ interface WritePlan {
   body: unknown
   /** 성공 상태 코드 — 전환 204 · 댓글 201 */
   ok: number
+  /** 처음 보내기 직전에 한 번 — 다시 확인에 쓸 것을 읽어 둔다. 실패하면 보내지 않는다(안 됨) */
+  prepare?(c: Credentials, signal: AbortSignal): Promise<void>
   landed(c: Credentials, signal: AbortSignal): Promise<boolean>
 }
 /** 쓰기 기록 한 줄 — 요청 번호마다 하나. 인증 값은 담지 않는다(세대 번호만) */
@@ -206,14 +208,21 @@ export class Jira {
     return this.once('transition', key, requestId, JSON.stringify(['transition', key, transitionId]), () => {
       const to = this.targets.get(`${this.gen}\n${key}`)?.get(transitionId)
       if (!to) throw fail('전환 목록을 다시 읽은 뒤 골라 주세요.')
+      const status = async (c: Credentials, signal: AbortSignal) => {
+        const data = await this.request(c, 'GET', `/rest/api/3/issue/${key}?fields=status`, undefined, signal, 'issue')
+        const id = data?.fields?.status?.id
+        if (typeof id !== 'string') throw fail('Jira 이슈 상태를 확인하지 못했어요.')
+        return id
+      }
+      // 보내기 직전의 상태 — 목표와 같으면(같은 상태로 도는 전환) 상태만 보고는 됐는지 알 수 없다
+      let from: string | undefined
       return {
         path: `/rest/api/3/issue/${key}/transitions`, body: { transition: { id: transitionId } }, ok: 204,
+        prepare: async (c, signal) => { from = await status(c, signal) },
         // 다시 보내기 전 확인: 이슈 상태가 이미 이 전환의 목표인가
         landed: async (c, signal) => {
-          const data = await this.request(c, 'GET', `/rest/api/3/issue/${key}?fields=status`, undefined, signal, 'issue')
-          const status = data?.fields?.status?.id
-          if (typeof status !== 'string') throw fail('Jira 이슈 상태를 확인하지 못했어요.')
-          return status === to.id
+          if (from === undefined || from === to.id) throw fail('상태가 그대로인 전환이라 됐는지 확인할 수 없어요. Jira 에서 직접 확인해 주세요.')
+          return (await status(c, signal)) === to.id
         },
       }
     })
@@ -291,6 +300,10 @@ export class Jira {
     if (verify) {
       try { if (await record.plan.landed(c, AbortSignal.timeout(this.timeout))) return { status: 'done', message: '' } }
       catch (reason) { return { status: 'unknown', message: text(reason) } }
+    }
+    else if (record.plan.prepare) {
+      try { await record.plan.prepare(c, AbortSignal.timeout(this.timeout)) }
+      catch (reason) { return { status: 'failed', message: text(reason) } }
     }
     try {
       const status = await this.request(c, 'POST', record.plan.path, record.plan.body, AbortSignal.timeout(this.timeout), record.state.kind)
