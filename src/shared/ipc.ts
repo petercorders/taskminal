@@ -71,6 +71,8 @@ export const IPC = {
   hostTail: 'host:tail', // invoke(paneId) → 마지막 20줄
   hostKill: 'host:kill', // send(paneId[]) — 주인 없는 셸 끝내기
   hostAction: 'host:action', // send(HostAction)
+  hostOthers: 'host:others', // invoke → OtherHost[] — 이 Mac 의 다른 지킴이 (61단계)
+  hostOthersEnd: 'host:others-end', // invoke(OtherHostTarget) → EndOtherHostResult — 다시 찾아 그대로일 때만 끝낸다
   // 17단계 데이터 안전
   backupList: 'backup:list', // invoke → BackupInfo[]
   backupRead: 'backup:read', // invoke(이름) → AppState (검증한 것)

@@ -17,6 +17,7 @@ import { isAccel, isAppCommand } from '../shared/keymap'
 import { MAX_LINK, webUrl } from '../shared/links'
 import { rendererFromEnv, type RendererMode } from '../shared/renderer'
 import { isPaneId, validSize, validWrite } from '../shared/pty'
+import { isOtherHostTarget } from '../shared/host-scan'
 import { controlPathFits, isRemotePath, isSshHost, parseSshConfigHosts, sshArgs } from '../shared/remote'
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onCliInstall, onQuitAll } from './menu'
@@ -1092,6 +1093,16 @@ if (!app.requestSingleInstanceLock()) {
     if (!fromOurWindow(event) || !Array.isArray(paneIds) || paneIds.length > MAX_LIVE_PANES) return
     hostControl?.ptys.killUnowned(paneIds.filter(isPaneId))
   })
+  // 61단계: 이 Mac 의 다른 지킴이 — 설정 › 셸 지킴이. 끝내기는 renderer 의 확인 뒤에 오고, main 이 대상을 다시 찾는다
+  ipcMain.handle(IPC.hostOthers, async (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return control().others()
+  })
+  ipcMain.handle(IPC.hostOthersEnd, async (event, target: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isOtherHostTarget(target)) throw new Error('끝낼 지킴이를 확인해 주세요')
+    return control().endOther({ pid: target.pid, startedAt: target.startedAt, sockPath: target.sockPath })
+  })
   ipcMain.on(IPC.hostAction, (event, action: unknown) => {
     if (!fromOurWindow(event) || !isHostAction(action)) return
     if (action === 'quit-all') return void quitAll()
@@ -1256,7 +1267,7 @@ if (!app.requestSingleInstanceLock()) {
         paneWatch.exit(paneId, code)
         agentEvents?.forget(paneId)
       },
-    })
+    }, (text) => redact(text, secretOpts))
     startCliServer()
     updater = createUpdater()
     const firstMs = Number(process.env['TASKMINAL_UPDATE_FIRST_MS'])

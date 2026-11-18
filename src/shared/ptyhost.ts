@@ -122,6 +122,8 @@ export interface HostStats {
   startedAt: number
   rss: number
   sessions: number
+  /** 지금 이어진 연결 수(묻는 연결 포함) — 61단계부터. 옛 지킴이의 답에는 없다 */
+  clients?: number
 }
 
 const isStr = (v: unknown, max = 4096): v is string => typeof v === 'string' && v.length <= max

@@ -1730,6 +1730,19 @@ input[type='checkbox'] {
 .host-confirm span {
   flex: 1;
 }
+/* 61단계: 이 Mac 의 다른 지킴이 — 긴 데이터 폴더 경로는 줄이고(전체는 title), 결과 글은 목록 위에 */
+.host-other-folder {
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-other-note {
+  margin: var(--space-1) 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
 
 /* ─── 17단계 데이터 안전: 알림 · 백업 · 비밀값 가리기 ─── */
 .link {

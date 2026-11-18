@@ -370,6 +370,51 @@ describe('HostCore', () => {
     expect(core.sessionCount).toBe(1)
   })
 
+  // 61단계 스파이크 — 다른 앱이 '이 Mac 의 다른 지킴이' 를 들여다볼 때(hello → list → stats → 끊기) 그 지킴이의 셸에 영향이 없어야 한다
+  it('다른 연결이 들여다보고 끊어도 붙어 있는 손님의 셸 · 출력은 그대로다 (판 번호가 달라도 답한다)', () => {
+    const a = new Conn()
+    core.open(a)
+    core.handle(a, spawnReq(1))
+    const peek = new Conn()
+    core.open(peek)
+    core.handle(peek, { op: 'hello', id: 1, version: 99 })
+    expect(peek.reply(1)).toMatchObject({ ok: true, version: 1, pid: 4242 })
+    core.handle(peek, { op: 'list', id: 2 })
+    expect(peek.reply(2)!['sessions']).toMatchObject([{ paneId: 'p1', attached: true }])
+    core.handle(peek, { op: 'stats', id: 3 })
+    expect(peek.reply(3)).toMatchObject({ sessions: 1, clients: 2 }) // 붙은 손님 + 들여다보는 연결
+    core.close(peek)
+    ptys[0]!.emit('still\r\n')
+    expect(a.data()).toBe('still\r\n')
+    expect(peek.data()).toBe('') // 들여다본 연결은 출력을 받지 않는다
+    core.handle(a, { op: 'list', id: 4 })
+    expect(a.reply(4)!['sessions']).toMatchObject([{ paneId: 'p1', attached: true, detachedMs: 0 }])
+    expect(ptys[0]!.kills).toEqual([])
+    expect(core.clientCount).toBe(1)
+  })
+
+  it('들여다보기는 손님 없는 셸의 떨어진 시간 · 못 본 알림을 바꾸지 않는다', async () => {
+    const a = new Conn()
+    core.open(a)
+    core.handle(a, spawnReq(1))
+    core.close(a)
+    ptys[0]!.emit('\x1b]9;확인해 주세요\x07')
+    await core.settled()
+    advance(5000)
+    const peek = new Conn()
+    core.open(peek)
+    core.handle(peek, { op: 'list', id: 1 })
+    expect(peek.reply(1)!['sessions']).toMatchObject([{ attached: false, detachedMs: 5000, unseen: { waiting: true, message: '확인해 주세요' } }])
+    core.handle(peek, { op: 'stats', id: 2 })
+    expect(peek.reply(2)).toMatchObject({ clients: 1 }) // 들여다보는 연결뿐 — 쓰는 앱이 없다
+    core.close(peek)
+    advance(1000)
+    const b = new Conn()
+    core.open(b)
+    core.handle(b, { op: 'list', id: 1 })
+    expect(b.reply(1)!['sessions']).toMatchObject([{ attached: false, detachedMs: 6000, unseen: { waiting: true, message: '확인해 주세요' } }])
+  })
+
   it('손님 수 · 살아 있는 셸 수로 유휴를 안다', () => {
     const a = new Conn()
     core.open(a)

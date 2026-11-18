@@ -8,6 +8,7 @@ import type { ChatEvent } from '../shared/chat'
 import type { UpdateView } from '../shared/update'
 import type { AppState } from '../shared/types'
 import type { SessionInfo } from '../shared/ptyhost'
+import type { EndOtherHostResult, OtherHost } from '../shared/host-scan'
 import type { AgentSignal } from '../shared/agent-hooks'
 import type { UsageMap } from '../shared/usage'
 import type { WorktreeResult } from '../shared/worktree'
@@ -144,6 +145,8 @@ const api: TaskminalApi = {
     tail: (paneId) => ipcRenderer.invoke(IPC.hostTail, paneId) as Promise<string>,
     kill: (paneIds) => ipcRenderer.send(IPC.hostKill, paneIds),
     action: (action) => ipcRenderer.send(IPC.hostAction, action),
+    others: () => ipcRenderer.invoke(IPC.hostOthers) as Promise<OtherHost[]>,
+    endOther: (target) => ipcRenderer.invoke(IPC.hostOthersEnd, target) as Promise<EndOtherHostResult>,
   },
   update: {
     view: () => ipcRenderer.invoke(IPC.updateView) as Promise<UpdateView>,

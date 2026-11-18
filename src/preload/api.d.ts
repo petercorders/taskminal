@@ -4,6 +4,7 @@ import type { AppInfo, BackupMark, HostAction, HostView, LoadedState, PtyAttachR
 import type { AgentSignal } from '../shared/agent-hooks'
 import type { UsageMap, UsageWindowKey } from '../shared/usage'
 import type { SessionInfo } from '../shared/ptyhost'
+import type { EndOtherHostResult, OtherHost, OtherHostTarget } from '../shared/host-scan'
 import type { AppState } from '../shared/types'
 
 export interface PtyApi {
@@ -87,6 +88,10 @@ export interface HostApi {
   /** 주인 없는 셸 끝내기 — 어느 창도 쓰지 않는 pane 만 main 이 끝낸다 */
   kill(paneIds: string[]): void
   action(action: HostAction): void
+  /** 이 Mac 에 떠 있는 다른 Taskminal 지킴이들 (61단계) — 지금 앱의 것은 없다 */
+  others(): Promise<OtherHost[]>
+  /** 고른 다른 지킴이를 셸까지 끝낸다. main 이 다시 찾아 그대로이고 붙은 앱이 없을 때만 */
+  endOther(target: OtherHostTarget): Promise<EndOtherHostResult>
 }
 
 /** 자동 업데이트 (18단계) */
