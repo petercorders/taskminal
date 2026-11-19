@@ -332,8 +332,6 @@ export function App() {
   // 한 번 띄운 셸은 다른 탭 · 일감으로 옮겨도 숨겨 둔 채 유지한다.
   const [seenTabs, setSeenTabs] = useState<ReadonlySet<string>>(() => new Set())
   const loadedRef = useRef<LoadedState['state'] | null>(null)
-  // 67단계: 정리 전에 먼저 보낸 상태 — effect 가 같은 상태를 다시 보내 main 의 revision 을 올려 정리를 막지 않게
-  const sentRef = useRef<AppState | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
   useEffect(() => window.taskminal.backup.onError(setBackupError), [])
@@ -366,7 +364,7 @@ export function App() {
   const canSave = load.phase === 'ready' && !load.readOnly
   useEffect(() => {
     // 막 읽은 상태를 그대로 다시 쓰지 않는다 — 바뀐 것이 있을 때만.
-    if (canSave && state !== loadedRef.current && state !== sentRef.current) window.taskminal.state.save(state)
+    if (canSave && state !== loadedRef.current) window.taskminal.state.save(state)
   }, [state, canSave])
 
   const shownTabId = state.tasks.find((t) => t.id === state.activeTaskId)?.activeTabId ?? null
@@ -1184,6 +1182,13 @@ export function App() {
   }
 
   // ─── 25단계: 보관함 ───
+  /** 보관할 때 셸만 끈다 — 대화 pane 은 프로세스만 끝내고 기록은 남긴다(되살리면 이어 하기) */
+  const stopPanes = (panes: Task['panes'][string][]) => {
+    for (const p of panes) {
+      if (p.kind === 'chat') window.taskminal.chat.close(p.id, false)
+      else window.taskminal.pty.kill(p.id)
+    }
+  }
   /** 보관 — id 로 지금 상태에서 다시 찾는다(확인 창 · 제안 칩을 누른 사이 지워지거나 이미 보관됐으면 뺀다). 돌고 있는 명령이 있으면 한 번 묻는다 */
   const archive = (ids: string[], confirmed = false) => {
     const cur = stateRef.current
@@ -1195,11 +1200,7 @@ export function App() {
       const cmd = busy.map((p) => shownActivity[p.id]?.command).find(Boolean)
       return setConfirming({ kind: 'archive', ids: tasks.map((t) => t.id), busy: busy.length, total: panes.length, ...(cmd ? { command: cmd } : {}) })
     }
-    // 셸만 끈다 — 대화 pane 은 프로세스만 끝내고 기록은 남긴다(되살리면 이어 하기)
-    for (const p of panes) {
-      if (p.kind === 'chat') window.taskminal.chat.close(p.id, false)
-      else window.taskminal.pty.kill(p.id)
-    }
+    stopPanes(panes)
     const at = Date.now()
     for (const t of tasks) dispatch({ type: 'task/archive', id: t.id, at })
     closeDialogs()
@@ -1221,16 +1222,12 @@ export function App() {
     const at = Date.now()
     for (const t of local) {
       if (isArchived(t)) continue
-      for (const p of Object.values(t.panes)) {
-        if (p.kind === 'chat') window.taskminal.chat.close(p.id, false)
-        else window.taskminal.pty.kill(p.id)
-      }
+      stopPanes(Object.values(t.panes))
       next = archiveTask(next, t.id, at)
     }
     if (next !== cur) {
       stateRef.current = next
       dispatch({ type: 'state/replace', state: next })
-      sentRef.current = next
       window.taskminal.state.save(next)
     }
     return local.map((t) => t.id)

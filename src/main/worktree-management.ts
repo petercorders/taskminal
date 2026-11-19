@@ -4,12 +4,12 @@ import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
-  isWorktreeOid, parseWorktrees, validWorktreeJournal, WORKTREE_USED_REASON,
+  isWorktreeOid, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
   type CreateWorktree, type ManagedWorktree, type MergeInfo, type WorktreeCleanItem, type WorktreeCleanResult,
   type WorktreeCreateReceipt, type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
   type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
 } from '../shared/worktree-management'
-import { classifyMerge } from '../shared/worktree-cleanup'
+import { classifyMerge, OWN_COMMIT } from '../shared/worktree-cleanup'
 
 export interface WorktreeJournal {
   load(fallback: WorktreeJournalState): WorktreeJournalState
@@ -118,10 +118,6 @@ async function locked<T>(key: string, job: () => Promise<T>): Promise<T> {
   await previous
   try { return await job() }
   finally { release(); if (repositoryLocks.get(key) === tail) repositoryLocks.delete(key) }
-}
-
-function sameTarget(a: WorktreeSnapshot, b: WorktreeSnapshot): boolean {
-  return a.path === b.path && a.commonDir === b.commonDir && a.head === b.head && a.branch === b.branch
 }
 
 function validateTarget(value: WorktreeSnapshot): void {
@@ -308,16 +304,18 @@ export class WorktreeManagement {
     try {
       let ancestor: boolean | null = null
       let created: string | null = null
+      let committed = false
       if (base && entry.head && entry.branch && !entry.primary && !entry.bare) {
         const check = await this.run(root, ['merge-base', '--is-ancestor', entry.head, base.oid])
         ancestor = check.timedOut || check.truncated ? null : check.code === 0 ? true : check.code === 1 ? false : null
         if (ancestor) {
-          const log = await this.git(root, ['reflog', 'show', '--format=%H %gs', '--end-of-options', entry.branch])
-          const first = log.split('\n').filter(Boolean).at(-1) ?? ''
-          created = /^([0-9a-f]{40}|[0-9a-f]{64}) branch: Created from /.exec(first)?.[1] ?? null
+          // 브랜치 reflog 전체(새 것부터) — 맨 끝이 만든 줄, 중간에 이 브랜치에서 커밋을 만든 줄이 있었는지
+          const lines = (await this.git(root, ['reflog', 'show', '--format=%H %gs', '--end-of-options', entry.branch])).split('\n').filter(Boolean)
+          created = /^([0-9a-f]{40}|[0-9a-f]{64}) branch: Created from /.exec(lines.at(-1) ?? '')?.[1] ?? null
+          committed = lines.some((line) => OWN_COMMIT.test(line.slice(line.indexOf(' ') + 1)))
         }
       }
-      const info = classifyMerge({ head: entry.head, branch: entry.branch, primary: entry.primary, bare: entry.bare, base, created, ancestor })
+      const info = classifyMerge({ head: entry.head, branch: entry.branch, primary: entry.primary, bare: entry.bare, base, created, committed, ancestor })
       if (info?.state === 'merged' && entry.head) {
         const last = (await this.git(root, ['log', '-1', '--format=%ct%x09%s', entry.head, '--'])).replace(/\n$/, '')
         const tab = last.indexOf('\t'), at = Number(last.slice(0, tab)) * 1000
@@ -434,13 +432,15 @@ export class WorktreeManagement {
     }
     const results: WorktreeCleanResult[] = []
     let stopped = false
+    let base: MergeBase | null | undefined // 한 번의 정리 안에서는 기준을 한 번만 푼다
     for (const item of items) {
       const path = item.target.path
       if (stopped) { results.push({ state: 'skipped', path, message: '앞 정리 결과를 확인하지 못해 멈췄어요. 목록을 다시 읽어 주세요.' }); continue }
       try {
         const registry = await this.registry(root)
         const entry = this.find(registry, item.target)
-        const merge = await this.mergeOf(registry.root, entry, await this.mergeBase(registry.root))
+        if (base === undefined) base = await this.mergeBase(registry.root)
+        const merge = await this.mergeOf(registry.root, entry, base)
         if (merge?.state !== 'merged') throw new Error('병합됨을 다시 확인하지 못했어요. 정리하지 않았어요.')
         const fresh = () => usedFor(item.taskIds)
         // 보관이 끈 셸(SIGHUP, 2초 뒤 SIGKILL)이 아직 이 폴더에 있으면 잠깐 기다린다 — 끝까지 남으면 remove 가 막는다

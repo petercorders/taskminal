@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  classifyMerge, cleanupPreview, cleanupStep, mergeBadges, runCleanup, shownBadge, usedTaskPaths,
+  classifyMerge, cleanupPreview, cleanupStep, mergeBadges, runCleanup, shownBadge, usedTaskPaths, worktreeUseKey,
   type CleanupCandidate, type CleanupDeps, type CleanupFlow, type MergeInput,
 } from '../../src/shared/worktree-cleanup'
 import { validWorktreeJournal, WORKTREE_USED_REASON, type ManagedWorktree, type WorktreeJournalState, type WorktreeView } from '../../src/shared/worktree-management'
@@ -46,10 +46,11 @@ const none = async () => [] as string[]
 
 describe('병합 판정 classifyMerge', () => {
   const base = { ref: 'refs/remotes/origin/main', oid: 'b'.repeat(40) }
-  const input = (over: Partial<MergeInput>): MergeInput => ({ head: 'a'.repeat(40), branch: 'refs/heads/feat', primary: false, bare: false, base, created: 'c'.repeat(40), ancestor: true, ...over })
+  const input = (over: Partial<MergeInput>): MergeInput => ({ head: 'a'.repeat(40), branch: 'refs/heads/feat', primary: false, bare: false, base, created: 'c'.repeat(40), committed: true, ancestor: true, ...over })
   it('조상이고 만든 뒤 커밋이 있었으면 병합됨, 만든 지점 그대로면 fresh', () => {
     expect(classifyMerge(input({}))?.state).toBe('merged')
     expect(classifyMerge(input({ created: 'a'.repeat(40) }))?.state).toBe('fresh')
+    expect(classifyMerge(input({ committed: false }))?.state).toBe('fresh')
   })
   it('기준 없음 · 분리된 HEAD · 비교 실패 · 조상 아님 · 만든 기록 없음은 모름', () => {
     for (const over of [{ base: null }, { branch: null }, { ancestor: null }, { ancestor: false }, { created: null }]) {
@@ -79,12 +80,15 @@ describe('병합 판정 — 실제 git', () => {
     expect(row(view, squash).merge?.state).toBe('unknown')
     expect(row(view, f.root).merge).toBeNull()
   })
-  it('커밋 없이 새로 만든 worktree 는 기준이 앞서가도 병합됨이 아니다', async () => {
+  it('커밋 없이 새로 만든 worktree 는 기준이 앞서가도, 기준을 받아 오기만(ff) 해도 병합됨이 아니다', async () => {
     const f = repository()
     const fresh = f.add('fresh')
+    const caught = f.add('caught')
     f.commit(f.root, 'later.txt')
+    git(caught, 'merge', '--ff-only', 'main')
     const view = await f.service().list(f.root)
     expect(row(view, fresh).merge?.state).toBe('fresh')
+    expect(row(view, caught).merge?.state).toBe('fresh')
     expect(cleanupPreview(view).candidates).toEqual([])
   })
   it('기준 브랜치가 없으면 모름', async () => {
@@ -146,9 +150,13 @@ describe('정리 후보 cleanupPreview', () => {
     const p = cleanupPreview(view(entry({ merge: { state: 'unknown', base: null, reason: '' } }), entry({ merge: { state: 'fresh', base: 'x', reason: '' } }), entry({ primary: true, merge: null })))
     expect(p).toEqual({ candidates: [], excluded: [], unknown: 1, fresh: 1 })
   })
-  it('연결 일감 칩은 일감 폴더가 그 안인 일감만, 브랜치가 바뀌면 숨긴다', () => {
-    const badges = mergeBadges(view(entry({ tasks: [{ id: 'own', name: 'A', own: true }, { id: 'pane', name: 'B', own: false }] })))
-    expect(Object.keys(badges)).toEqual(['own'])
+  it('연결 일감 칩은 일감 폴더가 그 안인 일감의 병합됨만, 브랜치가 바뀌면 숨긴다', () => {
+    const badges = mergeBadges(view(
+      entry({ tasks: [{ id: 'own', name: 'A', own: true }, { id: 'pane', name: 'B', own: false }] }),
+      entry({ path: '/r/wip', merge: { state: 'unknown', base: 'refs/heads/main', reason: '' }, tasks: [{ id: 'wip', name: 'W', own: true }] }),
+    ))
+    expect(Object.keys(badges)).toEqual(['own', 'wip'])
+    expect(badges.wip).toBeNull()
     expect(shownBadge(badges.own, 'w')?.state).toBe('merged')
     expect(shownBadge(badges.own, 'other')).toBeNull()
   })
@@ -210,12 +218,36 @@ describe('실행 순서 runCleanup', () => {
     expect(rows.map((r) => [r.path, r.state])).toEqual([['/r/b', 'skipped'], ['/r/c', 'skipped'], ['/r/a', 'removed']])
     expect(rows.find((r) => r.path === '/r/a')?.archived).toEqual(['A'])
   })
+  it('앞 줄의 결과를 모르면 뒤 줄의 일감은 보관하지도 지우지도 않는다', async () => {
+    const calls: string[] = []
+    const deps: CleanupDeps = {
+      list: async () => ({ root: '/r/main', commonDir: '/r/.git', entries: [merged('/r/a', 'a'.repeat(40), [{ id: 'ta', name: 'A', own: true }]), merged('/r/b', 'a'.repeat(40), [{ id: 'tb', name: 'B', own: true }])] }),
+      busy: () => false,
+      archive: (ids) => { calls.push('archive ' + ids.join(',')); return ids },
+      clean: async (_root, items) => { calls.push('clean ' + items[0]!.target.path); return [{ state: 'unknown', path: items[0]!.target.path, message: '?' }] },
+    }
+    const rows = await runCleanup('/r/main', [candidate('/r/a', [{ id: 'ta', name: 'A', archived: false }]), candidate('/r/b', [{ id: 'tb', name: 'B', archived: false }])], deps)
+    expect(calls).toEqual(['archive ta', 'clean /r/a'])
+    expect(rows.map((r) => [r.path, r.state, r.archived])).toEqual([['/r/a', 'unknown', ['A']], ['/r/b', 'skipped', []]])
+  })
   it('정리 응답을 못 받으면 줄마다 모름', async () => {
     const deps: CleanupDeps = {
       list: async () => ({ root: '/r/main', commonDir: '/r/.git', entries: [merged('/r/a', 'a'.repeat(40))] }),
       busy: () => false, archive: (ids) => ids, clean: async () => { throw new Error('lost') },
     }
     expect((await runCleanup('/r/main', [candidate('/r/a')], deps)).map((r) => r.state)).toEqual(['unknown'])
+  })
+})
+
+describe('main revision 기준 worktreeUseKey', () => {
+  it('이름 · 상태 같은 저장에는 그대로, 폴더 · pane 폴더 · 보관이 바뀌면 바뀐다', () => {
+    const task = { id: 't', name: 'A', statusId: 's1', cwd: '/w/a', panes: { p: { cwd: '/w/a', title: 'x' } } }
+    const key = worktreeUseKey([task])
+    const renamed = { ...task, name: 'B', statusId: 's2', panes: { p: { cwd: '/w/a', title: 'y' } } }
+    expect(worktreeUseKey([renamed])).toBe(key)
+    expect(worktreeUseKey([{ ...task, archivedAt: 1 }])).not.toBe(key)
+    expect(worktreeUseKey([{ ...task, panes: { p: { cwd: '/w/b' } } }])).not.toBe(key)
+    expect(worktreeUseKey([{ ...task, cwd: '/w/c' }])).not.toBe(key)
   })
 })
 

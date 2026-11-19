@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isAbsolutePath } from '../shared/platform'
 import {
-  prepareAfterCreate, prepareTarget,
+  prepareAfterCreate, prepareTarget, sameTarget,
   type CreateWorktree, type ManagedWorktree, type WorktreeApi, type WorktreeSnapshot, type WorktreeView,
 } from '../shared/worktree-management'
 import {
@@ -34,7 +34,6 @@ const pendingCreates = new Map<string, PendingCreate>()
 const emptyDraft = (): Draft => ({ branch: '', base: '', path: '' })
 const message = (error: unknown) => error instanceof Error ? error.message : '요청 결과를 확인하지 못했어요. 목록을 다시 읽어 주세요.'
 const snapshot = (entry: ManagedWorktree): WorktreeSnapshot => ({ path: entry.path, commonDir: entry.commonDir, head: entry.head, branch: entry.branch })
-const sameTarget = (entry: WorktreeSnapshot, other: WorktreeSnapshot) => entry.path === other.path && entry.commonDir === other.commonDir && entry.head === other.head && entry.branch === other.branch
 const sameInput = (a: Draft, b: Draft) => a.branch === b.branch && a.base === b.base && a.path === b.path
 const day = (at: number) => new Date(at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
 const CLEAN_STATE: Record<CleanupReportRow['state'], string> = { removed: '정리함', unchanged: '남음', unknown: '확인 못 함', skipped: '안 함' }

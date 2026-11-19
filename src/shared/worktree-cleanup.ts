@@ -1,6 +1,6 @@
 // 67단계: 병합된 worktree 정리 — 병합 판정 · 후보 · 확인 흐름 · 실행 순서(순수, main 과 renderer 가 같이 쓴다)
 import {
-  WORKTREE_USED_REASON,
+  sameTarget, WORKTREE_USED_REASON,
   type ManagedWorktree, type MergeInfo, type MergeState, type WorktreeCleanItem, type WorktreeCleanResult,
   type WorktreeSnapshot, type WorktreeView,
 } from './worktree-management'
@@ -16,11 +16,16 @@ export interface MergeInput {
   base: { ref: string; oid: string } | null
   /** 브랜치 reflog 의 맨 처음 줄이 'branch: Created from …' 이면 그 커밋, 아니면(기록 없음 · 만료) null */
   created: string | null
+  /** 브랜치 reflog 에 이 브랜치에서 커밋을 만든 줄(commit · cherry-pick · revert · am · merge 커밋)이 있는가 — 기준을 받아 오기만(Fast-forward) 했으면 false */
+  committed: boolean
   /** HEAD 가 기준의 조상인가 — 비교하지 못했으면 null */
   ancestor: boolean | null
 }
 
-/** 조상 검사만으로는 방금 만든(커밋 없는) worktree 도 '병합됨' 이 된다 — 만든 지점과 HEAD 가 같으면 fresh */
+/** 이 브랜치에서 커밋을 만든 reflog 줄(%gs) — git 이 고정 영어로 쓴다(commit · commit (amend) · cherry-pick · revert · am · merge 커밋) */
+export const OWN_COMMIT = /^(?:commit(?: \([^)]*\))?|cherry-pick|revert|am): |^merge [^:]*: Merge made by /
+
+/** 조상 검사만으로는 방금 만든(커밋 없는) worktree 도 '병합됨' 이 된다 — 만든 지점 그대로이거나 기준을 받아 오기만 했으면 fresh */
 export function classifyMerge(i: MergeInput): MergeInfo | null {
   if (i.primary || i.bare) return null
   if (i.base && i.branch === 'refs/heads/' + shortRef(i.base.ref)) return null
@@ -32,6 +37,7 @@ export function classifyMerge(i: MergeInput): MergeInfo | null {
   if (!i.ancestor) return unknown(`${shortRef(i.base.ref)}에 없는 커밋이 있어요 — squash·rebase로 병합됐는지는 알 수 없어요`)
   if (i.created === null) return unknown('브랜치를 만든 기록(reflog)이 없어 새로 만든 브랜치인지 알 수 없어요')
   if (i.created === i.head) return { state: 'fresh', base, reason: '만든 뒤 커밋이 없어요' }
+  if (!i.committed) return { state: 'fresh', base, reason: '이 브랜치에서 만든 커밋 기록이 없어요 — 기준을 받아 오기만 했어요' }
   return { state: 'merged', base, reason: `${shortRef(i.base.ref)}에 들어 있어요` }
 }
 
@@ -46,7 +52,8 @@ export interface CleanupCandidate extends WorktreeSnapshot {
 export interface CleanupExcluded { path: string; label: string; reason: string }
 export interface CleanupPreview { candidates: CleanupCandidate[]; excluded: CleanupExcluded[]; unknown: number; fresh: number }
 
-const branchLabel = (entry: Pick<ManagedWorktree, 'branch'>) => entry.branch?.replace(/^refs\/heads\//, '') ?? '분리된 HEAD'
+const shortBranch = (branch: string | null) => branch?.replace(/^refs\/heads\//, '') ?? null
+const branchLabel = (entry: Pick<ManagedWorktree, 'branch'>) => shortBranch(entry.branch) ?? '분리된 HEAD'
 
 /** 병합됨 + '사용 중' 말고는 정리할 수 있음 + 연결 일감이 모두 그 폴더의 일감이고 명령이 돌지 않을 때만 후보 */
 export function cleanupPreview(view: WorktreeView, busy: (taskId: string) => boolean = () => false): CleanupPreview {
@@ -74,15 +81,15 @@ export function cleanupPreview(view: WorktreeView, busy: (taskId: string) => boo
   return out
 }
 
-/** 연결 일감 카드(사이드바 · 전체 보기)의 칩 — 일감 폴더가 그 worktree 안인 일감만, 그때의 브랜치와 함께 */
-export interface MergeBadge { state: 'merged' | 'unknown'; branch: string | null; reason: string }
+/** 연결 일감 카드(사이드바 · 전체 보기)의 칩 — 일감 폴더가 그 worktree 안인 일감만, 그때의 브랜치와 함께.
+ *  '병합 모름' 은 진행 중인 모든 브랜치가 해당해(조상 아님) 카드에는 '병합됨' 만 — 모름과 이유는 워크트리 패널에서 */
+export interface MergeBadge { state: 'merged'; branch: string | null; reason: string }
 export function mergeBadges(view: WorktreeView): Record<string, MergeBadge | null> {
   const out: Record<string, MergeBadge | null> = {}
   for (const entry of view.entries) {
     for (const task of entry.tasks ?? []) {
       if (!task.own) continue
-      const m = entry.merge
-      out[task.id] = m && m.state !== 'fresh' ? { state: m.state, branch: entry.branch?.replace(/^refs\/heads\//, '') ?? null, reason: m.reason } : null
+      out[task.id] = entry.merge?.state === 'merged' ? { state: 'merged', branch: shortBranch(entry.branch), reason: entry.merge.reason } : null
     }
   }
   return out
@@ -145,7 +152,6 @@ export interface CleanupReportRow {
   archived: string[]
 }
 
-const sameSnapshot = (a: WorktreeSnapshot, b: WorktreeSnapshot) => a.path === b.path && a.commonDir === b.commonDir && a.head === b.head && a.branch === b.branch
 const sameTasks = (a: CleanupCandidate['tasks'], b: CleanupCandidate['tasks']) => {
   const x = a.map((t) => t.id).sort(), y = b.map((t) => t.id).sort()
   return x.length === y.length && x.every((id, i) => id === y[i])
@@ -156,36 +162,34 @@ export async function runCleanup(root: string, confirmed: readonly CleanupCandid
   const rows: CleanupReportRow[] = []
   const go: CleanupCandidate[] = []
   for (const item of confirmed) {
-    const now = fresh.candidates.find((c) => sameSnapshot(c, item))
+    const now = fresh.candidates.find((c) => sameTarget(c, item))
     const skip = !now ? '확인한 뒤 경로·브랜치·HEAD가 바뀌었거나 더 이상 정리 후보가 아니에요. 정리하지 않았어요.'
       : !sameTasks(now.tasks, item.tasks) ? '확인한 뒤 연결 일감이 바뀌었어요. 정리하지 않았어요.' : ''
     if (skip) rows.push({ path: item.path, label: item.label, state: 'skipped', message: skip, archived: [] })
     else go.push(now!)
   }
-  if (!go.length) return rows
-  const wanted = [...new Set(go.flatMap((c) => c.tasks.map((t) => t.id)))]
-  const archived = new Set(wanted.length ? await deps.archive(wanted) : [])
-  const items: WorktreeCleanItem[] = []
-  const started: CleanupCandidate[] = []
+  // 줄마다 그 줄의 일감만 보관한 직전에 지운다 — 앞 줄의 결과를 모르면 뒤 줄의 일감은 보관하지도 않는다
+  let stopped = false
   for (const c of go) {
-    if (c.tasks.some((t) => !archived.has(t.id))) {
-      rows.push({ path: c.path, label: c.label, state: 'skipped', message: '연결 일감을 보관하지 못해 정리하지 않았어요.', archived: c.tasks.filter((t) => archived.has(t.id)).map((t) => t.name) })
-      continue
-    }
-    items.push({ target: { path: c.path, commonDir: c.commonDir, head: c.head, branch: c.branch }, taskIds: c.tasks.map((t) => t.id) })
-    started.push(c)
+    const row = (state: CleanupReportRow['state'], message: string, archived: string[] = []) => rows.push({ path: c.path, label: c.label, state, message, archived })
+    if (stopped) { row('skipped', '앞 정리 결과를 확인하지 못해 멈췄어요. 목록을 다시 읽어 주세요.'); continue }
+    const ids = c.tasks.map((t) => t.id)
+    const archived = new Set(ids.length ? await deps.archive(ids) : [])
+    const names = c.tasks.filter((t) => !t.archived && archived.has(t.id)).map((t) => t.name)
+    if (ids.some((id) => !archived.has(id))) { row('skipped', '연결 일감을 보관하지 못해 정리하지 않았어요.', names); continue }
+    const item: WorktreeCleanItem = { target: { path: c.path, commonDir: c.commonDir, head: c.head, branch: c.branch }, taskIds: ids }
+    let result: WorktreeCleanResult | undefined
+    try { result = (await deps.clean(root, [item]))[0] } catch { result = undefined }
+    if (result && result.path === c.path) row(result.state, result.message, names)
+    else row('unknown', '정리 결과를 확인하지 못했어요. 목록을 다시 읽어 확인해 주세요.', names)
+    if (rows.at(-1)!.state === 'unknown') stopped = true
   }
-  if (!items.length) return rows
-  let results: WorktreeCleanResult[] | null = null
-  try { results = await deps.clean(root, items) } catch { results = null }
-  started.forEach((c, i) => {
-    const r = results?.[i]
-    const names = c.tasks.filter((t) => !t.archived).map((t) => t.name)
-    rows.push(r && r.path === c.path
-      ? { path: c.path, label: c.label, state: r.state, message: r.message, archived: names }
-      : { path: c.path, label: c.label, state: 'unknown', message: '정리 결과를 확인하지 못했어요. 목록을 다시 읽어 확인해 주세요.', archived: names })
-  })
   return rows
+}
+
+/** main 이 worktree 사용 경로를 다시 볼 때 기준 — 이 값이 바뀔 때만 revision 을 올린다(이름 · 선택 · 활동 같은 저장은 정리를 막지 않게) */
+export function worktreeUseKey(tasks: ReadonlyArray<{ id: string; host?: string; archivedAt?: number; cwd: string; panes: Record<string, { cwd: string }> }>): string {
+  return JSON.stringify(tasks.filter((t) => !t.host).map((t) => [t.id, t.archivedAt ?? null, t.cwd, Object.values(t.panes).map((p) => p.cwd)]))
 }
 
 /** main 의 사용 경로 — 이 정리를 위해 **보관 상태인** 그 일감들의 저장된 폴더만 뺀다. 보관 안 된 일감 · 다른 보관 일감 · 원격은 39 그대로 */

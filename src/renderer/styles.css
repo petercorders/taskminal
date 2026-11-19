@@ -4341,6 +4341,7 @@ input[type='checkbox'] {
 .task-merge.merged {
   border-color: var(--done);
 }
+.overview-merge.merged { color: var(--done); }
 .archive-panel,
 .weekly-panel {
   width: min(760px, calc(100vw - 32px));

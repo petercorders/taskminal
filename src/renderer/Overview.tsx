@@ -38,6 +38,11 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose, m
   const input = useRef<HTMLInputElement>(null)
   const current = useRef(state)
   current.current = state
+  // 67단계: 사이드바와 같은 병합 칩 — 워크트리 패널에서 읽은 때의 값
+  const mergeChip = (task: Task) => {
+    const merge = mergeOf?.(task)
+    return merge && <span className={`overview-merge ${merge.state}`} title={`${merge.reason} — 워크트리 패널에서 읽은 때 기준`}> · {MERGE_LABEL[merge.state]}</span>
+  }
   const sections = useMemo(() => overviewSections(state, activity, branches, unread, query), [state, activity, branches, unread, query])
   const shown = sections.filter((s) => filter === 'all' || s.key === filter)
   const total = shown.reduce((n, s) => n + s.cards.length, 0)
@@ -116,7 +121,7 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose, m
             <h3><button type="button" className="link overview-task-open" disabled={!card.target} onClick={() => card.target && open(card.target)} title={card.task.name}>
               {card.task.name}{card.unread && <span className="overview-unread" aria-label="안 읽음"> · 안 읽음</span>}
             </button></h3>
-            <div className="dim small overview-meta" title={card.task.cwd}>{card.group && `${card.group} · `}{shortPath(card.task.cwd)}{card.branch && ` · ${card.branch}`}{(() => { const merge = mergeOf?.(card.task); return merge && <span className={`overview-merge ${merge.state}`} title={merge.reason}> · {MERGE_LABEL[merge.state]}</span> })()}</div>
+            <div className="dim small overview-meta" title={card.task.cwd}>{card.group && `${card.group} · `}{shortPath(card.task.cwd)}{card.branch && ` · ${card.branch}`}{mergeChip(card.task)}</div>
             <p className={`overview-last ${card.line?.tone ?? 'dim'}`}>{card.line?.agent ? <span className="agent-label"><AgentIcon agent={card.line.agent} />{card.line.text}</span> : (card.line?.text ?? '최근 활동이 없습니다.')}</p>
             {card.lastAt !== null && <div className="dim small">최근 활동 {timeAgo(card.lastAt, Date.now())} 전</div>}
             <ul className="overview-panes" aria-label={`${card.task.name} 화면`}>

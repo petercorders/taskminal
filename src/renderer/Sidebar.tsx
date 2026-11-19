@@ -223,7 +223,7 @@ export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activi
                     </span>
                   )}
                   {issue && <span className={`task-issue${issue.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issue.title ?? issue.text}>{issue.text}</span>}
-                  {merge && <span className={`task-merge ${merge.state}`} data-testid="task-merge" title={merge.reason}>{MERGE_LABEL[merge.state]}</span>}
+                  {merge && <span className={`task-merge ${merge.state}`} data-testid="task-merge" title={`${merge.reason} — 워크트리 패널에서 읽은 때 기준`}>{MERGE_LABEL[merge.state]}</span>}
                   <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>

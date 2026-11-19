@@ -36,6 +36,7 @@ import { installIssuesIpc } from './issues-ipc'
 import { installRemoteIpc } from './remote/ipc'
 import { installScheduleIpc } from './schedule-ipc'
 import { installWorktreeIpc } from './worktree-ipc'
+import { worktreeUseKey } from '../shared/worktree-cleanup'
 import type { WorkspaceBrowser } from './workspace-browser'
 import type { WorkflowRunner } from './workflow-runner'
 import { installWorkspaceIpc } from './workspace-ipc'
@@ -347,6 +348,8 @@ const reviewWatch = new ReviewWatch()
 let backupStore: BackupStore | null = null
 const backups = () => (backupStore ??= new BackupStore(app.getPath('userData')))
 let worktreeRevision=0
+// 67단계: 일감 · pane 폴더 · 보관 상태가 바뀔 때만 revision 을 올린다 — 이름 · 선택 같은 저장이 정리 중 사용 검사를 막지 않게
+let worktreeUse=''
 const pendingWorktreeCwds=new Map<symbol,string>()
 let lastWritten: AppState | null = null // 디스크에 있는 상태 — 다음 상태와 비교해 백업 이유를 정한다
 let lastSettingsBackup = 0
@@ -751,6 +754,7 @@ if (!app.requestSingleInstanceLock()) {
     lastState = loaded.state
     // 상태에 없는 pane 의 에이전트 기록 파일을 지운다(닫힌 pane · 지난 실행의 찌꺼기)
     agentEvents?.keepOnly(new Set(loaded.state.tasks.flatMap((t) => Object.keys(t.panes))))
+    worktreeUse = worktreeUseKey(loaded.state.tasks)
     worktreeRevision++
     stateFile = file
     if (file.canWrite) {
@@ -786,7 +790,8 @@ if (!app.requestSingleInstanceLock()) {
     if (bytes > MAX_STATE_BYTES) return
     const state = normalizeState(raw, randomUUID)
     lastState = state
-    worktreeRevision++
+    const use = worktreeUseKey(state.tasks)
+    if (use !== worktreeUse) { worktreeUse = use; worktreeRevision++ }
     if (stateFile?.canWrite) {
       secretOpts = optsFrom(state.settings)
       updatePrefs = prefsFrom(state.settings)

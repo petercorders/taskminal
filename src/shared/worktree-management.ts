@@ -130,6 +130,10 @@ export interface WorktreeApi {
   clean(root: string, items: WorktreeCleanItem[]): Promise<WorktreeCleanResult[]>
 }
 
+/** 확인한 대상과 같은 줄인가 — 경로 · 공유 Git 정보 · HEAD · 브랜치가 모두 같아야 한다 */
+export const sameTarget = (a: WorktreeSnapshot, b: WorktreeSnapshot): boolean =>
+  a.path === b.path && a.commonDir === b.commonDir && a.head === b.head && a.branch === b.branch
+
 export const isWorktreeOid = (value: unknown): value is string =>
   typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value)
 
