@@ -8,6 +8,7 @@ import {
   IMAGE_MAX_BYTES,
   IMAGE_MAX_COUNT,
   IMAGE_MIMES,
+  agentCard,
   chatStatus,
   foldBlocks,
   isChatEvent,
@@ -18,6 +19,7 @@ import {
   type ChatEvent,
   type ChatImage,
   type ChatPermission,
+  type ToolItem,
 } from '../shared/chat'
 import { conversationMessage } from '../shared/conversation-search'
 import { Icon } from './icons'
@@ -518,6 +520,16 @@ export function ChatPane(p: Props) {
   const permName = CHAT_PERMISSIONS.find((x) => x.id === p.permission)?.name ?? ''
   const lastCtx = [...events].reverse().find((e): e is Extract<ChatEvent, { t: 'turn_end' }> => e.t === 'turn_end' && e.ctxPct !== undefined)?.ctxPct
 
+  /** 끝난 도구가 고친 파일마다 'diff 열기' 카드 — 하위 에이전트가 고친 파일도 그 카드 아래에 (68) */
+  const diffCards = (items: readonly ToolItem[]) =>
+    editedPaths(items).map((path) => (
+      <div key={path} className="chat-diff-card" data-testid="chat-diff-card">
+        <span className="chat-diff-path">{path}</span>
+        <button type="button" onClick={() => p.onOpenDiff(path)}>
+          diff 열기 →
+        </button>
+      </div>
+    ))
   const renderBlock = (b: ChatBlock) => {
     switch (b.kind) {
       case 'user': {
@@ -583,15 +595,54 @@ export function ChatPane(p: Props) {
                 ))}
               </ul>
             )}
-            {st[1] !== 'run' &&
-              editedPaths(b.items).map((path) => (
-                <div key={path} className="chat-diff-card" data-testid="chat-diff-card">
-                  <span className="chat-diff-path">{path}</span>
-                  <button type="button" onClick={() => p.onOpenDiff(path)}>
-                    diff 열기 →
-                  </button>
-                </div>
-              ))}
+            {st[1] !== 'run' && diffCards(b.items)}
+          </div>
+        )
+      }
+      case 'agent': {
+        // 68단계: 하위 에이전트 카드 — 진행 · 끝난 뒤 요약, 하위 에이전트가 부른 도구는 펼쳐 본다(본 흐름에 섞지 않는다)
+        const c = agentCard(b.item)
+        const sub = b.item.sub
+        const isOpen = !!open[b.key]
+        return (
+          <div key={b.key} className="chat-agent" data-testid="chat-block" data-kind="agent" data-state={c.tone}>
+            <div className="chat-agent-head">
+              <span className="chat-tool-name">{b.item.name}</span>
+              <span className="chat-agent-desc" title={b.item.summary}>
+                {b.item.summary}
+              </span>
+              {b.item.agent?.bg && <span className="chat-agent-bg">백그라운드</span>}
+              <span className={`chat-tools-state ${c.tone}`}>{c.label}</span>
+            </div>
+            {c.progress && (
+              <div className="chat-agent-progress" data-testid="chat-agent-progress">
+                {c.progress}
+              </div>
+            )}
+            {c.summary && (
+              <div className="chat-agent-summary" data-testid="chat-agent-summary">
+                {c.summary}
+              </div>
+            )}
+            {c.detail && <pre className="chat-tool-tail">{c.detail}</pre>}
+            {sub.length > 0 && (
+              <button type="button" className="chat-agent-toggle" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [b.key]: !isOpen }))}>
+                <span aria-hidden>{isOpen ? '▾' : '▸'}</span>
+                하위 도구 {sub.length}개
+              </button>
+            )}
+            {isOpen && (
+              <ul className="chat-tools-items">
+                {sub.map((i) => (
+                  <li key={i.id} className={i.state} data-testid="chat-agent-sub-item">
+                    <span className="chat-tool-name">{i.name}</span> {i.summary}
+                    {i.sub.length > 0 && ` · 하위 도구 ${i.sub.length}개`}
+                    {i.tail && <pre className="chat-tool-tail">{i.tail}</pre>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {c.tone !== 'run' && diffCards(sub)}
           </div>
         )
       }
