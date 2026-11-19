@@ -62,3 +62,32 @@
 .worktree-pending p { margin: 0; }
 .worktree-panel .dialog-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .worktree-panel:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--space-half); }
+.worktree-flags > .worktree-merge.merged { border-color: var(--done); }
+/* 67단계: 병합된 것 정리 — 미리보기 · 결과 */
+.worktree-cleanup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+.worktree-cleanup h3 { margin: 0; font-size: 15px; line-height: 1.5; }
+.worktree-cleanup p { margin: 0; }
+.worktree-cleanup-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  list-style: none;
+}
+.worktree-cleanup-item { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; cursor: pointer; }
+.worktree-cleanup-item > input { flex: none; margin-top: var(--space-1); }
+.worktree-cleanup-text { display: flex; flex-direction: column; min-width: 0; }
+.worktree-cleanup-excluded > summary { cursor: pointer; color: var(--muted); font-size: 12px; }

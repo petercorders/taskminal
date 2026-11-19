@@ -6,6 +6,7 @@ import { realpath } from 'node:fs/promises'
 import { IPC } from '../shared/ipc'
 import type { AppState } from '../shared/types'
 import { validWorktreeJournal, type WorktreeJournalState } from '../shared/worktree-management'
+import { usedTaskPaths } from '../shared/worktree-cleanup'
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
 import { configured } from './development-tools'
@@ -26,8 +27,9 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
     let paths:string[]=taskPaths(),warning=''
     try{paths=await used()}catch{warning='실행 중인 셸의 폴더를 확인하지 못했어요. 상태를 확인하기 전에는 정리하지 않아요.'}
     const result=await service.list(authorized,paths)
-    const tasks=await Promise.all((d.state()?.tasks.filter(t=>!t.host)??[]).map(async task=>({id:task.id,name:task.name,paths:await Promise.all([task.cwd,...Object.values(task.panes).map(p=>p.cwd)].map(p=>realpath(expand(p)).catch(()=>expand(p))))})))
-    return {...result,entries:result.entries.map(entry=>({...entry,tasks:tasks.filter(t=>t.paths.some(path=>inside(entry.path,path))).map(({id,name})=>({id,name})),...(warning?{removable:false,reasons:[...entry.reasons,warning]}:{})}))}
+    const tasks=await Promise.all((d.state()?.tasks.filter(t=>!t.host)??[]).map(async task=>({id:task.id,name:task.name,archived:task.archivedAt!==undefined,paths:await Promise.all([task.cwd,...Object.values(task.panes).map(p=>p.cwd)].map(p=>realpath(expand(p)).catch(()=>expand(p))))})))
+    // 67단계: own = 일감 폴더(paths[0])가 이 worktree 안 — pane 만 둔 다른 폴더 일감은 정리와 함께 보관하지 않는다
+    return {...result,entries:result.entries.map(entry=>({...entry,tasks:tasks.filter(t=>t.paths.some(path=>inside(entry.path,path))).map(({id,name,archived,paths})=>({id,name,own:inside(entry.path,paths[0]!),archived})),...(warning?{removable:false,cleanable:false,reasons:[...entry.reasons,warning]}:{})}))}
   })
   // 62단계: 만든 것이 확인됐고 그 일감 폴더에 환경 설정이 있으면 답에 실어, 패널이 환경 준비 미리보기로 잇는다
   ipcMain.handle(IPC.worktreesCreate,async(event,dir,input)=>{const authorized=root(event,dir),result=await service.create(authorized,input);return result.state==='created'&&await configured(authorized)?{...result,environment:true}:result})
@@ -38,5 +40,11 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
     return result
   })
   ipcMain.handle(IPC.worktreesRemove,(event,dir,target)=>service.remove(root(event,dir),target))
+  // 67단계: 병합된 것 정리 — renderer 가 연결 일감을 보관하고 상태를 먼저 보낸 뒤 부른다. 보관 상태인 그 일감들의 폴더만 사용 경로에서 빼고,
+  // 실제 셸 cwd · 열리는 중 · 다른 일감(보관 일감 포함)은 39 그대로 막는다
+  ipcMain.handle(IPC.worktreesClean,(event,dir,items)=>{
+    const authorized=root(event,dir)
+    return service.clean(authorized,items,async exclude=>{const live=await d.liveCwds();return [...usedTaskPaths(d.state()?.tasks??[],exclude).map(expand),...d.pendingPaths().map(expand),...live]})
+  })
   return service
 }

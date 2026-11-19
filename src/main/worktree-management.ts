@@ -4,11 +4,12 @@ import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
-  isWorktreeOid, parseWorktrees, validWorktreeJournal,
-  type CreateWorktree, type ManagedWorktree, type WorktreeCreateReceipt,
-  type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
+  isWorktreeOid, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
+  type CreateWorktree, type ManagedWorktree, type MergeInfo, type WorktreeCleanItem, type WorktreeCleanResult,
+  type WorktreeCreateReceipt, type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
   type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
 } from '../shared/worktree-management'
+import { classifyMerge, OWN_COMMIT } from '../shared/worktree-cleanup'
 
 export interface WorktreeJournal {
   load(fallback: WorktreeJournalState): WorktreeJournalState
@@ -42,6 +43,13 @@ interface Repository {
 interface Registry extends Repository {
   entries: ManagedWorktree[]
 }
+
+/** 67단계: 병합 판정의 기준 — origin/HEAD → origin/main · master → main · master. fetch 하지 않는다 */
+interface MergeBase { ref: string; oid: string }
+const BASE_FALLBACKS = ['refs/remotes/origin/main', 'refs/remotes/origin/master', 'refs/heads/main', 'refs/heads/master']
+/** 정리 직전 사용 경로 — 보관한 연결 일감(taskIds)의 폴더만 빼고 받는다 */
+export type WorktreeUsedFor = (taskIds: readonly string[]) => Promise<readonly string[]>
+const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 
 const EMPTY: WorktreeJournalState = { version: 1, creates: [] }
 const repositoryLocks = new Map<string, Promise<void>>()
@@ -110,10 +118,6 @@ async function locked<T>(key: string, job: () => Promise<T>): Promise<T> {
   await previous
   try { return await job() }
   finally { release(); if (repositoryLocks.get(key) === tail) repositoryLocks.delete(key) }
-}
-
-function sameTarget(a: WorktreeSnapshot, b: WorktreeSnapshot): boolean {
-  return a.path === b.path && a.commonDir === b.commonDir && a.head === b.head && a.branch === b.branch
 }
 
 function validateTarget(value: WorktreeSnapshot): void {
@@ -216,7 +220,7 @@ export class WorktreeManagement {
     return { ...repo, entries }
   }
 
-  private async used(entry: ManagedWorktree, paths: readonly string[]): Promise<boolean> {
+  private async used(entry: Pick<ManagedWorktree, 'path'>, paths: readonly string[]): Promise<boolean> {
     for (const path of paths) if (inside(entry.path, await canonicalLoose(path))) return true
     return false
   }
@@ -224,7 +228,7 @@ export class WorktreeManagement {
   private async inspect(entry: ManagedWorktree, usedCwds: readonly string[]): Promise<void> {
     try {
       entry.used = await this.used(entry, usedCwds)
-      if (entry.used) entry.reasons.push('이 앱의 일감이나 pane이 이 폴더를 사용 중이에요')
+      if (entry.used) entry.reasons.push(WORKTREE_USED_REASON)
       if (entry.bare || entry.prunable || entry.path === entry.commonDir || entry.reasons.includes('원래 폴더를 확인하지 못했어요')) return
       const owner = await this.gitPath(entry.path, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
       if (owner !== entry.commonDir) throw new Error('다른 저장소')
@@ -248,7 +252,9 @@ export class WorktreeManagement {
       if (entry.ignored) entry.reasons.push('Git이 무시하는 파일도 보존해야 해요')
       if (entry.unsafeIndex) entry.reasons.push('sparse·skip-worktree·assume-unchanged 상태라 정리하지 않아요')
       entry.removable = entry.reasons.length === 0 && !statusText
-    } catch { entry.reasons.push('상태 미확인 — 정리할 수 없어요'); entry.removable = false }
+      // 67단계: '사용 중' 만 빼면 정리할 수 있는가 — 연결 일감을 보관한 뒤의 정리 후보
+      entry.cleanable = entry.reasons.every((reason) => reason === WORKTREE_USED_REASON) && !statusText
+    } catch { entry.reasons.push('상태 미확인 — 정리할 수 없어요'); entry.removable = false; entry.cleanable = false }
   }
 
   /** 56단계: 환경 준비 대상 고르기용 — list() 는 워크트리마다 git status(무시한 파일까지)를 돌려 느릴 수 있어 등록 목록만 준다 */
@@ -261,15 +267,64 @@ export class WorktreeManagement {
     const registry = await this.registry(root)
     // Keep every entry for nesting and ownership decisions; never truncate the safety registry.
     const deadline = Date.now() + 15_000
+    const base = await this.mergeBase(registry.root)
     let cursor = 0
     await Promise.all(Array.from({ length: Math.min(4, registry.entries.length) }, async () => {
       while (cursor < registry.entries.length) {
         const entry = registry.entries[cursor++]
+        entry.current = inside(entry.path, registry.root)
         if (Date.now() >= deadline) entry.reasons.push('전체 조회 시간 제한 — 새로 읽어 주세요')
-        else await this.inspect(entry, usedCwds)
+        else {
+          await this.inspect(entry, usedCwds)
+          entry.merge = await this.mergeOf(registry.root, entry, base)
+        }
       }
     }))
     return registry
+  }
+
+  /** 67단계: 기준 브랜치 — 원격 기본(origin/HEAD)이 먼저, 없으면 main · master(원격 먼저). 못 찾으면 null(병합 모름) */
+  private async mergeBase(root: string): Promise<MergeBase | null> {
+    try {
+      const refs: string[] = []
+      const symbolic = await this.run(root, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'])
+      const target = symbolic.stdout.trim()
+      if (symbolic.code === 0 && !symbolic.timedOut && /^refs\/remotes\/origin\/[^\s\0]+$/.test(target)) refs.push(target)
+      for (const ref of [...refs, ...BASE_FALLBACKS]) {
+        const resolved = await this.run(root, ['rev-parse', '--verify', '-q', '--end-of-options', ref + '^{commit}'])
+        const oid = resolved.stdout.trim()
+        if (resolved.code === 0 && !resolved.timedOut && !resolved.truncated && isWorktreeOid(oid)) return { ref, oid }
+      }
+    } catch { /* 기준을 모르면 판정도 모름 */ }
+    return null
+  }
+
+  /** 조상 검사 + 브랜치 reflog 의 만든 지점 — 커밋 없이 새로 만든 worktree 는 조상이어도 병합됨이 아니다 */
+  private async mergeOf(root: string, entry: ManagedWorktree, base: MergeBase | null): Promise<MergeInfo | null> {
+    try {
+      let ancestor: boolean | null = null
+      let created: string | null = null
+      let committed = false
+      if (base && entry.head && entry.branch && !entry.primary && !entry.bare) {
+        const check = await this.run(root, ['merge-base', '--is-ancestor', entry.head, base.oid])
+        ancestor = check.timedOut || check.truncated ? null : check.code === 0 ? true : check.code === 1 ? false : null
+        if (ancestor) {
+          // 브랜치 reflog 전체(새 것부터) — 맨 끝이 만든 줄, 중간에 이 브랜치에서 커밋을 만든 줄이 있었는지
+          const lines = (await this.git(root, ['reflog', 'show', '--format=%H %gs', '--end-of-options', entry.branch])).split('\n').filter(Boolean)
+          created = /^([0-9a-f]{40}|[0-9a-f]{64}) branch: Created from /.exec(lines.at(-1) ?? '')?.[1] ?? null
+          committed = lines.some((line) => OWN_COMMIT.test(line.slice(line.indexOf(' ') + 1)))
+        }
+      }
+      const info = classifyMerge({ head: entry.head, branch: entry.branch, primary: entry.primary, bare: entry.bare, base, created, committed, ancestor })
+      if (info?.state === 'merged' && entry.head) {
+        const last = (await this.git(root, ['log', '-1', '--format=%ct%x09%s', entry.head, '--'])).replace(/\n$/, '')
+        const tab = last.indexOf('\t'), at = Number(last.slice(0, tab)) * 1000
+        if (tab > 0 && Number.isFinite(at)) info.last = { at, subject: last.slice(tab + 1).slice(0, 200) }
+      }
+      return info
+    } catch {
+      return entry.primary || entry.bare ? null : { state: 'unknown', base: base?.ref ?? null, reason: '병합 상태를 확인하지 못했어요' }
+    }
   }
 
   private find(registry: Registry, target: WorktreeSnapshot): ManagedWorktree {
@@ -336,7 +391,7 @@ export class WorktreeManagement {
     }
   }
 
-  async remove(root: string, confirmed: WorktreeSnapshot, usedCwds: readonly string[] = []): Promise<WorktreeRemoveResult> {
+  async remove(root: string, confirmed: WorktreeSnapshot, usedCwds: readonly string[] = [], fresh: (() => readonly string[] | Promise<readonly string[]>) | undefined = this.options.freshUsedCwds): Promise<WorktreeRemoveResult> {
     this.writable()
     validateTarget(confirmed)
     const initial = await this.repository(root)
@@ -345,14 +400,14 @@ export class WorktreeManagement {
       let registry = await this.registry(root)
       if (registry.commonDir !== initial.commonDir) throw new Error('원본 저장소가 바뀌었어요')
       let entry = this.find(registry, confirmed)
-      const paths = [...usedCwds, registry.root, ...(await this.options.freshUsedCwds?.() ?? [])]
+      const paths = [...usedCwds, registry.root, ...(await fresh?.() ?? [])]
       await this.inspect(entry, paths)
       if (!entry.removable) throw new Error(entry.reasons.join(' · ') || '정리할 수 없는 worktree예요')
       // Repeat membership/HEAD/lock/nesting checks after the asynchronous status probes.
       registry = await this.registry(root)
       entry = this.find(registry, confirmed)
       const usedRevision = this.options.usedRevision?.()
-      const finalPaths = [...usedCwds, registry.root, ...(await this.options.freshUsedCwds?.() ?? [])]
+      const finalPaths = [...usedCwds, registry.root, ...(await fresh?.() ?? [])]
       const used = await this.used(entry, finalPaths)
       if (entry.reasons.length || used || usedRevision !== this.options.usedRevision?.()) throw new Error('대상이 바뀌었거나 앱이 사용 중이에요. 정리하지 않았어요.')
       // External writers are not fenced by this in-app mutex; Git repeats its ordinary clean check.
@@ -360,6 +415,47 @@ export class WorktreeManagement {
       catch { /* Query real membership and filesystem state even when the command reply is lost. */ }
       return this.reconcileRemove(registry.root, entry.path)
     })
+  }
+
+  /**
+   * 67단계: 병합된 것 정리 — 고른 순서대로 하나씩. 줄마다 등록 목록에서 확인한 경로 · HEAD 로 다시 찾아 병합됨을 다시 판정하고,
+   * 보관한 연결 일감의 셸이 끝나기를 잠깐 기다린 뒤 39 의 remove(같은 안전 검사 · force 없음)로 지운다.
+   * 실행 전에 막히면 unchanged, 결과를 모르면 그 뒤 줄은 skipped(모르는 상태에서 더 지우지 않는다).
+   */
+  async clean(root: string, items: readonly WorktreeCleanItem[], usedFor: WorktreeUsedFor, settleMs = 3000): Promise<WorktreeCleanResult[]> {
+    this.writable()
+    if (!Array.isArray(items) || items.length === 0 || items.length > 100) throw new Error('정리할 워크트리를 다시 골라 주세요')
+    for (const item of items) {
+      if (!item || typeof item !== 'object' || !Array.isArray(item.taskIds) || item.taskIds.length > 100 ||
+        item.taskIds.some((id: unknown) => typeof id !== 'string' || !id || id.length > 200)) throw new Error('정리할 워크트리를 다시 골라 주세요')
+      validateTarget(item.target)
+    }
+    const results: WorktreeCleanResult[] = []
+    let stopped = false
+    let base: MergeBase | null | undefined // 한 번의 정리 안에서는 기준을 한 번만 푼다
+    for (const item of items) {
+      const path = item.target.path
+      if (stopped) { results.push({ state: 'skipped', path, message: '앞 정리 결과를 확인하지 못해 멈췄어요. 목록을 다시 읽어 주세요.' }); continue }
+      try {
+        const registry = await this.registry(root)
+        const entry = this.find(registry, item.target)
+        if (base === undefined) base = await this.mergeBase(registry.root)
+        const merge = await this.mergeOf(registry.root, entry, base)
+        if (merge?.state !== 'merged') throw new Error('병합됨을 다시 확인하지 못했어요. 정리하지 않았어요.')
+        const fresh = () => usedFor(item.taskIds)
+        // 보관이 끈 셸(SIGHUP, 2초 뒤 SIGKILL)이 아직 이 폴더에 있으면 잠깐 기다린다 — 끝까지 남으면 remove 가 막는다
+        if (item.taskIds.length) {
+          const until = Date.now() + settleMs
+          while (Date.now() < until && await this.used(entry, await fresh())) await sleep(200)
+        }
+        const result = await this.remove(root, item.target, [], fresh)
+        results.push(result)
+        if (result.state === 'unknown') stopped = true
+      } catch (error) {
+        results.push({ state: 'unchanged', path, message: error instanceof Error ? error.message : '정리하지 않았어요.' })
+      }
+    }
+    return results
   }
 
   private async reconcileRemove(root: string, path: string): Promise<WorktreeRemoveResult> {
