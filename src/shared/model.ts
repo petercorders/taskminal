@@ -887,6 +887,7 @@ function parseTask(v: unknown, settings: Settings, newId: NewId, seen: SeenIds):
     ...(typeof v.lastViewedAt === 'number' && Number.isFinite(v.lastViewedAt) && v.lastViewedAt > 0 ? { lastViewedAt: v.lastViewedAt } : {}),
     ...(typeof v.archivedAt === 'number' && Number.isFinite(v.archivedAt) && v.archivedAt > 0 ? { archivedAt: v.archivedAt } : {}),
     ...(isStr(v.host) && isSshHost(v.host) ? { host: v.host, ...(v.remoteTmux === false ? { remoteTmux: false } : {}) } : {}),
+    ...(isObj(v.parent) && isId(v.parent.taskId) && v.parent.taskId !== v.id ? { parent: { taskId: v.parent.taskId, ...(isId(v.parent.paneId) ? { paneId: v.parent.paneId } : {}) } } : {}),
   }
 }
 

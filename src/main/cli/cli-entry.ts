@@ -1,11 +1,11 @@
 // `taskminal` 명령 (24단계) — 앱의 Electron 을 node 로(ELECTRON_RUN_AS_NODE) 돌린다(out/main/cli.js).
 // 인자 → 소켓(<userData>/cli.sock) 한 줄 JSON → 답을 찍고 종료 코드. 앱이 꺼져 있으면 3.
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { CLI_PROTOCOL, cliSocketPath, EXIT, HELP, parseArgs, type CliReply } from '../../shared/cli'
+import { CLI_PROTOCOL, cliSocketPath, EXIT, HELP, parseArgs, retryHint, withRequestId, type CliReply } from '../../shared/cli'
 import { isPaneId } from '../../shared/pty'
 import { isAbsolutePath, platformUserData } from '../../shared/platform'
 
@@ -40,8 +40,12 @@ function main(): void {
   }
   // 상대 경로 폴더는 이 명령을 친 폴더 기준 — 앱은 그 폴더를 모른다
   if (parsed.req.op === 'task.new' && parsed.req.cwd && !isAbsolutePath(parsed.req.cwd) && parsed.req.cwd !== '~' && !parsed.req.cwd.startsWith('~/')) parsed.req.cwd = resolve(parsed.req.cwd)
+  // 69: worktree 위임은 요청 번호를 여기서 붙인다 — 결과를 모르면 같은 번호로 다시 불러 두 번 만들지 않게
+  const req = withRequestId(parsed.req, randomUUID)
+  const hint = retryHint(req)
+  const again = () => hint && process.stderr.write(`taskminal: ${hint}\n`)
   const self = process.env['TASKMINAL_PANE_ID']
-  const body = { v: CLI_PROTOCOL, ...parsed.req, ...(isPaneId(self) ? { self } : {}) }
+  const body = { v: CLI_PROTOCOL, ...req, ...(isPaneId(self) ? { self } : {}) }
   const sock = connect(socketPath(process.env))
   let buf = ''
   let answered = false
@@ -56,6 +60,7 @@ function main(): void {
       return process.exit(EXIT.down)
     }
     process.stderr.write(`taskminal: 앱에 연결하지 못했어요: ${e.message}\n`)
+    again()
     process.exit(EXIT.error)
   })
   sock.on('close', () => {
@@ -66,6 +71,7 @@ function main(): void {
       r = JSON.parse(buf) as CliReply
     } catch {
       process.stderr.write('taskminal: 앱과 연결이 끊겼어요 — 반영됐는지 `taskminal list` 로 확인해 주세요\n')
+      again()
       return process.exit(EXIT.error)
     }
     if (r.ok) {
@@ -81,6 +87,8 @@ function main(): void {
   process.on('SIGINT', () => {
     answered = true
     sock.destroy()
+    // 69: 앱의 worktree 만들기는 끊기지 않고 끝까지 간다 — 결과는 같은 번호로 다시 불러 받는다
+    again()
     process.exit(130)
   })
 }

@@ -5,6 +5,7 @@ import { formatDuration, taskActivity, type PaneActivity } from './activity'
 import { hasPane, paneIds } from './layout'
 import { tabShownLabel } from './model'
 import { isPaneId } from './pty'
+import { REQUEST_ID_RE, validDelegateBranch } from './delegation'
 import type { AppState, Id, Task } from './types'
 
 export const CLI_PROTOCOL = 1
@@ -25,7 +26,8 @@ export type CliRequest = { self?: string } & (
   | {op:'workflow';action:'view'|'append'|'message'|'answer';runId?:string;input?:unknown;messageId?:string;text?:string}
   | ({ op: 'browser' } & BrowserCommand)
   | { op: 'list' }
-  | { op: 'task.new'; name: string; cwd?: string; template?: string; group?: string; status?: string }
+  /** worktree: 69단계 — 부른 터미널의 저장소에 새 브랜치 worktree 를 만들어 그 폴더로 일감(부모 기록). request = 39 생성 기록의 요청 번호(CLI 가 붙인다) */
+  | { op: 'task.new'; name: string; cwd?: string; template?: string; group?: string; status?: string; worktree?: string; base?: string; request?: string }
   | { op: 'task.move'; task?: string; status?: string; group?: string }
   | { op: 'task.open'; task?: string }
   | { op: 'task.rename'; task?: string; name: string }
@@ -75,7 +77,7 @@ interface Spec {
 
 const SPECS: Record<string, Spec> = {
   list: { flags: ['json'], pos: [0, 0] },
-  'task new': { values: ['cwd', 'template', 'group', 'status'], pos: [1, 1] },
+  'task new': { values: ['cwd', 'template', 'group', 'status', 'worktree', 'base', 'request'], pos: [1, 1] },
   'task move': { values: ['status', 'group'], pos: [0, 1] },
   'task open': { pos: [0, 1] },
   'task rename': { pos: [1, 2] },
@@ -178,9 +180,19 @@ function build(name: string, pos: string[], v: Record<string, string>, f: Set<st
   switch (name) {
     case 'list':
       return { op: 'list' }
-    case 'task new':
+    case 'task new': {
       if (!pos[0]!.trim()) return '일감 이름이 비었어요'
-      return { op: 'task.new', name: pos[0]!, ...opt('cwd', v['cwd']), ...opt('template', v['template']), ...opt('group', v['group']), ...opt('status', v['status']) }
+      const wt = v['worktree']
+      if (wt === undefined && (v['base'] !== undefined || v['request'] !== undefined)) return '--base · --request 는 --worktree 와 함께 써요'
+      if (wt !== undefined) {
+        if (v['cwd'] !== undefined) return '--cwd 와 --worktree 는 함께 쓰지 않아요 — 만든 worktree 폴더가 새 일감의 폴더예요'
+        const bad = validDelegateBranch(wt)
+        if (bad) return bad
+        if (v['base'] !== undefined && !okBase(v['base'])) return '--base 를 확인해 주세요 (브랜치 · 태그 · 커밋)'
+        if (v['request'] !== undefined && !REQUEST_ID_RE.test(v['request'])) return '--request 는 영문 · 숫자 · _ · - 로 100자까지'
+      }
+      return { op: 'task.new', name: pos[0]!, ...opt('cwd', v['cwd']), ...opt('template', v['template']), ...opt('group', v['group']), ...opt('status', v['status']), ...opt('worktree', wt), ...opt('base', v['base']), ...opt('request', v['request']) }
+    }
     case 'task move':
       if (v['status'] === undefined && v['group'] === undefined) return '--status 나 --group 을 적어 주세요'
       return { op: 'task.move', ...opt('task', pos[0]), ...opt('status', v['status']), ...opt('group', v['group']) }
@@ -261,6 +273,8 @@ const str = (v: unknown, max = TEXT_MAX): v is string => typeof v === 'string' &
 const optStr = (v: unknown, max = 4096): boolean => v === undefined || str(v, max)
 const okText = (v: unknown): v is string => str(v) && v.trim().length > 0
 const okMs = (v: unknown, min = 0): v is number => Number.isInteger(v) && (v as number) >= min && (v as number) <= WAIT_MAX_MS
+/** worktree 기준 ref — 39 create 의 검사와 같은 한도 */
+const okBase = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= 256 && !v.includes('\0')
 
 /** 같은 사용자의 아무 프로그램이나 소켓에 쓸 수 있다 — 모양을 다시 본다(모르는 칸은 버린다) */
 export function isCliRequest(v: unknown): v is CliRequest {
@@ -272,8 +286,13 @@ export function isCliRequest(v: unknown): v is CliRequest {
     case 'browser':return validBrowserCommand(o)
     case 'list':
       return true
-    case 'task.new':
-      return okText(o['name']) && ['cwd', 'template', 'group', 'status'].every((k) => optStr(o[k]))
+    case 'task.new': {
+      if (!okText(o['name']) || !['cwd', 'template', 'group', 'status'].every((k) => optStr(o[k]))) return false
+      // 69: worktree 면 요청 번호가 있어야 하고(CLI 가 붙인다) 폴더는 정하지 않는다
+      if (o['worktree'] === undefined) return o['base'] === undefined && o['request'] === undefined
+      return typeof o['worktree'] === 'string' && validDelegateBranch(o['worktree']) === null && o['cwd'] === undefined &&
+        (o['base'] === undefined || okBase(o['base'])) && typeof o['request'] === 'string' && REQUEST_ID_RE.test(o['request'])
+    }
     case 'task.move':
       return ['task', 'status', 'group'].every((k) => optStr(o[k])) && (o['status'] !== undefined || o['group'] !== undefined)
     case 'task.open':
@@ -311,6 +330,20 @@ export function isCliRequest(v: unknown): v is CliRequest {
     default:
       return false
   }
+}
+
+// ─── 69: 요청 번호 (CLI 쪽) ───────────────────────────────────
+
+/** worktree 위임에 요청 번호가 없으면 하나 붙인다 — 같은 번호로 다시 부르면 39 기록이 새 worktree 를 만들지 않는다 */
+export function withRequestId(req: CliRequest, make: () => string): CliRequest {
+  return req.op === 'task.new' && req.worktree !== undefined && req.request === undefined ? { ...req, request: make() } : req
+}
+
+/** 실패 · 연결 끊김 뒤 stderr 한 줄 — 결과를 모를 때 같은 번호로 다시 부르게 */
+export function retryHint(req: CliRequest): string | null {
+  return req.op === 'task.new' && req.worktree !== undefined && req.request !== undefined
+    ? `같은 요청으로 다시 하려면 같은 명령에 --request ${req.request} 를 붙여 주세요 (worktree 를 두 번 만들지 않아요)`
+    : null
 }
 
 // ─── 이름 → id ───────────────────────────────────────────────
@@ -458,6 +491,8 @@ export const HELP = `taskminal — Taskminal 의 일감 · 탭 · 터미널을 �
 
   taskminal list [--json]                          일감 · 탭 · 터미널과 활동 (← 여기 = 이 터미널)
   taskminal task new <이름> [--cwd 폴더] [--template 이름] [--group 이름] [--status 이름]
+  taskminal task new <이름> --worktree <새 브랜치> [--base <ref>] [--request <번호>]
+                                                   이 터미널의 저장소에 worktree 를 만들어 맡길 일감으로 → 일감 id
   taskminal task move [<일감>] [--status 이름] [--group 이름]
   taskminal task open [<일감>]                     화면에 열기
   taskminal task rename [<일감>] <새 이름>
@@ -502,6 +537,8 @@ export interface PaneTarget {
   chat?: { agent: 'claude' | 'codex'; sessionId?: string; forkAt?: string }
   /** 아직 보내지 않은 시작 명령이 있다 */
   pending: boolean
+  /** 69: 터미널에서 지금 도는 에이전트(claude · codex) — 있을 때만 pane send 에 보낸 이 머리를 붙인다 */
+  runs?: 'claude' | 'codex'
 }
 
 /** main 이 창에 묻는 것: 화면 상태를 바꾸는 CLI 요청 그대로 · 이름 풀기(필요하면 그 탭을 띄운다) */
@@ -511,9 +548,13 @@ export type UiRequest =
   | {op:'workflow.prepare'; taskId:string;paneId:string;tabId:string;agent:'claude'|'codex';runId:string;label:string;cwd?:string;self?:string}
   | Exclude<CliRequest, { op: 'workflow' | 'browser' | 'pane.send' | 'pane.read' | 'pane.wait' | 'chat.send' | 'chat.wait' | 'chat.read' }>
   | { op: 'pane.resolve'; pane?: string; self?: string }
+  /** 69: 위임 — 부른 pane 의 일감 · 폴더(쓰기 전에 템플릿 · 상태 · 묶음 이름도 본다) · main 이 정한 id 로 부모를 기록한 일감 만들기 */
+  | { op: 'delegate.source'; template?: string; group?: string; status?: string; self?: string }
+  | { op: 'delegate.prepare'; taskId: string; name: string; cwd: string; parent: { taskId: string; paneId: string }; template?: string; group?: string; status?: string; self?: string }
   | { op: 'chat.panes'; panes: string[]; all: boolean; task?: string; self?: string }
 
-export type UiReply = ({ ok: true; text?: string; data?: unknown; exit?: number; target?: PaneTarget; targets?: PaneTarget[] }) | { ok: false; error: string; candidates?: string[]; exit?: number }
+/** sender: 69 — 부른 pane 이 받는 pane 과 다르면 보낸 이 머리(`[taskminal: … 에서 보냄]`) */
+export type UiReply = ({ ok: true; text?: string; data?: unknown; exit?: number; target?: PaneTarget; targets?: PaneTarget[]; sender?: string }) | { ok: false; error: string; candidates?: string[]; exit?: number }
 
 const isTarget = (v: unknown): v is PaneTarget =>
   isObj(v) &&
@@ -522,6 +563,7 @@ const isTarget = (v: unknown): v is PaneTarget =>
   (v['kind'] === 'terminal' || v['kind'] === 'chat' || v['kind'] === 'review') &&
   str(v['cwd'], 4096) &&
   typeof v['pending'] === 'boolean' &&
+  (v['runs'] === undefined || v['runs'] === 'claude' || v['runs'] === 'codex') &&
   (v['chat'] === undefined || (isObj(v['chat']) && (v['chat']['agent'] === 'claude' || v['chat']['agent'] === 'codex')))
 
 /** 창이 보낸 답 — 모양이 틀리면 null (main 이 '앱 화면이 답하지 않아요' 로) */
@@ -537,6 +579,7 @@ export function parseUiReply(v: unknown): UiReply | null {
   }
   if (v['text'] !== undefined && !str(v['text'], 1_000_000)) return null
   if (v['target'] !== undefined && !isTarget(v['target'])) return null
+  if (v['sender'] !== undefined && !(str(v['sender'], 1000) && !/[\r\n]/.test(v['sender']))) return null
   if (v['targets'] !== undefined && !(Array.isArray(v['targets']) && v['targets'].length <= 200 && v['targets'].every(isTarget))) return null
   return v as UiReply
 }

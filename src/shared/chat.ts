@@ -582,6 +582,28 @@ export function openAgents(events: readonly ChatEvent[]): string[] {
 }
 
 export type ChatState = 'new' | 'run' | 'wait' | 'done' | 'fail' | 'stopped'
+export type TurnStop = Extract<ChatState, 'done' | 'fail' | 'wait' | 'stopped'>
+
+/**
+ * 턴이 멈춘 사건 → 그때의 상태 — `chat wait`(24) 와 맡긴 일감의 부모 알림(69)이 같이 쓴다.
+ * 68 의 하위 에이전트 사건(agent) · 도구 · 글은 멈춤이 아니다(하위 에이전트의 끝은 agent end 로 온다).
+ */
+export function turnStop(ev: ChatEvent): TurnStop | null {
+  switch (ev.t) {
+    case 'turn_end':
+      return ev.ok ? 'done' : 'fail'
+    case 'stopped':
+      return 'stopped'
+    case 'error':
+      return 'fail'
+    case 'permission':
+    case 'question':
+      return 'wait'
+    default:
+      return null
+  }
+}
+
 export interface ChatStatus {
   state: ChatState
   /** 실행 중이면 마지막으로 보낸 시각 */

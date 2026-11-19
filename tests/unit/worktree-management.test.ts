@@ -217,6 +217,22 @@ describe('real Git worktree management', () => {
     expect(writes).toBe(1)
   })
 
+  // 69단계: 이미 있는 브랜치는 기록 전에 거절 — 전에는 worktree add 가 실패(종료 255)해 '결과 모름' 영수증이 남았다
+  it('refuses an existing branch before journaling or running add, but a repeated request still reconciles', async () => {
+    const f = repository()
+    git(f.root, 'branch', 'taken', f.oid)
+    let writes = 0
+    const run: WorktreeGit = async (cwd, args) => { if (args[0] === 'worktree' && args[1] === 'add') writes++; return f.run(cwd, args) }
+    await expect(f.service({ run }).create(f.root, { requestId: 'taken', branch: 'taken', base: f.oid, path: join(f.temporary, 'taken') })).rejects.toThrow('이미 있는 브랜치예요')
+    expect(writes).toBe(0)
+    expect(existsSync(f.journalFile)).toBe(false)
+    expect(existsSync(join(f.temporary, 'taken'))).toBe(false)
+    const input = { requestId: 'mine', branch: 'mine', base: f.oid, path: join(f.temporary, 'mine') }
+    expect((await f.service({ run }).create(f.root, input)).state).toBe('created')
+    expect(await f.service({ run }).create(f.root, input)).toMatchObject({ state: 'created', existing: true })
+    expect(writes).toBe(1)
+  })
+
   it('preserves corrupt journals and refuses all Git writes', async () => {
     const f = repository(), row = await linked(f)
     writeFileSync(f.journalFile, 'broken')

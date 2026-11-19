@@ -263,3 +263,44 @@ describe('lastTurnText', () => {
     expect(lastTurnText([])).toBe('')
   })
 })
+
+describe('보낸 이 머리 · 위임 (69)', () => {
+  const H = '[taskminal: 부모 › 대화 (p0) 에서 보냄]'
+  const withSender = (target: PaneTarget, sender?: string) => async (req: UiRequest): Promise<UiReply> =>
+    req.op === 'pane.resolve' || req.op === 'chat.new' ? { ok: true, target, ...(sender ? { sender } : {}) } : { ok: true }
+
+  it('chat send: 창이 보낸 이를 주면 머리 줄 + 글, 안 주면(사람 · 같은 pane · 앱 밖) 글 그대로', async () => {
+    const sent: string[] = []
+    const chat = (askUi: CliServerDeps['askUi']) => setup({ askUi, chat: { send: async (_t, text) => (sent.push(text), 'ok'), history: async () => [], subscribe: () => () => {} } })
+    await chat(withSender(chatT('c1'), H)).server.handle({ op: 'chat.send', pane: 'c1', text: '이거 해 줘', self: 'p0' })
+    await chat(withSender(chatT('c1'))).server.handle({ op: 'chat.send', pane: 'c1', text: '이거 해 줘' })
+    expect(sent).toEqual([`${H}\n이거 해 줘`, '이거 해 줘'])
+  })
+
+  it('chat new: 첫 글에도 보낸 이 머리', async () => {
+    const sent: string[] = []
+    const { server } = setup({ askUi: withSender(chatT('c9'), H), chat: { send: async (_t, text) => (sent.push(text), 'ok'), history: async () => [], subscribe: () => () => {} } })
+    await server.handle({ op: 'chat.new', agent: 'claude', where: 'right', text: '맡길 일', self: 'p0' })
+    expect(sent).toEqual([`${H}\n맡길 일`])
+  })
+
+  it('pane send: 터미널에서 claude · codex 가 돌 때만 같은 줄 머리, 셸이면 보낸 이가 있어도 글 그대로', async () => {
+    const tui = setup({ askUi: withSender({ ...term, runs: 'claude' }, H) })
+    await tui.server.handle({ op: 'pane.send', pane: 'p1', text: '테스트 돌려', enter: true, self: 'p0' })
+    expect(tui.written).toEqual([['p1', `${H} 테스트 돌려\r`]])
+    const shell = setup({ askUi: withSender(term, H) })
+    await shell.server.handle({ op: 'pane.send', pane: 'p1', text: 'npm test', enter: true, self: 'p0' })
+    expect(shell.written).toEqual([['p1', 'npm test\r']])
+  })
+
+  it('task new --worktree 는 위임으로, 아니면 창에 그대로', async () => {
+    const delegated: unknown[] = []
+    const { server, asked } = setup({ delegate: async (req) => (delegated.push(req), { ok: true, data: { task: 't' } }) })
+    expect(await server.handle({ op: 'task.new', name: 'x', worktree: 'b', request: 'r', self: 'p0' })).toEqual({ ok: true, data: { task: 't' } })
+    expect(delegated).toEqual([{ op: 'task.new', name: 'x', worktree: 'b', request: 'r', self: 'p0' }])
+    expect(asked).toEqual([])
+    await server.handle({ op: 'task.new', name: 'y' })
+    expect(asked).toEqual([{ op: 'task.new', name: 'y' }])
+    expect(await setup().server.handle({ op: 'task.new', name: 'x', worktree: 'b', request: 'r' })).toMatchObject({ ok: false })
+  })
+})

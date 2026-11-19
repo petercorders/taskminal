@@ -13,7 +13,7 @@ const GUIDE = [
   'taskminal browser tabs "$TASKMINAL_TASK_ID" --json   # 이 일감의 브라우저 탭 — 출력의 selectedTabId 가 TAB',
   'taskminal browser navigate "$TASKMINAL_TASK_ID" --tab TAB --url http://localhost:3000   # 그 탭에서 주소 열기',
   'taskminal browser snapshot "$TASKMINAL_TASK_ID" --tab TAB --json   # 열린 페이지의 글 · 요소 읽기',
-  'taskminal help   # 브라우저 누르기 · 채우기 등 나머지 명령과 옵션',
+  'taskminal help   # 새 worktree 일감에 맡기기(task new --worktree) · 브라우저 누르기 등 나머지 명령과 옵션',
 ].join('\n')
 
 export function agentGuide(): string {
