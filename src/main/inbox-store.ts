@@ -4,7 +4,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { markInboxRead, mergeInbox, parseInboxEntry, pruneInbox, type InboxEntry, type InboxRead } from '../shared/inbox'
+import { INBOX_BODY_MAX, INBOX_TITLE_MAX, markInboxRead, mergeInbox, parseInboxEntry, pruneInbox, type InboxEntry, type InboxRead } from '../shared/inbox'
 import { redact, type SecretOptions } from '../shared/redact'
 
 export class InboxStore {
@@ -67,7 +67,8 @@ export class InboxStore {
     const parsed = parseInboxEntry(input)
     if (!parsed) return Promise.reject(new Error('알림 기록 모양을 확인해 주세요'))
     const opts = this.redactOptions()
-    const entry: InboxEntry = { ...parsed, title: redact(parsed.title, opts), body: redact(parsed.body, opts) }
+    // 가린 글이 원래보다 길 수 있어 다시 자른다(다음 읽기에서 모양 검사에 버려지지 않게)
+    const entry: InboxEntry = { ...parsed, title: redact(parsed.title, opts).slice(0, INBOX_TITLE_MAX), body: redact(parsed.body, opts).slice(0, INBOX_BODY_MAX) }
     return this.run(async () => {
       // 같은 id 는 mergeInbox 가 앞(파일의 것)을 남긴다 — 다시 보낸 것이 본문을 바꾸지 않는다
       await this.save(mergeInbox(await this.load(), [entry], this.now()))

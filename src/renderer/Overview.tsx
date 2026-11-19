@@ -75,7 +75,7 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose }:
       <section className="overview-inbox" aria-labelledby="overview-inbox-title" data-testid="overview-inbox">
         <div className="overview-inbox-head">
           <h2 id="overview-inbox-title">지난 알림 {unreadCount > 0 && <span className="dim small">안 읽음 {unreadCount}</span>}</h2>
-          <button type="button" className="button" disabled={unreadCount === 0} onClick={() => inboxModel().read({ all: true })}>모두 읽음</button>
+          <button type="button" className="button" disabled={unreadCount === 0} onClick={() => inboxModel().readAll()}>모두 읽음</button>
           <button type="button" className="button" disabled={inbox.length === 0} onClick={() => setClearing(true)}>비우기…</button>
         </div>
         {rows.length === 0 ? <p className="dim small">지난 알림이 없어요. 보고 있지 않은 화면의 알림이 여기에 남아요(30일 · 300개).</p> : <>
@@ -89,7 +89,7 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose }:
                 <ActivityIcon state={KIND_ICON[entry.kind]} />
                 <span className="overview-inbox-title">{entry.title}{!entry.read && <span className="overview-unread" aria-label="안 읽음"> · 안 읽음</span>}</span>
                 <span className="overview-inbox-body">{entry.body || taskName}</span>
-                <span className="dim small">{taskName} · {timeAgo(entry.at, Date.now())} 전</span>
+                <span className="dim small">{entry.body ? '' : `${taskName} · `}{timeAgo(entry.at, Date.now())} 전</span>
               </button>
             </li>)}
           </ul>

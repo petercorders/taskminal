@@ -42,8 +42,8 @@ import { AgentSessionsPanel, sessionKey } from './AgentSessionsPanel'
 import { DEADLINE_MS, withDeadline, type AgentSession, type ResumeHow } from '../shared/agent-sessions'
 import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
-import { inboxModel, useInbox } from './inbox'
-import { inboxUnread } from '../shared/inbox'
+import { inboxModel, useInboxUnread } from './inbox'
+import { INBOX_TITLE } from '../shared/inbox'
 import { AccountsPanel } from './AccountsPanel'
 import { DevelopmentPanel } from './DevelopmentPanel'
 import { RemotePanel } from './RemotePanel'
@@ -153,12 +153,6 @@ interface QuickRef {
   id: string
 }
 
-const NOTIFY_TITLE: Record<NotifyKind, string> = {
-  wait: '입력을 기다립니다',
-  long: '명령이 끝났습니다',
-  fail: '명령이 실패했습니다',
-  exit: '셸이 닫혔습니다',
-}
 
 /** 테마 '시스템 따라가기' 를 푼 값 */
 function useSystemDark(): boolean {
@@ -396,11 +390,14 @@ export function App() {
   }, [shownPanesKey])
   viewedRef.current = viewedPane
   // 66단계: 그 pane 을 보면 그 pane 의 지난 알림은 읽음(안 읽은 것이 있을 때만 쓴다)
+  // 전체 보기가 터미널을 덮는 동안은 그 pane 을 보고 있지 않다 — 그 사이 알림은 남기고 읽음으로 바꾸지 않는다
+  const inboxViewedPane = overviewOpen ? null : viewedPane
+  const inboxViewedRef = useRef(inboxViewedPane)
+  inboxViewedRef.current = inboxViewedPane
   useEffect(() => {
-    if (viewedPane) inboxModel().viewed(viewedPane)
-  }, [viewedPane])
-  const inboxEntries = useInbox()
-  const inboxCount = inboxUnread(inboxEntries)
+    if (inboxViewedPane) inboxModel().viewed(inboxViewedPane)
+  }, [inboxViewedPane])
+  const inboxCount = useInboxUnread()
 
   // 활동의 원본은 ref — 사건 하나에서 이전 · 다음을 함께 보고 알릴지 정한다(setState 갱신 함수 안에서 알림을 보내지 않게)
   const activityRef = useRef(activity)
@@ -428,11 +425,11 @@ export function App() {
             : undefined
     const body = diskMaskRef.current([taskName, act?.command, detail].filter(Boolean).join(' · '))
     // 66단계: 보고 있지 않은 pane 의 알림은 받은편지함에 남긴다 — 알림 · 소리를 꺼 둔 종류도(설정은 방해만 끈다)
-    if (!viewed && taskId) inboxModel().add({ id: crypto.randomUUID(), kind, taskId, paneId, body })
+    if (paneId !== inboxViewedRef.current && taskId) inboxModel().add({ id: crypto.randomUUID(), kind, taskId, paneId, body })
     if (!way.banner && !way.sound) return
     if (s.settings.muteViewed && viewed) return
     if (!way.banner) return window.taskminal.beep()
-    const n = new Notification(NOTIFY_TITLE[kind], { body, silent: !way.sound })
+    const n = new Notification(INBOX_TITLE[kind], { body, silent: !way.sound })
     n.onclick = () => {
       window.focus()
       const id = findPaneTask(stateRef.current, paneId)
@@ -546,7 +543,11 @@ export function App() {
         // 원격 ssh 의 255 는 연결 끊김 — TerminalPane 이 다시 붙고 띠가 알린다(다섯 번 다 실패하면 확인 필요)
         if (remotePanes.has(paneId) && exit.exitCode === 255 && !exit.signal) return
         deliverRef.current('exit', paneId, activityRef.current[paneId])
-        if (cleanExit(exit)) dispatch({ type: 'pane/exited', paneId })
+        if (cleanExit(exit)) {
+          dispatch({ type: 'pane/exited', paneId })
+          // 닫힌 pane 은 다시 볼 수 없다 — 기록은 남기되 안 읽음 수에 남지 않게 읽음으로(66 리뷰)
+          inboxModel().read({ paneId, until: Date.now() })
+        }
       }),
     [],
   )

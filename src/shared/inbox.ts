@@ -6,6 +6,9 @@ export const INBOX_MAX = 300
 /** 이보다 오래된 알림은 버린다 */
 export const INBOX_DAYS = 30
 const DAY = 24 * 60 * 60 * 1000
+/** 제목 · 본문 글자 수 상한 — 넘으면 자른다(명령 글이 길어도 기록이 버려지지 않게) */
+export const INBOX_TITLE_MAX = 200
+export const INBOX_BODY_MAX = 2000
 const KINDS: readonly NotifyKind[] = ['wait', 'long', 'fail', 'exit']
 
 export interface InboxEntry {
@@ -29,6 +32,8 @@ export const INBOX_TITLE: Record<NotifyKind, string> = {
 }
 
 const ID = /^[\w-]{1,100}$/
+/** id · 일감 · pane 번호 모양(IPC 검사도 이것을 쓴다) */
+export const isInboxId = (v: unknown): v is string => typeof v === 'string' && ID.test(v)
 const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max
 
 /** 비신뢰 값(파일 · IPC) → 항목. 모양이 다르면 null */
@@ -39,7 +44,7 @@ export function parseInboxEntry(v: unknown): InboxEntry | null {
   if (typeof e['at'] !== 'number' || !Number.isFinite(e['at']) || e['at'] < 0) return null
   if (!KINDS.includes(e['kind'] as NotifyKind)) return null
   if (typeof e['taskId'] !== 'string' || !ID.test(e['taskId']) || typeof e['paneId'] !== 'string' || !ID.test(e['paneId'])) return null
-  if (!text(e['title'], 200) || !text(e['body'], 2000)) return null
+  if (!text(e['title'], INBOX_TITLE_MAX) || !text(e['body'], INBOX_BODY_MAX)) return null
   return { id: e['id'], at: e['at'], kind: e['kind'] as NotifyKind, taskId: e['taskId'], paneId: e['paneId'], title: e['title'], body: e['body'], read: e['read'] === true }
 }
 

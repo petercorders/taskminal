@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { INBOX_DAYS, INBOX_MAX, inboxUnread, markInboxRead, mergeInbox, parseInboxEntry, parseInboxRead, pruneInbox, type InboxApi, type InboxEntry } from '../../src/shared/inbox'
+import { INBOX_BODY_MAX, INBOX_DAYS, INBOX_MAX, inboxUnread, markInboxRead, mergeInbox, parseInboxEntry, parseInboxRead, pruneInbox, type InboxApi, type InboxEntry } from '../../src/shared/inbox'
 import { InboxModel } from '../../src/shared/inbox-model'
 import { InboxStore } from '../../src/main/inbox-store'
 
@@ -115,6 +115,41 @@ describe('받은편지함 화면 모델', () => {
   })
 })
 
+describe('받은편지함 화면 모델 — 66 리뷰', () => {
+  it('긴 본문은 잘라서 남긴다(main 이 버리지 않게)', async () => {
+    const { api, release } = gatedApi()
+    const m = new InboxModel(api, () => NOW)
+    void m.load()
+    release([])
+    await tick()
+    m.add({ id: 'long', kind: 'fail', taskId: 'task-a', paneId: 'pane-a', body: 'x'.repeat(INBOX_BODY_MAX + 500) })
+    const sent = (api.add.mock.calls as unknown as [InboxEntry][])[0]![0]
+    expect(sent.body).toHaveLength(INBOX_BODY_MAX)
+    expect(parseInboxEntry(sent)).not.toBeNull()
+  })
+  it('모두 읽음은 화면에 있는 안 읽은 것의 id 로 보낸다(처음 읽기가 실패해도 보지 못한 것은 건드리지 않는다)', async () => {
+    const { api } = gatedApi()
+    api.list.mockRejectedValueOnce(new Error('EIO'))
+    const m = new InboxModel(api, () => NOW)
+    await m.load()
+    m.add({ id: 'seen', kind: 'wait', taskId: 'task-a', paneId: 'pane-a', body: 'x' })
+    m.readAll()
+    expect(api.read).toHaveBeenCalledWith({ ids: ['seen'] })
+    m.readAll()
+    expect(api.read).toHaveBeenCalledTimes(1)
+  })
+  it('비우기가 실패하면 목록을 되돌린다(다시 비울 수 있게)', async () => {
+    const { api, release } = gatedApi()
+    api.clear.mockRejectedValueOnce(new Error('disk'))
+    const m = new InboxModel(api, () => NOW)
+    void m.load()
+    release([entry('a')])
+    await tick()
+    await expect(m.clear()).rejects.toThrow('disk')
+    expect(m.entries.map((e) => e.id)).toEqual(['a'])
+  })
+})
+
 describe('받은편지함 main 저장소', () => {
   const dirs: string[] = []
   afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
@@ -135,6 +170,17 @@ describe('받은편지함 main 저장소', () => {
     // 다시 보낸 같은 id 는 처음 것의 본문을 바꾸지 않는다
     expect(readFileSync(file, 'utf8')).not.toContain('다시 보냄')
     await expect(s.add({ id: 'x' })).rejects.toThrow()
+  })
+  it('가린 뒤 길어진 본문도 잘라서 · 다시 열어도 남는다', async () => {
+    const file = join(dir(), 'inbox.json')
+    // 짧은 값이 긴 가림 글(‹가림:이름›)로 바뀌어 상한을 넘는 경우
+    const opts = () => ({ custom: [{ name: '사내-토큰-이름이-긴-종류', pattern: 'Q9' }] })
+    const s = new InboxStore(file, opts, () => NOW)
+    await s.add(entry('edge', { body: 'y'.repeat(INBOX_BODY_MAX - 2) + 'Q9' }))
+    const saved = await new InboxStore(file, opts, () => NOW).list()
+    expect(saved.map((e) => e.id)).toEqual(['edge'])
+    expect(saved[0]!.body.length).toBeLessThanOrEqual(INBOX_BODY_MAX)
+    expect(saved[0]!.body).not.toContain('Q9')
   })
   it('읽음 · 일감 지우기 · 비우기가 차례대로 파일에 남는다', async () => {
     const file = join(dir(), 'inbox.json')

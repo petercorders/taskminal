@@ -46,7 +46,7 @@ import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
 import { InboxStore } from './inbox-store'
-import { parseInboxRead } from '../shared/inbox'
+import { isInboxId, parseInboxRead } from '../shared/inbox'
 import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
 import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
 import { spawn as spawnChild } from 'node:child_process'
@@ -897,7 +897,7 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.handle(IPC.inboxRemoveTask, (event, taskId: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
-    if (typeof taskId !== 'string' || !/^[\w-]{1,100}$/.test(taskId)) throw new Error('일감을 확인해 주세요')
+    if (!isInboxId(taskId)) throw new Error('일감을 확인해 주세요')
     return inboxWrite(() => inbox().removeTask(taskId))
   })
   ipcMain.handle(IPC.inboxClear, (event) => {

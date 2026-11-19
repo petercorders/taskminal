@@ -56,7 +56,7 @@
 | 59 AI 도구 실제 로고 | Claude · Codex 이름 앞에 실제 로고(simple-icons CC0 · lobe-icons MIT, path 만 `src/shared/agent-icons.ts`) — 탭 · pane 머리 · 사이드바 · 전체 보기 · 새 일감 · 세션 · 계정 등 14곳. `THIRD_PARTY_NOTICES.md` 를 앱 묶음에. 단위1,469·변이18·리뷰 3/9. **e2e 미실행** — `docs/stages/59-agent-icons.md` |
 | 60 0.2.0 출시 | **0.2.0 공개 완료**(2026-11-18) — 44~59단계. 태그 `v0.2.0` = `057a736`, 네 OS CI 성공, Mac 두 칩 서명 · 공증, 파일 22개 대조 뒤 공개, 공개 내려받기 해시 일치, 0.1.2 → 0.2.0 자동 업데이트를 임시 사본으로 확인. e2e 미실행. `docs/releases/v0.2.0-prep.md` |
 | 61~65 Orca 비교 v5 | 61 이 Mac 의 다른 셸 지킴이 보기 · 끝내기(다시 찾아 그대로 · 붙은 앱 없을 때만 shutdown) · 62 worktree 만들 때 환경 준비 미리보기 + `links`(공유 폴더 링크) · 63 `taskminal` 안내를 대화 Codex · 터미널 claude/codex 까지 · 64 Jira 쓰기(상태 바꾸기 · 댓글, 확인 뒤 · 요청 번호마다 한 번 · 됐는지 모름은 다시 확인) · 65 ⌘P 파일 범위 · 파일 내용 찾기(git grep). 단위1,578·변이 31+6+9+6·리뷰 10/10. **e2e 미실행(사용자 지시)** · 실제 Jira 미검증 — `docs/stages/61-65-orca-gap-v5.md` |
-| 66 알림 받은편지함 | 보고 있지 않은 pane 의 알림(기다림 · 끝남 · 실패 · 셸 닫힘)을 `<userData>/inbox.json`(0600 · 가림 · 300개 · 30일)에 남기고 전체 보기 '지난 알림' · 사이드바 '· 알림 N' 으로 보인다. 보면 읽음 · 눌러 열기 · 모두 읽음 · 비우기. 단위1,590·변이 12. **e2e 미실행(사용자 지시)** — `docs/stages/66-notification-inbox.md` |
+| 66 알림 받은편지함 | 보고 있지 않은 pane 의 알림(기다림 · 끝남 · 실패 · 셸 닫힘)을 `<userData>/inbox.json`(0600 · 가림 · 300개 · 30일)에 남기고 전체 보기 '지난 알림' · 사이드바 '· 알림 N' 으로 보인다. 보면 읽음 · 눌러 열기 · 모두 읽음 · 비우기. 단위1,594·변이 12+4·리뷰 9/10. **e2e 미실행(사용자 지시)** — `docs/stages/66-notification-inbox.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
