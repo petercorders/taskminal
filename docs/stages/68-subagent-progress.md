@@ -15,29 +15,47 @@
 
 ## 만든 것
 - **이벤트**(`src/shared/chat.ts`): `tool` 에 선택 칸 `parent`. 새 종류 `agent`(id = Agent 도구 id · phase start/progress/end · bg · doing · tools · last · ms · status · summary). `isChatEvent` 가 선택 칸의 타입까지 보고, `redactEvent` 가 doing · last · summary 를 가린다. summary 는 1000자로 자른다.
-- **변환**: 부모 단 assistant 줄은 tool_use 만 `tool{parent}` 로, 글 · 생각 · 오류는 버린다(하위 실패는 알림 status 로). tool_result 는 부모와 무관하게 지금처럼. `task_updated` 는 버린다 — tool_use_id 가 없고, 같은 상태가 알림으로 바로 뒤에 온다(실측 2회).
+- **변환**: 부모 단 assistant 줄은 tool_use 만 `tool{parent}` 로, 글 · 생각 · 오류는 버린다(하위 실패는 알림 status 로). 로그인 실패(`authentication_failed`)만은 계정 전체의 일이라 본 흐름의 로그인 띠로 낸다. tool_result 는 부모와 무관하게 지금처럼. `task_updated` 는 버린다 — tool_use_id 가 없고, 같은 상태가 알림으로 바로 뒤에 온다(실측 2회).
 - **접기**(`foldBlocks`): Agent · Task 도구는 도구 묶음에 넣지 않고 새 블록 `agent`. 부모 단 도구는 그 카드의 `sub` 로(부모를 모르면 버림 — 본 흐름에 섞지 않는다). `agent` 사건은 id 로 카드를 찾아 Agent · Task 이름일 때만 반영 — 턴이 끝나고 다음 글을 보낸 뒤 온 알림도 맞는 카드를 채운다. 포그라운드는 Agent 도구 결과가 오면 알림이 없어도 닫고(백그라운드의 결과는 '맡겼다' 는 답), 멈춤은 포그라운드만, 갑자기 끝남(crash · missing)은 백그라운드까지 '멈춤' 으로. 나중에 진짜 알림이 오면 그것이 이긴다.
-- **카드 글자**(`agentCard`): 상태(진행 중 · ✓ 끝남 · ✕ 실패 · 멈춤) · 진행 줄(하는 일 · 도구 N번 · 마지막 X · 걸린 시간 — 끝나면 하는 일은 지움) · 끝난 뒤 요약.
-- **끝을 못 받은 하위 작업 닫기**: `ClaudeSession` 이 시작했는데 알림이 없는 id 를 기억해 프로세스가 끝나거나(`ended`) 갈라 띄우며 떼어 낼 때(`fork`) `agent{end, stopped}` 를 낸다. 앱이 그 표시를 쓰기 전에 끝나거나 죽었으면 `ChatManager.history()` 가 다시 열 때 `openAgents` 로 찾아 닫는다(열린 턴을 '멈춤' 으로 닫는 21단계 방식 그대로, 한 번만).
+- **카드 글자**(`agentCard`): 상태(진행 중 · ✓ 끝남 · ✕ 실패 · 멈춤) · 진행 줄(하는 일 · 도구 N번 · 마지막 X · 걸린 시간 — 끝나면 하는 일은 지움) · 끝난 뒤 요약 · 요약이 없을 때 Agent 도구 결과의 끝 줄(거절 같은 실패 이유 · 옛 기록의 결과 — `agentId` · `<usage>` 기계 글이면 숨김).
+- **백그라운드 판정**: `task_started.is_backgrounded` 와 Agent 입력의 `run_in_background` 둘 다 본다 — 'launched' 결과가 task_started 보다 먼저 와도 끝으로 보지 않는다. 멈춤(interrupt)은 도는 백그라운드 하위 에이전트 아래의 도구를 실패로 바꾸지 않고, 하위 작업이 멈춤 · 실패로 끝나면 그 아래 도는 도구를 실패로.
+- **끝을 못 받은 하위 작업 닫기**: 열린 하위 작업은 `AgentTracker` 하나가 `foldBlocks` 와 같은 규칙으로 센다(Agent · Task id 만 · 포그라운드는 Agent 결과로 닫힘 · 끝난 뒤 진행은 다시 열지 않음). `ClaudeSession` 은 프로세스가 끝날 때(`ended`) 열린 것에 `agent{end, stopped}` 를 내고, 앱이 그 표시를 쓰기 전에 끝나거나 죽었으면 `ChatManager.history()` 가 다시 열 때, 되감기(`rewind`)는 남긴 기록 기준으로 `openAgents` 를 찾아 닫는다(열린 턴을 '멈춤' 으로 닫는 21단계 방식 그대로, 한 번만). 이미 끝난 카드는 이런 지어낸 멈춤에 덮이지 않는다.
 - **anchor**: `ClaudeSession.lastUuid` 는 부모 없는 assistant 줄만 받는다.
 - **화면**(`ChatPane.tsx` · `styles.css`): Agent 카드 — 머리(이름 · 설명 · '백그라운드' · 상태) · 진행 줄 · 요약(넘치면 160px 안에서 스크롤) · '하위 도구 N개' 펼치기(`aria-expanded`, 24px 높이) · 하위 에이전트가 고친 파일의 'diff 열기' 카드. 간격은 `--space-*`, 글자 12px 이상. 원격 패널(`RemotePanel.tsx`)은 모르는 블록을 '대화 중지됨' 으로 그리던 마지막 줄에 걸리지 않게 agent 블록을 `<details>` 로 그린다.
 - **가짜 claude**(`tests/fixtures/fake-claude.mjs`): e2e 용 대본 `subagent`(포그라운드 · Read 하나 · 부모 단 중간 글) · `bgagent`(백그라운드 — 턴 끝 뒤 진행 · 알림). 단위 시험이 실제 node 프로세스로 adapter 에 물려 한 번 받아 본다(앱은 띄우지 않음).
 
 ## 옛 기록 · 순서에 기대는 곳
 - 68 전 기록(`<userData>/chat/*.jsonl`)은 그대로 읽힌다. Agent 없는 기록은 접은 결과가 전과 같다(68 전 코드로 접은 결과를 시험에 고정). Agent 가 있는 옛 기록은 진행 없는 Agent 카드가 되고, 섞여 기록된 옛 하위 도구는 부모 정보가 없어 본 흐름에 남는다.
-- 카드는 끝 3줄(tail)을 보이지 않는다 — Agent 도구 결과의 끝은 `agentId … <usage>` 기계 글이고 요약은 알림이 준다. 옛 기록의 Agent 카드는 상태만 보인다.
+- 카드는 요약이 있으면 끝 3줄(tail)을 보이지 않는다 — 2.1.325 의 Agent 도구 결과 끝은 `agentId … <usage>` 기계 글이라 숨기고, 그 밖의 끝 줄(실패 이유 · 옛 claude 의 결과)은 보인다.
 - 새 기록을 옛 앱(0.2.0)이 읽으면 `agent` 줄은 버려지고 화면은 그대로지만, 옛 앱의 대화 기록 검색은 모르는 줄이 든 대화를 '읽지 못함' 으로 건너뛴다. 원격 서버는 같은 버전을 요구한다(`docs/remote-workspaces.md`). 되돌려 깔 일이 드물어 받아들였다.
 - 되감기 · 나누기(`rewindPlan`)는 user · turn_end · session · text 만 본다 — `agent` 는 세지 않고 지나간다. 잘린 뒤 늦게 온 알림은 모르는 id 라 버려진다. `lastTurnText`(CLI `chat wait/read`) · 워크플로 단계 결과 · 알림 본문은 text 만 모으므로 하위 에이전트 글이 더는 섞이지 않는다. `chatStatus` 는 `agent` 를 보지 않는다.
 
 ## 검증
-- `FULL_CHECK_NO_E2E=1 full-check.sh` 종료 4 — typecheck · 경계 · 간격 · 단위 **1,610개 통과**(새 시험 16), **e2e 미실행(사용자 지시)**.
-- 새 단위 시험: `chat.test.ts` 9(실측 재료 · 진행 · 알림 · 자르기 · 가림 · 모르는 id · 백그라운드 · 멈춤 · 옛 기록 · 모양 검사) · `chat-adapter.test.ts` 4(anchor · 하위 작업 닫기 · 가짜 대본 둘) · `chat-manager.test.ts` 2 · `chat-store.test.ts` 1.
+- `FULL_CHECK_NO_E2E=1 full-check.sh` 종료 4 — typecheck · 경계 · 간격 · 단위 통과, **e2e 미실행(사용자 지시)**. 구현 커밋 1,610개 → 리뷰 고침 뒤 **1,618개**(새 시험 24). 병합 뒤 다시 검사한 값은 PR 본문.
+- 새 단위 시험: `chat.test.ts` 15(실측 재료 · 진행 · 알림 · 자르기 · 가림 · 모르는 id · 백그라운드 · 멈춤 · 옛 기록 · 모양 검사 + 리뷰 고침 6) · `chat-adapter.test.ts` 5(anchor · 하위 작업 닫기 · 지어낸 멈춤 없음 · 가짜 대본 둘) · `chat-manager.test.ts` 3(다시 열 때 · 턴 도중 · 되감을 때) · `chat-store.test.ts` 1.
 - 변이 10개(`mutation-check.sh --batch`) — 모두 잡음. 처음 둘(부모 단 줄을 본 흐름으로 · foldBlocks 가 parent 를 안 봄)은 조건을 `false` 로 바꾸니 컴파일이 깨져 판정 불가 → 옛 구조를 재현하는 값 변이(parent 칸을 안 붙임 · 있을 수 없는 id 와 비교)로 다시 돌려 잡음. 나머지: Agent 를 도구 묶음에 · Agent 아닌 도구에 진행 · 백그라운드를 tool_end 로 닫음 · 멈춤이 백그라운드까지 · 요약을 안 가림 · 하위 줄 uuid 가 anchor · 프로세스 끝에 안 닫음 · 다시 열 때 안 닫음.
 - UI(코드로): 펼치기는 native button + `aria-expanded`, 이름은 '하위 도구 N개'(화살표는 `aria-hidden`). 상태는 글자 + 색(색만으로 뜻을 전하지 않음). 머리 설명은 넘치면 말줄임 + `title`. 요약 상자는 넘치면 스크롤 — Electron 45(Chromium 130 이후)는 스크롤 상자를 키보드로 갈 수 있다. 진행이 바뀌어도 화면 읽기 알림은 하지 않는다(기존 도구 묶음과 같음).
+
+- 리뷰 고침 변이 3개(지어낸 멈춤이 끝난 카드를 덮음 · 포그라운드 Agent 결과로 안 닫음 · 되감을 때 안 닫음) — 모두 잡음(첫째는 리터럴 비교로 컴파일이 깨져 줄을 빈 문장으로 바꿔 다시).
+
+## 리뷰 (/code-review high, 10건 — 8 고침 · 2 안 고침)
+1. 되감기가 백그라운드 카드를 '진행 중' 에 굳힘(닫는 사건이 화면 교체로 사라지고, 잘린 끝 알림은 다시 닫지 않음) — **고침**: `rewind` 가 남긴 기록 기준으로 닫아 결과에도 넣는다. adapter `fork` 는 더 내지 않는다.
+2. 아무 end 나 끝난 카드를 덮음(지어낸 멈춤이 '✓ 끝남 · 요약' 을 지움) — **고침**: 끝난 카드에 온 stopped 는 버린다(진짜 알림은 멈춤을 덮는다).
+3. adapter `openTasks` · `openAgents` 가 늦은 진행에 다시 열고 포그라운드 Agent 결과로 안 닫음 — **고침**: 공용 `AgentTracker`. <!-- refs-ignore -->
+4. 백그라운드를 `is_backgrounded` 로만 앎 — **고침**: Agent 입력 `run_in_background` 로도(실제 순서는 여전히 미확인).
+5. Agent 카드가 끝 줄을 안 보여 task 사건 없이 실패한 이유가 안 보임 — **고침**: 요약이 없으면 끝 줄(기계 글 빼고).
+6. 하위 줄의 로그인 실패가 버려짐 — **고침**: 로그인 띠로.
+7. 멈춤이 도는 백그라운드 하위 도구를 실패로 — **고침**.
+8. Agent 아닌 작업(백그라운드 셸)도 추적해 쓸데없는 end 를 씀 — **고침**(3 과 같은 추적기).
+9. task_progress 를 모두 기록 파일에 씀(디스크 · IPC · 다시 접기 비용, 앞이 잘리면 Agent 줄이 먼저 잘림) — **안 고침**: 진행 한 줄은 하위 도구 하나마다 오는 짧은 줄로, 같이 오는 tool · tool_end 짝보다 작다. 기록에서 빼면 다시 열 때 진행이 사라지고, 창의 이벤트 번호와 파일 자리가 어긋나 되감기가 보낸 시각 찾기에 기댄다. 앞이 잘려 Agent 줄이 없어지면 그 하위 사건은 버려질 뿐 화면이 깨지지 않는다. 되풀이되면 진행을 합쳐 쓰는 쪽으로.
+10. 옛 클라이언트가 새 원격 서버의 history 를 통째로 거절 — **안 고침**: 이미 배포된 옛 클라이언트의 검사 코드는 고칠 수 없고, 원격 서버는 같은 버전을 요구한다(`docs/remote-workspaces.md`).
 
 ## 계획과 다르게 한 것
 - 변이 두 개를 계획의 '조건 끄기' 대신 값 변이로 다시 돌렸다(위 검증 — 컴파일이 깨져 판정 불가였다).
 - 계획에 없던 것: 펼치기 단추 `min-height: 24px`(포인터 영역), 하위 에이전트가 고친 파일의 'diff 열기' 카드 유지(68 전에는 섞인 도구 줄이 카드를 냈다 — 기능을 잃지 않으려고), `ChatStore` 옛 줄 + 새 줄 읽기 시험.
+- 계획은 adapter 가 `fork` 때도 닫는다고 했지만, 리뷰 1 로 되감기(manager)가 남긴 기록 기준으로 닫게 바꿨다.
+- 계획은 '카드에 끝 3줄을 보이지 않음' 이었지만 리뷰 5 로 요약이 없을 때는 보인다.
+- 변이는 공통 지시의 상한 10개를 넘겨 13개(+ 컴파일이 깨져 다시 돌린 3개) — 리뷰 고침이 주장하는 회귀를 확인하려고 3개를 더 돌렸다.
 - 그 밖은 없음.
 
 ## 범위 밖 · 안 한 것

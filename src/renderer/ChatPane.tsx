@@ -624,6 +624,7 @@ export function ChatPane(p: Props) {
                 {c.summary}
               </div>
             )}
+            {c.detail && <pre className="chat-tool-tail">{c.detail}</pre>}
             {sub.length > 0 && (
               <button type="button" className="chat-agent-toggle" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [b.key]: !isOpen }))}>
                 <span aria-hidden>{isOpen ? '▾' : '▸'}</span>

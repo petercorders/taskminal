@@ -192,7 +192,7 @@ describe('하위 에이전트 (68단계)', () => {
     const progress = ev.filter((e) => e.t === 'agent' && e.phase === 'progress')
     expect(progress).toHaveLength(2)
     const first = card(foldBlocks(ev.slice(0, ev.indexOf(progress[0]!) + 1)))
-    expect(agentCard(first)).toEqual({ tone: 'run', label: '진행 중', progress: 'Reading a.txt · 도구 1번 · 마지막 Read · 1초', summary: '' })
+    expect(agentCard(first)).toEqual({ tone: 'run', label: '진행 중', progress: 'Reading a.txt · 도구 1번 · 마지막 Read · 1초', summary: '', detail: '' })
     const second = card(foldBlocks(ev.slice(0, ev.indexOf(progress[1]!) + 1)))
     expect(second.agent).toMatchObject({ status: 'run', doing: 'Reading b.txt', tools: 2, last: 'Read', ms: 1811 })
     expect(second.sub).toHaveLength(1) // 두 번째 Read 는 아직 안 옴
@@ -200,11 +200,11 @@ describe('하위 에이전트 (68단계)', () => {
   it('task_notification 이 상태와 summary 를 채운다 — 끝나면 하는 일은 지운다', () => {
     const item = card(foldBlocks(eventsOf('subagent-tools')))
     expect(item.agent).toMatchObject({ status: 'done', summary: '5', tools: 2, ms: 4666, bg: false })
-    expect(agentCard(item)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '도구 2번 · 마지막 Read · 4초', summary: '5' })
+    expect(agentCard(item)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '도구 2번 · 마지막 Read · 4초', summary: '5', detail: '' })
     // 도구 없이 답한 하위 에이전트
     const pong = card(foldBlocks(eventsOf('subagent')))
     expect(pong.sub).toEqual([])
-    expect(agentCard(pong)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '1초', summary: 'PONG' })
+    expect(agentCard(pong)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '1초', summary: 'PONG', detail: '' })
   })
   it('summary 는 1000자로 자르고, 화면 · 디스크 사본에서 비밀값을 가린다', () => {
     const key = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789'
@@ -297,7 +297,7 @@ describe('하위 에이전트 (68단계)', () => {
     expect(blocks.map((b) => b.kind)).toEqual(['user', 'agent', 'tools', 'text', 'tools', 'done'])
     const a = card(blocks)
     expect(a.agent).toBeUndefined()
-    expect(agentCard(a)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '', summary: '' })
+    expect(agentCard(a)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '', summary: '', detail: '' })
   })
   it('isChatEvent: 모양이 틀린 agent · parent 줄은 버린다', () => {
     expect(isChatEvent({ t: 'agent', id: 'a', phase: 'end', status: 'done', summary: 's', tools: 1, ms: 2, bg: false, doing: '', last: 'Read' })).toBe(true)
@@ -311,5 +311,80 @@ describe('하위 에이전트 (68단계)', () => {
       { t: 'tool', id: 'r', name: 'Read', summary: 'a', parent: 5 },
     ])
       expect(isChatEvent(bad)).toBe(false)
+  })
+})
+
+// 68 리뷰 고침
+describe('하위 에이전트 — 리뷰 고침 (68단계)', () => {
+  const card = (blocks: ChatBlock[], id: string) => {
+    const b = blocks.find((x) => x.kind === 'agent' && x.item.id === id)
+    if (!b || b.kind !== 'agent') throw new Error('카드 없음 ' + id)
+    return b.item
+  }
+  const fg: ChatEvent[] = [
+    { t: 'user', text: 'a', at: 1 },
+    { t: 'tool', id: 'F', name: 'Agent', summary: '앞' },
+    { t: 'agent', id: 'F', phase: 'start', bg: false },
+  ]
+  it('끝난 카드는 지어낸 멈춤(stopped)에 덮이지 않는다 — 진짜 알림은 지어낸 멈춤을 덮는다', () => {
+    const done: ChatEvent = { t: 'agent', id: 'F', phase: 'end', status: 'done', summary: '1줄' }
+    const stop: ChatEvent = { t: 'agent', id: 'F', phase: 'end', status: 'stopped' }
+    expect(agentCard(card(foldBlocks([...fg, done, stop]), 'F'))).toMatchObject({ label: '✓ 끝남', summary: '1줄' })
+    expect(agentCard(card(foldBlocks([...fg, stop, done]), 'F'))).toMatchObject({ label: '✓ 끝남', summary: '1줄' })
+  })
+  it('openAgents 는 foldBlocks 와 같은 규칙 — 포그라운드는 Agent 결과로 닫히고, 끝난 뒤 진행은 다시 열지 않고, Agent 아닌 작업은 세지 않는다', () => {
+    expect(openAgents([...fg, { t: 'tool_end', id: 'F', ok: true, tail: '' }])).toEqual([])
+    expect(openAgents([...fg, { t: 'agent', id: 'F', phase: 'end', status: 'done' }, { t: 'agent', id: 'F', phase: 'progress', tools: 9 }])).toEqual([])
+    const bash: ChatEvent[] = [
+      { t: 'tool', id: 'B', name: 'Bash', summary: 'npm run dev' },
+      { t: 'agent', id: 'B', phase: 'start', bg: true },
+    ]
+    expect(openAgents(bash)).toEqual([])
+    // 백그라운드는 Agent 결과('맡겼다')가 와도 열려 있다
+    const bg: ChatEvent[] = [{ t: 'tool', id: 'G', name: 'Task', summary: '뒤' }, { t: 'agent', id: 'G', phase: 'start', bg: true }, { t: 'tool_end', id: 'G', ok: true, tail: 'launched' }]
+    expect(openAgents(bg)).toEqual(['G'])
+  })
+  it('백그라운드는 Agent 입력의 run_in_background 로도 안다 — task_started 보다 결과가 먼저 와도 진행 중', () => {
+    const line = { type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id: 'G', name: 'Agent', input: { description: '뒤', prompt: 'p', run_in_background: true } }] } }
+    const ev = claudeLineToEvents(line, CWD)
+    expect(ev).toEqual([
+      { t: 'tool', id: 'G', name: 'Agent', summary: '뒤' },
+      { t: 'agent', id: 'G', phase: 'start', bg: true },
+    ])
+    const blocks = foldBlocks([...ev, { t: 'tool_end', id: 'G', ok: true, tail: 'Async agent launched' }])
+    expect(agentCard(card(blocks, 'G'))).toMatchObject({ tone: 'run' })
+    // task_started 에 is_backgrounded 가 없으면 앞의 값을 지우지 않는다
+    expect(claudeLineToEvents({ type: 'system', subtype: 'task_started', tool_use_id: 'G', description: 'd' }, CWD)).toEqual([{ t: 'agent', id: 'G', phase: 'start' }])
+  })
+  it('task 사건 없이 실패한 Agent(거절 · 잘못된 종류)는 실패 이유(끝 줄)를 보인다 — 하위 에이전트 결과의 기계 글은 숨긴다', () => {
+    const denied = foldBlocks([{ t: 'tool', id: 'D', name: 'Agent', summary: 'd' }, { t: 'tool_end', id: 'D', ok: false, tail: 'Permission to use Agent denied' }])
+    expect(agentCard(card(denied, 'D'))).toMatchObject({ tone: 'err', detail: 'Permission to use Agent denied' })
+    const meta = foldBlocks([{ t: 'tool', id: 'M', name: 'Agent', summary: 'd' }, { t: 'tool_end', id: 'M', ok: true, tail: '<usage>subagent_tokens: 5\ntool_uses: 2\nduration_ms: 4667</usage>' }])
+    expect(agentCard(card(meta, 'M')).detail).toBe('')
+    // 요약이 있으면 끝 줄은 보이지 않는다
+    const done = foldBlocks([...fg, { t: 'tool_end', id: 'F', ok: true, tail: 'raw' }, { t: 'agent', id: 'F', phase: 'end', status: 'done', summary: '요약' }])
+    expect(agentCard(card(done, 'F'))).toMatchObject({ summary: '요약', detail: '' })
+  })
+  it('하위 에이전트 줄의 로그인 실패는 로그인 띠로 — 다른 오류 줄은 본 흐름에 넣지 않는다', () => {
+    const auth = { type: 'assistant', parent_tool_use_id: 'F', error: 'authentication_failed', message: { model: '<synthetic>', content: [{ type: 'text', text: 'Please run /login' }] } }
+    expect(claudeLineToEvents(auth, CWD)).toEqual([{ t: 'error', kind: 'login', message: 'Please run /login' }])
+    const other = { ...auth, error: 'server_error' }
+    expect(claudeLineToEvents(other, CWD)).toEqual([])
+  })
+  it('멈춤은 도는 백그라운드 하위 에이전트의 도구를 실패로 바꾸지 않는다 — 하위 작업이 멈춤 · 실패로 끝나면 그 아래 도는 도구는 실패', () => {
+    const ev: ChatEvent[] = [
+      { t: 'user', text: 'a', at: 1 },
+      { t: 'tool', id: 'G', name: 'Agent', summary: '뒤' },
+      { t: 'agent', id: 'G', phase: 'start', bg: true },
+      { t: 'tool_end', id: 'G', ok: true, tail: 'launched' },
+      { t: 'tool', id: 'G-r', name: 'Read', summary: 'a.txt', parent: 'G' },
+      { t: 'tool', id: 'F', name: 'Agent', summary: '앞' },
+      { t: 'tool', id: 'F-r', name: 'Read', summary: 'b.txt', parent: 'F' },
+    ]
+    const stopped = foldBlocks([...ev, { t: 'stopped' }])
+    expect(card(stopped, 'G').sub.map((i) => i.state)).toEqual(['run'])
+    expect(card(stopped, 'F').sub.map((i) => i.state)).toEqual(['err'])
+    const ended = foldBlocks([...ev, { t: 'agent', id: 'G', phase: 'end', status: 'stopped' }])
+    expect(card(ended, 'G').sub.map((i) => i.state)).toEqual(['err'])
   })
 })

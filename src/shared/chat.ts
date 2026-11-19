@@ -176,7 +176,8 @@ function taskEvent(o: Obj, id: string): ChatEvent | null {
   }
   switch (o['subtype']) {
     case 'task_started':
-      return { t: 'agent', id, phase: 'start', bg: o['is_backgrounded'] === true }
+      // is_backgrounded 가 없으면 앞서 Agent 입력(run_in_background)에서 안 값을 지우지 않는다
+      return { t: 'agent', id, phase: 'start', ...(typeof o['is_backgrounded'] === 'boolean' ? { bg: o['is_backgrounded'] } : {}) }
     case 'task_progress': {
       const doing = str(o['summary']) || str(o['description'])
       const last = str(o['last_tool_name'])
@@ -205,9 +206,10 @@ export function claudeLineToEvents(o: unknown, cwd: string): ChatEvent[] {
   if (type === 'assistant' && isObj(o['message'])) {
     const content = o['message']['content']
     if (!Array.isArray(content)) return []
-    // 68단계: 하위 에이전트의 줄 — 도구 부르기만 그 Agent 카드 아래로. 글 · 오류는 본 흐름에 넣지 않는다(끝 글 · 실패는 task_notification 이 알린다)
+    // 68단계: 하위 에이전트의 줄 — 도구 부르기만 그 Agent 카드 아래로. 글 · 오류는 본 흐름에 넣지 않는다(끝 글 · 실패는 task_notification 이 알린다).
+    // 로그인 실패만은 계정 전체의 일이라 아래에서 본 흐름의 로그인 띠로 낸다(68 리뷰)
     const parent = o['parent_tool_use_id']
-    if (typeof parent === 'string') {
+    if (typeof parent === 'string' && o['error'] !== 'authentication_failed') {
       return content.flatMap((c): ChatEvent[] =>
         isObj(c) && c['type'] === 'tool_use' && typeof c['id'] === 'string' && typeof c['name'] === 'string' && c['name'] !== 'AskUserQuestion'
           ? [{ t: 'tool', id: c['id'], name: c['name'], summary: toolSummary(c['name'], c['input'], cwd), parent }]
@@ -224,6 +226,8 @@ export function claudeLineToEvents(o: unknown, cwd: string): ChatEvent[] {
       if (c['type'] === 'text' && typeof c['text'] === 'string' && c['text'].trim()) out.push({ t: 'text', text: c['text'] })
       if (c['type'] === 'tool_use' && typeof c['id'] === 'string' && typeof c['name'] === 'string' && c['name'] !== 'AskUserQuestion') {
         out.push({ t: 'tool', id: c['id'], name: c['name'], summary: toolSummary(c['name'], c['input'], cwd) })
+        // 백그라운드 하위 에이전트는 입력으로도 안다 — 'launched' 결과가 task_started 보다 먼저 와도 끝으로 보지 않게(68 리뷰)
+        if (AGENT_TOOLS.has(c['name']) && isObj(c['input']) && c['input']['run_in_background'] === true) out.push({ t: 'agent', id: c['id'], phase: 'start', bg: true })
       }
     }
     return out
@@ -380,6 +384,8 @@ export type ChatBlock =
 export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
   const out: ChatBlock[] = []
   const toolAt = new Map<string, ToolItem>()
+  /** 하위 도구 id → 그 도구를 부른 Agent 도구 */
+  const parentOf = new Map<string, ToolItem>()
   const cards = new Map<string, ChatBlock & { answer: AnswerHow | null }>()
   let turnHadError = false
   const loseOpenCards = () => {
@@ -388,6 +394,18 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
   /** 도는 하위 에이전트를 멈춤으로 — 멈춤(interrupt)은 포그라운드만, 프로세스가 죽으면 백그라운드까지. 나중에 진짜 알림이 오면 그것이 이긴다 */
   const stopAgents = (withBackground: boolean) => {
     for (const t of toolAt.values()) if (t.agent?.status === 'run' && (withBackground || !t.agent.bg)) t.agent.status = 'stopped'
+  }
+  /** 아직 도는 백그라운드 하위 에이전트 아래의 도구 — 본 턴을 멈춰도 그 도구는 돈다 */
+  const underRunningBackground = (t: ToolItem): boolean => {
+    for (let p = parentOf.get(t.id); p; p = parentOf.get(p.id)) if (p.agent?.bg && p.agent.status === 'run') return true
+    return false
+  }
+  /** 하위 작업이 멈춤 · 실패로 끝났다 — 그 아래 아직 도는 도구는 끝나지 못했다 */
+  const failRunning = (items: readonly ToolItem[]) => {
+    for (const i of items) {
+      if (i.state === 'run') i.state = 'err'
+      failRunning(i.sub)
+    }
   }
   events.forEach((ev, i) => {
     const key = String(i)
@@ -406,6 +424,7 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
           const parent = toolAt.get(ev.parent)
           if (parent) {
             toolAt.set(ev.id, item)
+            parentOf.set(ev.id, parent)
             parent.sub.push(item)
           }
           break
@@ -442,9 +461,13 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
         if (ev.last !== undefined) a.last = ev.last
         if (ev.phase === 'progress' && a.status === 'run' && ev.doing !== undefined) a.doing = ev.doing
         if (ev.phase === 'end') {
-          a.status = ev.status ?? 'stopped'
+          const status = ev.status ?? 'stopped'
+          // 이미 끝난 카드를 지어낸 멈춤(프로세스 끝 · 다시 열기 · 되감기가 내는 것)이 덮지 않는다 — 진짜 알림은 멈춤을 덮는다
+          if (status === 'stopped' && a.status !== 'run') break
+          a.status = status
           a.summary = ev.summary ?? ''
           a.doing = ''
+          if (status !== 'done') failRunning(item.sub)
         }
         break
       }
@@ -488,8 +511,8 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
         break
       case 'stopped':
         loseOpenCards()
-        for (const t of toolAt.values()) if (t.state === 'run') t.state = 'err'
         stopAgents(false)
+        for (const t of toolAt.values()) if (t.state === 'run' && !underRunningBackground(t)) t.state = 'err'
         out.push({ kind: 'stopped', key })
         break
       case 'session':
@@ -499,8 +522,11 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
   return out
 }
 
-/** Agent 카드 글자 (68단계) — 상태 · 진행 줄(하는 일 · 도구 N번 · 마지막 도구 · 걸린 시간) · 끝난 뒤 요약. 진행을 모르는 옛 기록은 도구 상태만 */
-export function agentCard(item: ToolItem): { tone: 'run' | 'ok' | 'err' | 'stop'; label: string; progress: string; summary: string } {
+/**
+ * Agent 카드 글자 (68단계) — 상태 · 진행 줄(하는 일 · 도구 N번 · 마지막 도구 · 걸린 시간) · 끝난 뒤 요약.
+ * detail: 요약이 없을 때 Agent 도구 결과의 끝 줄(거절 · 잘못된 종류 같은 실패 이유, 옛 기록의 결과) — 하위 에이전트 결과의 기계 글(agentId · usage)은 뺀다(68 리뷰)
+ */
+export function agentCard(item: ToolItem): { tone: 'run' | 'ok' | 'err' | 'stop'; label: string; progress: string; summary: string; detail: string } {
   const a = item.agent
   const status = a ? a.status : item.state === 'run' ? 'run' : item.state === 'ok' ? 'done' : 'fail'
   const [tone, label] = ({ run: ['run', '진행 중'], done: ['ok', '✓ 끝남'], fail: ['err', '✕ 실패'], stopped: ['stop', '멈춤'] } as const)[status]
@@ -511,18 +537,48 @@ export function agentCard(item: ToolItem): { tone: 'run' | 'ok' | 'err' | 'stop'
     a?.last ? `마지막 ${a.last}` : '',
     a?.ms ? formatDuration(a.ms) : '',
   ]
-  return { tone, label, progress: parts.filter(Boolean).join(' · '), summary: a && status !== 'run' ? a.summary : '' }
+  const summary = a && status !== 'run' ? a.summary : ''
+  const showTail = status !== 'run' && !summary && (!a || status !== 'done')
+  const detail = showTail && !/<\/?usage>|^\s*agentId: /m.test(item.tail) ? item.tail : ''
+  return { tone, label, progress: parts.filter(Boolean).join(' · '), summary, detail }
 }
 
-/** 시작은 했는데 끝 알림이 없는 하위 작업의 id — 프로세스 없이 다시 열 때 멈춤으로 닫는다 (68단계) */
-export function openAgents(events: readonly ChatEvent[]): string[] {
-  const open = new Set<string>()
-  for (const ev of events) {
-    if (ev.t !== 'agent') continue
-    if (ev.phase === 'end') open.delete(ev.id)
-    else open.add(ev.id)
+/**
+ * 열린 하위 작업 — foldBlocks 와 같은 규칙(68 리뷰): Agent · Task 도구의 id 만 세고, start 로 열고, end · 포그라운드 Agent 결과로 닫고,
+ * 끝난 뒤 늦게 온 진행은 다시 열지 않는다. adapter(프로세스가 끝날 때) · manager(다시 열 때 · 되감을 때)가 같은 것을 쓴다.
+ */
+export class AgentTracker {
+  private agents = new Set<string>()
+  /** id → 백그라운드인지 */
+  private open = new Map<string, boolean>()
+  private ended = new Set<string>()
+  see(ev: ChatEvent): void {
+    if (ev.t === 'tool') {
+      if (AGENT_TOOLS.has(ev.name)) this.agents.add(ev.id)
+    } else if (ev.t === 'tool_end') {
+      if (this.open.get(ev.id) === false) this.close(ev.id)
+    } else if (ev.t === 'agent' && this.agents.has(ev.id)) {
+      if (ev.phase === 'end') this.close(ev.id)
+      else if (ev.phase === 'start') {
+        this.ended.delete(ev.id)
+        this.open.set(ev.id, ev.bg ?? this.open.get(ev.id) ?? false)
+      } else if (!this.ended.has(ev.id) && !this.open.has(ev.id)) this.open.set(ev.id, false)
+    }
   }
-  return [...open]
+  private close(id: string) {
+    this.open.delete(id)
+    this.ended.add(id)
+  }
+  ids(): string[] {
+    return [...this.open.keys()]
+  }
+}
+
+/** 시작은 했는데 끝 알림이 없는 하위 작업의 id — 프로세스 없이 다시 열 때 · 되감을 때 멈춤으로 닫는다 (68단계) */
+export function openAgents(events: readonly ChatEvent[]): string[] {
+  const t = new AgentTracker()
+  for (const ev of events) t.see(ev)
+  return t.ids()
 }
 
 export type ChatState = 'new' | 'run' | 'wait' | 'done' | 'fail' | 'stopped'

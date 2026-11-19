@@ -175,6 +175,28 @@ describe('ChatManager — 하위 에이전트 (68단계)', () => {
   })
 })
 
+describe('ChatManager — 하위 에이전트 되감기 (68 리뷰)', () => {
+  it('되감아 남긴 기록에 끝을 못 받은 하위 작업이 있으면 멈춤으로 닫아 돌려준다(화면 · 디스크 둘 다)', async () => {
+    const saved: ChatEvent[] = [
+      { t: 'session', id: 's1' },
+      { t: 'user', text: '하나', at: 1 },
+      { t: 'tool', id: 'G', name: 'Agent', summary: '뒤' },
+      { t: 'agent', id: 'G', phase: 'start', bg: true },
+      { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u1' },
+      { t: 'user', text: '둘', at: 2 },
+      { t: 'agent', id: 'G', phase: 'end', status: 'done', summary: '뒤늦게 끝남' },
+      { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u2' },
+    ]
+    const t = setup(true, saved)
+    const r = await t.m.rewind('p1', 5, 2, { agent: 'claude', sessionId: 's1' })
+    const close: ChatEvent = { t: 'agent', id: 'G', phase: 'end', status: 'stopped' }
+    expect(r!.events).toEqual([...saved.slice(0, 5), close])
+    expect(t.replaced).toEqual([{ p: 'p1', ev: saved.slice(0, 5) }])
+    expect(t.stored).toEqual([close])
+    expect(r!.upTo).toBe(1)
+  })
+})
+
 describe('ChatManager — 되감기 · 나누기 (22단계)', () => {
   const saved: ChatEvent[] = [
     { t: 'session', id: 's1' },

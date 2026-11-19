@@ -220,10 +220,12 @@ describe('ClaudeSession — 22단계', () => {
       { t: 'tool', id: 'R1', name: 'Read', summary: 'a.txt', parent: 'A1' },
     ])
   })
-  it('68: 끝 알림을 못 받은 하위 작업은 프로세스가 끝나거나 갈라 띄우며 떼어 낼 때 멈춤으로 닫는다', () => {
+  it('68: 끝 알림을 못 받은 하위 작업은 프로세스가 끝날 때 멈춤으로 닫는다', () => {
     const started = (id: string) => ({ type: 'system', subtype: 'task_started', task_id: `t-${id}`, tool_use_id: id, description: 'd', is_backgrounded: true })
+    const agentLine = (...ids: string[]) => ({ type: 'assistant', message: { content: ids.map((id) => ({ type: 'tool_use', id, name: 'Agent', input: { description: id } })) } })
     const { s, children, events } = setup()
     s.send('x')
+    children[0]!.out(agentLine('A1', 'A2'))
     children[0]!.out(started('A1'))
     children[0]!.out(started('A2'))
     children[0]!.out({ type: 'system', subtype: 'task_notification', task_id: 't-A2', tool_use_id: 'A2', status: 'completed', summary: 'ok' })
@@ -233,13 +235,28 @@ describe('ClaudeSession — 22단계', () => {
       { t: 'agent', id: 'A2', phase: 'end', status: 'done', summary: 'ok' },
       { t: 'agent', id: 'A1', phase: 'end', status: 'stopped' },
     ])
-    // 다음 프로세스는 빈 목록에서 시작하고, fork 로 떼어 낼 때도 닫는다
+    // 다음 프로세스는 빈 목록에서 시작한다. fork 로 떼어 낼 때는 내지 않는다 — 되감기(manager)가 남긴 기록 기준으로 닫는다(68 리뷰)
     s.send('y')
+    children[1]!.out(agentLine('B1'))
     children[1]!.out(started('B1'))
     children[1]!.out(result)
+    const before = events.length
     s.fork('s', 'u-1')
-    expect(events.at(-1)).toEqual({ t: 'agent', id: 'B1', phase: 'end', status: 'stopped' })
+    expect(events.length).toBe(before)
     expect(events.filter((e) => e.t === 'agent' && e.phase === 'end' && e.id === 'A1')).toHaveLength(1)
+  })
+  it('68 리뷰: 포그라운드 Agent 결과로 닫힌 것 · Agent 아닌 작업 · 끝난 뒤 진행은 프로세스가 끝날 때 지어낸 멈춤을 내지 않는다', () => {
+    const { s, children, events } = setup()
+    s.send('x')
+    const c = children[0]!
+    c.out({ type: 'assistant', uuid: 'm1', message: { content: [{ type: 'tool_use', id: 'F', name: 'Agent', input: { description: 'd' } }, { type: 'tool_use', id: 'B', name: 'Bash', input: { command: 'npm run dev', run_in_background: true } }] } })
+    c.out({ type: 'system', subtype: 'task_started', tool_use_id: 'F', is_backgrounded: false })
+    c.out({ type: 'system', subtype: 'task_started', tool_use_id: 'B', is_backgrounded: true, task_type: 'local_bash' })
+    c.out({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'F', content: 'done' }] } })
+    c.out({ type: 'system', subtype: 'task_progress', tool_use_id: 'F', description: '늦은 진행', usage: { tool_uses: 3 } })
+    c.out(result)
+    c.emit('exit', 0, null)
+    expect(events.filter((e) => e.t === 'agent' && e.phase === 'end')).toEqual([])
   })
   it('fork(): 떠 있는 것을 끝내고 다음 띄우기에 --fork-session --resume-session-at, init 뒤에는 그냥 --resume', () => {
     const { s, children, calls } = setup('s-old')
@@ -310,7 +327,7 @@ describe('가짜 claude 하위 에이전트 대본 (68단계)', () => {
     expect(events.some((e) => e.t === 'text' && e.text.includes('중간 글'))).toBe(false)
     const item = card(events)
     expect(item.sub.map((i) => [i.name, i.summary, i.state])).toEqual([['Read', 'a.ts', 'ok']])
-    expect(agentCard(item)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '도구 1번 · 마지막 Read · 2초', summary: '1줄이에요' })
+    expect(agentCard(item)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '도구 1번 · 마지막 Read · 2초', summary: '1줄이에요', detail: '' })
     expect(events.find((e) => e.t === 'turn_end')).toMatchObject({ anchor: expect.stringMatching(/^u-/) })
   })
   it('bgagent: 턴이 끝날 때 카드는 진행 중, 턴 뒤에 온 알림이 끝남 · 요약을 채운다', async () => {

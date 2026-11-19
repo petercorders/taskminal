@@ -2,6 +2,7 @@
 // spawn 을 주입해 단위 시험한다. 이벤트 모양은 src/shared/chat.ts
 import type { EventEmitter } from 'node:events'
 import {
+  AgentTracker,
   claudeAnswerLine,
   claudeArgs,
   claudeControlLine,
@@ -75,7 +76,7 @@ export class ClaudeSession implements AgentSession {
   /** 이번 턴의 마지막 assistant 줄 uuid — 턴 끝 anchor (되감기 · 나누기가 여기서 가른다) */
   private lastUuid: string | undefined
   /** 68: 시작했는데 끝 알림을 못 받은 하위 작업(Agent 도구 id) — 이 프로세스가 끝나면 멈춤으로 닫는다 */
-  private openTasks = new Set<string>()
+  private tasks = new AgentTracker()
   /** 턴이 열려 있다 (보냈고 result · 멈춤을 아직 못 받음) */
   busy = false
   private stopping = false
@@ -90,7 +91,7 @@ export class ClaudeSession implements AgentSession {
     const gen = ++this.gen
     this.buf = ''
     this.stderr = ''
-    this.openTasks.clear()
+    this.tasks = new AgentTracker()
     // 58b: 안내는 이 실행의 인자로만 — 새 대화 · 이어 하기(--resume) · 갈라 띄우기 모두 여기서 띄운다
     const guide = this.o.agentGuide?.() ? ['--append-system-prompt', agentGuide()] : []
     const child = this.o.spawn(this.o.bin, [...claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt),...(this.o.model?['--model',this.o.model]:[]),...(this.o.effort?['--effort',this.o.effort]:[]),...guide], { cwd: this.o.cwd, env: this.o.env })
@@ -160,10 +161,7 @@ export class ClaudeSession implements AgentSession {
     }
     const events = claudeLineToEvents(o, this.o.cwd)
     for (const ev of events) {
-      if (ev.t === 'agent') {
-        if (ev.phase === 'end') this.openTasks.delete(ev.id)
-        else this.openTasks.add(ev.id)
-      }
+      this.tasks.see(ev)
       if (ev.t === 'turn_end' || ev.t === 'stopped') {
         this.busy = false
         this.stopping = false
@@ -241,7 +239,7 @@ export class ClaudeSession implements AgentSession {
     this.busy = false
     this.stopping = false
     this.pending.clear()
-    this.closeTasks()
+    this.tasks = new AgentTracker() // 떼어 낸 프로세스의 하위 작업은 되감기(manager)가 남긴 기록 기준으로 닫는다
     if (c) {
       try {
         c.stdin?.end()
@@ -257,8 +255,9 @@ export class ClaudeSession implements AgentSession {
 
   /** 이 프로세스의 하위 작업은 프로세스와 함께 끝난다 — 알림을 못 받은 것을 멈춤으로 닫는다 */
   private closeTasks() {
-    for (const id of this.openTasks) this.o.onEvent({ t: 'agent', id, phase: 'end', status: 'stopped' })
-    this.openTasks.clear()
+    const ids = this.tasks.ids()
+    this.tasks = new AgentTracker()
+    for (const id of ids) this.o.onEvent({ t: 'agent', id, phase: 'end', status: 'stopped' })
   }
 
   kill() {

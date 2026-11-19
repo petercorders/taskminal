@@ -193,6 +193,12 @@ export class ChatManager {
     await this.d.store.replace(paneId, kept)
     const sessionId = plan.forkAt ? (plan.sessionId ?? chat.sessionId) : undefined
     this.panes.get(paneId)?.s.fork(sessionId, plan.forkAt)
+    // 68: 떼어 낸 프로세스의 하위 작업은 함께 끝났고, 남긴 기록에서 끝 알림이 잘렸을 수도 있다 — 남긴 기록 기준으로 닫아 화면에도 돌려준다
+    for (const id of openAgents(kept)) {
+      const ev: ChatEvent = { t: 'agent', id, phase: 'end', status: 'stopped' }
+      kept.push(ev)
+      this.record(paneId, ev)
+    }
     return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, ...(sessionId ? { sessionId } : {}), refill: plan.refill, masked: plan.masked === true }
   }
 
