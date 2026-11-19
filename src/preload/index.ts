@@ -167,6 +167,13 @@ const api: TaskminalApi = {
     removeTask: (taskId) => ipcRenderer.send(IPC.historyRemoveTask, taskId),
     clear: () => ipcRenderer.invoke(IPC.historyClear) as Promise<void>,
   },
+  inbox: {
+    list: () => ipcRenderer.invoke(IPC.inboxList),
+    add: (entry) => ipcRenderer.invoke(IPC.inboxAdd, entry),
+    read: (how) => ipcRenderer.invoke(IPC.inboxRead, how),
+    removeTask: (taskId) => ipcRenderer.invoke(IPC.inboxRemoveTask, taskId),
+    clear: () => ipcRenderer.invoke(IPC.inboxClear),
+  },
   chat: {
     send: (paneId, text, cwd, chat, images) => ipcRenderer.invoke(IPC.chatSend, paneId, text, cwd, chat, images) as Promise<'ok' | 'busy' | 'missing'>,
     rewind: (paneId, index, at, chat) => ipcRenderer.invoke(IPC.chatRewind, paneId, index, at, chat) as ReturnType<ChatApiT['rewind']>,

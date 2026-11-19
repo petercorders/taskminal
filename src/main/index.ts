@@ -45,6 +45,8 @@ import { createHostControl, type HostControl } from './host-control'
 import { BackupStore } from './backup-store'
 import { ScrollbackStore } from './scrollback-store'
 import { HistoryStore } from './history-store'
+import { InboxStore } from './inbox-store'
+import { isInboxId, parseInboxRead } from '../shared/inbox'
 import { commitFiles, loadReview, makeRunGit, openTarget, restoreReverted, revertFile, revertLines, RevertStore, ReviewWatch, safeRel, undoCommit } from './review-git'
 import type { CommitResult, RestoreResult, ReviewLoad, RevertResult, RevertedView, UndoResult } from '../shared/review'
 import { spawn as spawnChild } from 'node:child_process'
@@ -303,6 +305,8 @@ const sendRedact = (s: RedactStatus) => {
 // 명령 기록(19단계) — userData 가 정해진 뒤 만든다. 디스크로 가기 전 가린다
 let historyStore: HistoryStore | null = null
 const history = () => (historyStore ??= new HistoryStore(join(app.getPath('userData'), 'history'), () => secretOpts))
+let inboxStore: InboxStore | null = null
+const inbox = () => (inboxStore ??= new InboxStore(join(app.getPath('userData'), 'inbox.json'), () => secretOpts))
 // 대화 pane (21단계) — 허락 방식은 상태 저장 때마다 갱신(떠 있는 claude 에도 바로)
 let chatPermission: ChatPermission = 'ask'
 let chatManager: ChatManager | null = null
@@ -873,6 +877,32 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(IPC.historyClear, (event) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
     return history().clear()
+  })
+
+  // 66단계 알림 받은편지함 — 모양 검사 · 가리기는 InboxStore. 쓰기 실패는 오류 기록에만(화면은 그대로, 다음 쓰기가 전체를 다시 쓴다)
+  const inboxWrite = (job: () => Promise<void>) => job().catch((e: unknown) => { report('warn', 'inbox-save', '알림 기록을 저장하지 못했어요', e); throw e })
+  ipcMain.handle(IPC.inboxList, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return inbox().list()
+  })
+  ipcMain.handle(IPC.inboxAdd, (event, entry: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return inboxWrite(() => inbox().add(entry))
+  })
+  ipcMain.handle(IPC.inboxRead, (event, how: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    const read = parseInboxRead(how)
+    if (!read) throw new Error('읽음 표시를 확인해 주세요')
+    return inboxWrite(() => inbox().read(read))
+  })
+  ipcMain.handle(IPC.inboxRemoveTask, (event, taskId: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isInboxId(taskId)) throw new Error('일감을 확인해 주세요')
+    return inboxWrite(() => inbox().removeTask(taskId))
+  })
+  ipcMain.handle(IPC.inboxClear, (event) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    return inboxWrite(() => inbox().clear())
   })
 
   // 스크롤 저장 — renderer 를 믿지 않는다: paneId 검사 · pane 당 바이트 상한은 ScrollbackStore, live 수 상한은 여기

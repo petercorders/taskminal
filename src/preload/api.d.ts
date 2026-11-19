@@ -207,6 +207,8 @@ export interface TaskminalApi {
   /** 첫 실행 안내를 끝냈다 — 다시 띄우지 않는다 */
   firstRunDone(): void
   history: HistoryApi
+  /** 66단계 알림 받은편지함 */
+  inbox: import('../shared/inbox').InboxApi
   ports: PortsApi
   chat: ChatApi
   review: ReviewApi

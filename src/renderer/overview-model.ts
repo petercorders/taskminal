@@ -4,6 +4,7 @@ import { AGENT_NAME, type ChatAgent } from '../shared/chat'
 import type { Branches } from '../shared/git'
 import { paneIds } from '../shared/layout'
 import type { AppState, Id, Task } from '../shared/types'
+import type { InboxEntry } from '../shared/inbox'
 import { flowSections, lastActive, lastLine, type PaneTarget } from './sidebar-model'
 
 export interface OverviewPane extends PaneTarget {
@@ -70,4 +71,19 @@ export function overviewSections(state: AppState, activity: Readonly<Record<Id, 
       return { task, panes, target, group: groups.find((g) => g.id === task.groupId)?.name ?? null, branch: branches[task.cwd] ?? null, line: lastLine(task, activity), lastAt: lastActive(task, activity), unread: unread.has(task.id) }
     }),
   }))
+}
+
+/** 66단계 '지난 알림' 한 줄 — 일감 이름과 지금 열 수 있는 pane(닫혔거나 보관했으면 null) */
+export interface InboxRow {
+  entry: InboxEntry
+  taskName: string
+  target: PaneTarget | null
+}
+export function inboxRows(state: AppState, entries: readonly InboxEntry[]): InboxRow[] {
+  return entries.map((entry) => {
+    const task = state.tasks.find((t) => t.id === entry.taskId)
+    const tab = task?.tabs.find((t) => paneIds(t.layout).includes(entry.paneId))
+    const target = task && tab ? overviewTarget(state, { taskId: task.id, tabId: tab.id, paneId: entry.paneId }) : null
+    return { entry, taskName: task?.name ?? '지운 일감', target }
+  })
 }
