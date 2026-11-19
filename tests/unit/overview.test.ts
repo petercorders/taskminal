@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTask, emptyState, splitActivePaneChat } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
-import { overviewSections, overviewTarget } from '../../src/renderer/overview-model'
+import { inboxRows, overviewSections, overviewTarget } from '../../src/renderer/overview-model'
 
 function fixture(): AppState {
   const s = emptyState()
@@ -76,5 +76,19 @@ describe('전체 보기', () => {
     const sections = overviewSections(s, { orphan: { state: 'waiting', busy: true, attention: true } }, {}, new Set(), '')
     expect(sections.find((x) => x.key === 'need')!.cards).toHaveLength(0)
     expect(sections.flatMap((x) => x.cards).find((c) => c.task.id === t.id)!.panes.map((p) => p.paneId)).not.toContain('orphan')
+  })
+  it('지난 알림 줄(66단계) — 지금 열 수 있는 pane 이면 그 탭을 찾고, 지운 일감 · 닫은 pane · 보관한 일감이면 열 대상이 없다', () => {
+    const s = fixture()
+    const [a, b] = s.tasks as [AppState['tasks'][number], AppState['tasks'][number]]
+    const pane = a.tabs[0]!.activePaneId
+    const e = (id: string, taskId: string, paneId: string) => ({ id, at: 1, kind: 'wait' as const, taskId, paneId, title: 't', body: 'b', read: false })
+    b.archivedAt = 1
+    const rows = inboxRows(s, [e('1', a.id, pane), e('2', a.id, 'gone'), e('3', 'deleted', 'x'), e('4', b.id, b.tabs[0]!.activePaneId)])
+    expect(rows.map((r) => [r.taskName, r.target])).toEqual([
+      ['서버', { taskId: a.id, tabId: a.tabs[0]!.id, paneId: pane }],
+      ['서버', null],
+      ['지운 일감', null],
+      ['화면', null],
+    ])
   })
 })

@@ -16,6 +16,8 @@ import type { UsageMap } from '../shared/usage'
 
 interface Props {
   onOverview(): void
+  /** 66단계: 안 읽은 지난 알림 수 — '전체 보기' 단추에 */
+  inboxUnread?: number
   /** 56단계: 위 도구 줄과 같은 목록(WorkToolOptions) — 값은 도구 kind · find-<kind> */
   onWorkTool(value:string):void
   state: AppState
@@ -71,7 +73,7 @@ const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, usage, onUsage, issueOf = () => null }: Props) {
+export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, usage, onUsage, issueOf = () => null }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -284,7 +286,9 @@ export function Sidebar({ onOverview, onWorkTool, state, activity, loading, onSe
           </button>
         </span>
       </header>
-      <button type="button" className="sidebar-overview button" onClick={onOverview} disabled={loading}>전체 보기</button>
+      <button type="button" className="sidebar-overview button" onClick={onOverview} disabled={loading}>
+        전체 보기{inboxUnread > 0 && <span className="overview-inbox-count" aria-label={`안 읽은 알림 ${inboxUnread}개`}> · 알림 {inboxUnread}</span>}
+      </button>
       <select className="sidebar-tools-menu" aria-label="작업 도구 선택" value="" onChange={e=>onWorkTool(e.target.value)}><WorkToolOptions task={state.tasks.find(task=>task.id===state.activeTaskId)??null}/></select>
       {state.tasks.length > 0 && (
         <div className="sidebar-tools">

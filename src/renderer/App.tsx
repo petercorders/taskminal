@@ -42,6 +42,8 @@ import { AgentSessionsPanel, sessionKey } from './AgentSessionsPanel'
 import { DEADLINE_MS, withDeadline, type AgentSession, type ResumeHow } from '../shared/agent-sessions'
 import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
+import { inboxModel, useInbox } from './inbox'
+import { inboxUnread } from '../shared/inbox'
 import { AccountsPanel } from './AccountsPanel'
 import { DevelopmentPanel } from './DevelopmentPanel'
 import { RemotePanel } from './RemotePanel'
@@ -393,6 +395,12 @@ export function App() {
     setFinding((f) => (f.paneId && !shownPanesKey.split(' ').includes(f.paneId) ? { ...f, paneId: null } : f))
   }, [shownPanesKey])
   viewedRef.current = viewedPane
+  // 66단계: 그 pane 을 보면 그 pane 의 지난 알림은 읽음(안 읽은 것이 있을 때만 쓴다)
+  useEffect(() => {
+    if (viewedPane) inboxModel().viewed(viewedPane)
+  }, [viewedPane])
+  const inboxEntries = useInbox()
+  const inboxCount = inboxUnread(inboxEntries)
 
   // 활동의 원본은 ref — 사건 하나에서 이전 · 다음을 함께 보고 알릴지 정한다(setState 갱신 함수 안에서 알림을 보내지 않게)
   const activityRef = useRef(activity)
@@ -407,8 +415,7 @@ export function App() {
   const deliver = (kind: NotifyKind, paneId: string, act: PaneActivity | undefined) => {
     const s = stateRef.current
     const way = s.settings.notify[kind]
-    if (!way.banner && !way.sound) return
-    if (s.settings.muteViewed && paneId === viewedRef.current) return
+    const viewed = paneId === viewedRef.current
     const taskId = findPaneTask(s, paneId)
     const taskName = s.tasks.find((t) => t.id === taskId)?.name ?? ''
     const detail =
@@ -420,6 +427,10 @@ export function App() {
             ? formatDuration(act.endedAt - act.startedAt)
             : undefined
     const body = diskMaskRef.current([taskName, act?.command, detail].filter(Boolean).join(' · '))
+    // 66단계: 보고 있지 않은 pane 의 알림은 받은편지함에 남긴다 — 알림 · 소리를 꺼 둔 종류도(설정은 방해만 끈다)
+    if (!viewed && taskId) inboxModel().add({ id: crypto.randomUUID(), kind, taskId, paneId, body })
+    if (!way.banner && !way.sound) return
+    if (s.settings.muteViewed && viewed) return
     if (!way.banner) return window.taskminal.beep()
     const n = new Notification(NOTIFY_TITLE[kind], { body, silent: !way.sound })
     n.onclick = () => {
@@ -452,6 +463,9 @@ export function App() {
   // 16단계: 앱이 처음 읽히면 셸 지킴이에 남은 셸을 본다 — 꺼져 있던 동안의 입력 기다림 · 실패를 활동(사이드바 확인 필요)으로 넣고,
   // 이어진 셸 수 · 기다리는 셸을 위 줄로. 아직 마운트되지 않은 탭의 pane 도 들어간다. 한 번만(clearUnseen).
   const loadedOnce = load.phase === 'ready'
+  useEffect(() => {
+    if (loadedOnce) void inboxModel().load()
+  }, [loadedOnce])
   useEffect(() => {
     if (!loadedOnce) return
     let alive = true
@@ -1242,6 +1256,7 @@ export function App() {
       onEnd: (undone) => {
         if (undone) return
         history.dropTask(task.id)
+        inboxModel().removeTask(task.id)
         // 대화 화면 기록도 되돌리기를 놓친 뒤 지운다 (프로세스는 일감이 빠질 때 이미 끝났다)
         for (const p of Object.values(task.panes)) if (p.kind === 'chat') window.taskminal.chat.close(p.id, true)
       },
@@ -2081,6 +2096,7 @@ export function App() {
       <div className="app-body">
         <CompactSidebar open={sidebarCompactOpen} onClose={() => setSidebarCompactOpen(false)}>
         <Sidebar
+          inboxUnread={inboxCount}
           issueOf={(t) => jiraSidebarText(issueLinks.find((link) => link.taskId === t.id && link.issue.provider === 'jira'), new Date())}
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
           onWorkTool={value=>sidebarAction(() => pickToolRef.current(value))}
@@ -2129,7 +2145,7 @@ export function App() {
           <nav ref={toolbarElement} className="workspace-toolbar" aria-label="작업 도구">
             <select className="compact-tools-select" aria-label="작업 도구 선택" value="" onChange={e=>pickTool(e.target.value)}><WorkToolOptions task={activeTask}/></select>
             <button type="button" className="button compact-sidebar-toggle" aria-expanded={sidebarCompactOpen} aria-controls="compact-sidebar-panel" onClick={()=>setSidebarCompactOpen(v=>!v)}>일감 목록</button>
-            <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기</button>
+            <button type="button" className="button compact-overview" onClick={()=>{setOverviewOpen(true);setWorkTool(null);setSidebarCompactOpen(false)}}>전체 보기{inboxCount>0&&<span className="overview-inbox-count" aria-label={`안 읽은 알림 ${inboxCount}개`}> · 알림 {inboxCount}</span>}</button>
             {/* 56단계: 이 일감 도구 · 앱 도구 두 묶음 — 이름은 ⌘P 와 같고, 막힌 일감 도구는 숨기지 않고 꺼서 이유를 보인다 */}
             <div className="toolbar-group" role="group" aria-label="이 일감">
               {WORK_TOOLS.filter(t=>t.group==='task'&&t.direct).map(t=>{const why=toolBlocked(t,activeTask);return <button type="button" className="button" key={t.kind} disabled={why!==null} title={why??undefined} onClick={()=>runCommand(t.command)}>{commandLabel(t.command)}</button>})}

@@ -95,6 +95,12 @@ export const IPC = {
   historyAppend: 'history:append', // invoke(HistoryEntry[] ≤50) → 쓴 줄 수 · 실패면 예외(저장 실패 줄)
   historyRemove: 'history:remove', // send(taskId, id[]) — 지우기 토스트가 끝난 뒤
   historyRemoveTask: 'history:remove-task', // send(taskId) — 일감을 지울 때
+  // 66단계 알림 받은편지함 — main 의 InboxStore(inbox.json)가 가린 뒤 쓴다. renderer 는 답으로 화면을 바꾸지 않는다
+  inboxList: 'inbox:list', // invoke → InboxEntry[]
+  inboxAdd: 'inbox:add', // invoke(InboxEntry) — 같은 id 는 한 줄
+  inboxRead: 'inbox:read', // invoke(InboxRead)
+  inboxRemoveTask: 'inbox:remove-task', // invoke(taskId)
+  inboxClear: 'inbox:clear', // invoke
   historyClear: 'history:clear', // invoke — 설정 › 개인정보 › 명령 기록 모두 지우기
   // 20단계 포트
   portsProbe: 'ports:probe', // invoke(paneId[]) → ProbeResult — 그 창의 pane 셸 자손이 듣는 포트
