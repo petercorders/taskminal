@@ -135,6 +135,68 @@ describe('ChatManager — 리뷰 반영', () => {
   })
 })
 
+describe('ChatManager — 하위 에이전트 (68단계)', () => {
+  it('프로세스 없이 다시 열 때 끝 알림이 없는 하위 작업을 멈춤으로 닫는다 — 한 번만', async () => {
+    const saved: ChatEvent[] = [
+      { t: 'user', text: 'a', at: 1 },
+      { t: 'tool', id: 'A1', name: 'Agent', summary: '뒤에서' },
+      { t: 'agent', id: 'A1', phase: 'start', bg: true },
+      { t: 'tool', id: 'A2', name: 'Agent', summary: '끝남' },
+      { t: 'agent', id: 'A2', phase: 'start' },
+      { t: 'agent', id: 'A2', phase: 'end', status: 'done', summary: 's' },
+      { t: 'turn_end', ok: true, ms: 1, reason: 'completed' },
+    ]
+    const t = setup(true, saved)
+    const h = await t.m.history('p1')
+    expect(h.events.slice(saved.length)).toEqual([{ t: 'agent', id: 'A1', phase: 'end', status: 'stopped' }])
+    expect(t.stored).toEqual([{ t: 'agent', id: 'A1', phase: 'end', status: 'stopped' }])
+    expect(h.upTo).toBe(1)
+    // 디스크에 닫힌 것이 쓰인 기록을 다시 읽으면 더 쓰지 않는다
+    const again = setup(true, [...saved, ...t.stored])
+    await again.m.history('p1')
+    expect(again.stored).toEqual([])
+  })
+  it('턴 도중 끝난 기록은 멈춤 뒤에 하위 작업도 닫는다 · 프로세스가 떠 있으면 건드리지 않는다', async () => {
+    const open: ChatEvent[] = [
+      { t: 'user', text: 'a', at: 1 },
+      { t: 'tool', id: 'A1', name: 'Agent', summary: 'd' },
+      { t: 'agent', id: 'A1', phase: 'start' },
+    ]
+    const t = setup(true, open)
+    expect(t.stored).toEqual([])
+    await t.m.history('p1')
+    expect(t.stored).toEqual([{ t: 'stopped' }, { t: 'agent', id: 'A1', phase: 'end', status: 'stopped' }])
+    const live = setup(true, open)
+    live.release()
+    expect(await live.m.send(live.sink, 'p1', 'b', '/tmp', { agent: 'claude' })).toBe('ok')
+    const before = live.stored.length
+    await live.m.history('p1')
+    expect(live.stored.length).toBe(before)
+  })
+})
+
+describe('ChatManager — 하위 에이전트 되감기 (68 리뷰)', () => {
+  it('되감아 남긴 기록에 끝을 못 받은 하위 작업이 있으면 멈춤으로 닫아 돌려준다(화면 · 디스크 둘 다)', async () => {
+    const saved: ChatEvent[] = [
+      { t: 'session', id: 's1' },
+      { t: 'user', text: '하나', at: 1 },
+      { t: 'tool', id: 'G', name: 'Agent', summary: '뒤' },
+      { t: 'agent', id: 'G', phase: 'start', bg: true },
+      { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u1' },
+      { t: 'user', text: '둘', at: 2 },
+      { t: 'agent', id: 'G', phase: 'end', status: 'done', summary: '뒤늦게 끝남' },
+      { t: 'turn_end', ok: true, ms: 1, reason: 'completed', anchor: 'u2' },
+    ]
+    const t = setup(true, saved)
+    const r = await t.m.rewind('p1', 5, 2, { agent: 'claude', sessionId: 's1' })
+    const close: ChatEvent = { t: 'agent', id: 'G', phase: 'end', status: 'stopped' }
+    expect(r!.events).toEqual([...saved.slice(0, 5), close])
+    expect(t.replaced).toEqual([{ p: 'p1', ev: saved.slice(0, 5) }])
+    expect(t.stored).toEqual([close])
+    expect(r!.upTo).toBe(1)
+  })
+})
+
 describe('ChatManager — 되감기 · 나누기 (22단계)', () => {
   const saved: ChatEvent[] = [
     { t: 'session', id: 's1' },

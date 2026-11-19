@@ -50,10 +50,58 @@ function ask(request, then) {
   out({ type: 'control_request', request_id: id, request })
 }
 
+/**
+ * 68단계: 하위 에이전트 — claude 2.1.325 실측(tests/fixtures/claude/subagent-tools.jsonl)을 줄인 모양. 하위 줄은 parent_tool_use_id 를 단다.
+ * bg(백그라운드): Agent 결과('맡겼다')와 턴 끝이 먼저 오고, 하위 진행 · 끝 알림은 턴이 끝난 뒤 온다.
+ */
+function subagent(bg) {
+  const n = ++seq
+  const agent = `tu-a${n}`
+  const read = `tu-ar${n}`
+  const task = `task-${n}`
+  const sys = (o) => out({ type: 'system', task_id: task, session_id: sessionId, ...o })
+  assistant([{ type: 'tool_use', id: agent, name: 'Agent', input: { description: '줄 세기', prompt: 'a.ts 를 읽고 줄 수만', subagent_type: 'general-purpose', run_in_background: bg } }])
+  sys({ subtype: 'task_started', tool_use_id: agent, description: '줄 세기', subagent_type: 'general-purpose', is_backgrounded: bg, task_type: 'local_agent', prompt: 'a.ts 를 읽고 줄 수만' })
+  out({ type: 'user', parent_tool_use_id: agent, message: { role: 'user', content: [{ type: 'text', text: 'a.ts 를 읽고 줄 수만' }] }, session_id: sessionId })
+  const work = () => {
+    sys({ subtype: 'task_progress', tool_use_id: agent, description: 'Reading a.ts', usage: { total_tokens: 100, tool_uses: 1, duration_ms: 1500 }, last_tool_name: 'Read' })
+    out({
+      type: 'assistant',
+      uuid: `s-${process.pid}-${n}`,
+      parent_tool_use_id: agent,
+      message: { model: 'claude-fake', role: 'assistant', content: [{ type: 'text', text: '하위 에이전트 중간 글' }, { type: 'tool_use', id: read, name: 'Read', input: { file_path: `${process.cwd()}/a.ts` } }] },
+      session_id: sessionId,
+    })
+    out({ type: 'user', parent_tool_use_id: agent, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: read, content: 'export const a = 1' }] }, session_id: sessionId })
+  }
+  const finish = () => {
+    sys({ subtype: 'task_updated', patch: { status: 'completed' } })
+    sys({ subtype: 'task_notification', tool_use_id: agent, status: 'completed', output_file: '', summary: '1줄이에요', usage: { total_tokens: 200, tool_uses: 1, duration_ms: 2500 } })
+  }
+  const agentResult = (text) => out({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: agent, content: [{ type: 'text', text }] }] }, session_id: sessionId })
+  if (!bg) {
+    work()
+    finish()
+    agentResult('1줄이에요\nagentId: x')
+    assistant([{ type: 'text', text: '하위 에이전트가 1줄이래요' }])
+    result()
+    return
+  }
+  agentResult('Async agent launched successfully.')
+  assistant([{ type: 'text', text: '뒤에서 세는 중이에요' }])
+  result()
+  setTimeout(work, 300)
+  setTimeout(finish, 900)
+}
+
 function turn(text, images = 0) {
   init()
   // Workflow context can contain words such as taskminal ('ask'). Match only the directive when requested.
   const trigger = process.env.FAKE_CLAUDE_MATCH_FIRST_LINE === '1' ? text.split('\n')[0] : text
+  if (trigger.includes('subagent') || trigger.includes('bgagent')) {
+    subagent(trigger.includes('bgagent'))
+    return
+  }
   if (trigger.includes('crash')) {
     assistant([{ type: 'text', text: '곧 끝나요' }])
     process.stderr.write('fake crash: boom\n')
