@@ -1,4 +1,4 @@
-import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { join, resolve, relative, isAbsolute, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
@@ -10,7 +10,9 @@ import { usedTaskPaths } from '../shared/worktree-cleanup'
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
 import { configured } from './development-tools'
-interface Dependencies { state():AppState|null; revision():number; pendingPaths():string[]; liveCwds():Promise<string[]> }
+import { buildImportPreview, ImportRoots, taskFolders } from './repo-import'
+import type { AgentSessionList } from '../shared/agent-sessions'
+interface Dependencies { state():AppState|null; revision():number; pendingPaths():string[]; liveCwds():Promise<string[]>; sessions():Promise<AgentSessionList> }
 const expand=(value:string)=>resolve(expandHome(value,homedir()))
 const inside=(parent:string,child:string)=>{const path=relative(parent,child);return path===''||(!isAbsolute(path)&&path!=='..'&&!path.startsWith('..'+sep))}
 export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d:Dependencies){
@@ -36,8 +38,9 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
   ipcMain.handle(IPC.worktreesTargets,(event,dir)=>service.targets(root(event,dir)))
   ipcMain.handle(IPC.worktreesOpen,async(event,dir,target)=>{
     const result=await service.open(root(event,dir),target)
-    for(const t of d.state()?.tasks??[])if(!t.host&&t.archivedAt===undefined&&(await realpath(expand(t.cwd)).catch(()=>''))===result.path){const current=d.state()?.tasks.find(item=>item.id===t.id&&!item.host&&item.archivedAt===undefined);if(current?.cwd===t.cwd)return {...result,taskId:t.id,cwd:t.cwd}}
-    return result
+    // 같은 폴더 신원 검사 — 70 가져오기와 같은 함수(taskFolders)
+    const owner=(await taskFolders(()=>d.state()?.tasks??[],homedir())).get(result.path)
+    return owner?{...result,taskId:owner.id,cwd:owner.cwd}:result
   })
   ipcMain.handle(IPC.worktreesRemove,(event,dir,target)=>service.remove(root(event,dir),target))
   // 67단계: 병합된 것 정리 — renderer 가 연결 일감을 보관하고 상태를 먼저 보낸 뒤 부른다. 보관 상태인 그 일감들의 폴더만 사용 경로에서 빼고,
@@ -45,6 +48,20 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
   ipcMain.handle(IPC.worktreesClean,(event,dir,items)=>{
     const authorized=root(event,dir)
     return service.clean(authorized,items,async exclude=>{const live=await d.liveCwds();return [...usedTaskPaths(d.state()?.tasks??[],exclude).map(expand),...d.pendingPaths().map(expand),...live]})
+  })
+  // 70단계: 저장소째 가져오기 — 고르기는 main 의 대화상자(고른 폴더만 미리보기 권한), 미리보기는 읽기만(일감은 renderer 가 한 동작으로 만든다)
+  const imports=new ImportRoots()
+  ipcMain.handle(IPC.worktreesImportPick,async(event)=>{
+    if(!trusted(event))throw new Error('알 수 없는 프레임')
+    const win=BrowserWindow.fromWebContents(event.sender)
+    const options={title:'가져올 저장소 폴더 선택',properties:['openDirectory'] as Array<'openDirectory'>}
+    const picked=win?await dialog.showOpenDialog(win,options):await dialog.showOpenDialog(options)
+    return picked.canceled||!picked.filePaths[0]?null:imports.add(picked.filePaths[0])
+  })
+  ipcMain.handle(IPC.worktreesImportPreview,async(event,dir)=>{
+    if(!trusted(event))throw new Error('알 수 없는 프레임')
+    const authorized=await imports.allowed(dir)??root(event,dir)
+    return buildImportPreview({worktrees:service,tasks:()=>d.state()?.tasks??[],home:homedir(),sessions:d.sessions},authorized)
   })
   return service
 }

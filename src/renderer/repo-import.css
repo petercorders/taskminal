@@ -1,0 +1,42 @@
+/* 70단계: 저장소째 가져오기 대화상자 — 긴 경로는 줄을 넘기고, 목록만 스크롤 */
+.repo-import h1:focus { outline: none; }
+.repo-import h1:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: var(--space-half); }
+.repo-import-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.repo-import-error { margin: 0; color: var(--danger); white-space: pre-wrap; overflow-wrap: anywhere; }
+.repo-import-path { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.repo-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  max-height: 50dvh;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.repo-import-list legend { padding: 0 var(--space-1); font-size: 13px; }
+.repo-import-row { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; cursor: pointer; }
+.repo-import-row.off { cursor: default; }
+.repo-import-row.off strong { color: var(--muted); }
+.repo-import-row > input { flex: none; margin-top: var(--space-1); }
+.repo-import-text { display: flex; flex-direction: column; gap: var(--space-half); min-width: 0; font-size: 13px; }
+.repo-import-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); min-width: 0; overflow-wrap: anywhere; }
+.repo-import-chip {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  font-size: 12px;
+}
+.repo-import-chip.merged { border-color: var(--done); }
+.repo-import-session { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
+.repo-import-report ul { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding-left: var(--space-4); font-size: 13px; overflow-wrap: anywhere; }
+.repo-import-skipped { color: var(--muted); }

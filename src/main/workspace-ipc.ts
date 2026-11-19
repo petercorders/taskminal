@@ -194,5 +194,5 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     accounts.dispose()
     search.dispose()
   })
-  return {accounts,browser}
+  return {accounts,browser,agentSessions}
 }

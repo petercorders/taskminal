@@ -66,6 +66,8 @@ interface Candidate {
 const MAX_FILES = 20_000
 /** 공급자마다 앞부분을 읽어 볼 파일 수 — 하위 에이전트 · 손상 파일이 많아도 여기서 멈춘다 */
 const MAX_PARSE = PER_AGENT * 3
+/** 기록 파일 이름 끝의 세션 id */
+const NAME_ID = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i
 
 async function entries(dir: string): Promise<Dirent[]> {
   try {
@@ -99,6 +101,8 @@ export class AgentSessions {
   reads = 0
   private cache = new Map<string, { mtimeMs: number; size: number; result: HeadResult }>()
   private index = new Map<string, Candidate>()
+  /** 70단계: 목록(에이전트마다 최근 300개) 밖의 기록 — 파일 이름의 세션 id → 파일. 가져온 일감에 저장한 이어 하기 후보가 오래돼도 찾게 */
+  private byName = new Map<string, Candidate>()
   private running: Promise<AgentSessionList> | null = null
   private pending = new Map<string, Promise<AgentSessionTarget>>()
 
@@ -174,6 +178,7 @@ export class AgentSessions {
     const options = this.secrets()
     const seen = new Set<string>()
     const index = new Map<string, Candidate>()
+    const byName = new Map<string, Candidate>()
     const sessions: AgentSession[] = []
     let skipped = 0
     let badLines = 0
@@ -186,6 +191,11 @@ export class AgentSessions {
         skipped += c.links
       }
       all.sort((a, b) => b.mtimeMs - a.mtimeMs)
+      for (const c of all) {
+        // Claude `<id>.jsonl` · Codex `rollout-…-<id>.jsonl` — 같은 id 면 더 최근 것. 앞부분을 다시 읽어 id 를 확인한 뒤에만 쓴다(resolve)
+        const id = NAME_ID.exec(c.name)?.[1]?.toLowerCase()
+        if (id && !byName.has(`${agent}:${id}`)) byName.set(`${agent}:${id}`, c)
+      }
       let count = 0
       let parsed = 0
       for (const c of all) {
@@ -221,6 +231,7 @@ export class AgentSessions {
     }
     for (const path of this.cache.keys()) if (!seen.has(path)) this.cache.delete(path)
     this.index = index
+    this.byName = byName
     sessions.sort((a, b) => b.updatedAt - a.updatedAt)
     return { sessions, skipped, badLines, subagents, home: homedir(), at: Date.now() }
   }
@@ -242,10 +253,10 @@ export class AgentSessions {
 
   private async resolve(key: string, req: AgentSessionRequest): Promise<AgentSessionTarget> {
     const missing = () => new Error('세션 기록을 찾지 못했어요. 목록을 새로 고쳐 주세요.')
-    let c = this.index.get(key)
+    let c = this.index.get(key) ?? this.byName.get(key)
     if (!c) {
       await this.list()
-      c = this.index.get(key)
+      c = this.index.get(key) ?? this.byName.get(key)
     }
     if (!c) throw missing()
     const info = await lstat(c.path).catch(() => null)

@@ -130,6 +130,10 @@ export interface WorktreeApi {
   clean(root: string, items: WorktreeCleanItem[]): Promise<WorktreeCleanResult[]>
 }
 
+/** 39 '일감으로 열기' 의 조건 — 상태를 확인했고(canOpen) bare · 등록 복구 필요 · 모르는 속성이 아니다. 70 가져오기가 같은 조건을 쓴다 */
+export const openable = (entry: Pick<ManagedWorktree, 'canOpen' | 'bare' | 'prunable' | 'unknownAttributes'>): boolean =>
+  entry.canOpen && !entry.bare && !entry.prunable && entry.unknownAttributes.length === 0
+
 /** 확인한 대상과 같은 줄인가 — 경로 · 공유 Git 정보 · HEAD · 브랜치가 모두 같아야 한다 */
 export const sameTarget = (a: WorktreeSnapshot, b: WorktreeSnapshot): boolean =>
   a.path === b.path && a.commonDir === b.commonDir && a.head === b.head && a.branch === b.branch

@@ -163,6 +163,8 @@ export interface TaskminalApi {
   remote: import('../shared/remote-workspace').RemoteApi
   issues: import('../shared/issues').IssueApi
   worktrees: import('../shared/worktree-management').WorktreeApi
+  /** 70단계 저장소째 가져오기 */
+  repoImport: import('../shared/repo-import').RepoImportApi
   schedules: import('../shared/schedules').ScheduleApi
   development: import('../shared/development-tools').DevelopmentApi
   workflows: import('../shared/workflows').WorkflowApi

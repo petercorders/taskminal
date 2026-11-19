@@ -121,6 +121,16 @@ describe('이어 하기 대상 — main 이 id 로 다시 찾는다', () => {
     const r = await new AgentSessions(() => roots).target({ agent: 'claude', id: uuid(1), paneId: 'p1', how: 'chat' })
     expect(r).toEqual({ agent: 'claude', sessionId: uuid(1), cwd: work, account: 'default-claude', paneId: 'p1', how: 'chat' })
   })
+  test('70: 목록(에이전트마다 최근 300개) 밖으로 밀린 오래된 기록도 id 로 찾는다 — Claude · Codex', async () => {
+    for (let i = 1; i <= 302; i++) claudeFile(i)
+    for (let i = 1; i <= 302; i++) codexFile(1000 + i)
+    const s = new AgentSessions(() => roots)
+    const list = await s.list()
+    expect(list.sessions.some((x) => x.id === uuid(1))).toBe(false)
+    expect(list.sessions.some((x) => x.id === uuid(1001))).toBe(false)
+    await expect(s.target({ agent: 'claude', id: uuid(1), paneId: 'p1', how: 'chat' })).resolves.toMatchObject({ sessionId: uuid(1), cwd: dir })
+    await expect(s.target({ agent: 'codex', id: uuid(1001), paneId: 'p2', how: 'terminal' })).resolves.toMatchObject({ sessionId: uuid(1001), cwd: dir })
+  })
   test('세션 폴더가 없으면 막고 안내', async () => {
     claudeFile(1, { cwd: join(dir, 'gone') })
     await expect(new AgentSessions(() => roots).target({ agent: 'claude', id: uuid(1), paneId: 'p1', how: 'terminal' })).rejects.toThrow('폴더')
