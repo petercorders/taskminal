@@ -1,7 +1,11 @@
+import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
+import { mkdtempSync, realpathSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ClaudeSession, type ChildLike } from '../../src/main/chat/claude-adapter'
-import { claudeArgs, type ChatEvent } from '../../src/shared/chat'
+import { agentCard, claudeArgs, foldBlocks, type ChatEvent } from '../../src/shared/chat'
 
 class FakeChild extends EventEmitter implements ChildLike {
   written: string[] = []
@@ -204,6 +208,39 @@ describe('ClaudeSession — 22단계', () => {
     children[0]!.out(result)
     expect(events.at(-1)).toMatchObject({ t: 'turn_end', anchor: 'u-2' })
   })
+  it('68: 하위 에이전트 줄(parent_tool_use_id)의 uuid 는 턴 끝 anchor 가 되지 않는다 — 본 세션에 없는 자리', () => {
+    const { s, children, events } = setup()
+    s.send('x')
+    children[0]!.out({ type: 'assistant', uuid: 'main-1', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id: 'A1', name: 'Agent', input: { description: 'd' } }] } })
+    children[0]!.out({ type: 'assistant', uuid: 'sub-1', parent_tool_use_id: 'A1', message: { content: [{ type: 'tool_use', id: 'R1', name: 'Read', input: { file_path: '/tmp/proj/a.txt' } }] } })
+    children[0]!.out(result)
+    expect(events.at(-1)).toMatchObject({ t: 'turn_end', anchor: 'main-1' })
+    expect(events.filter((e) => e.t === 'tool')).toEqual([
+      { t: 'tool', id: 'A1', name: 'Agent', summary: 'd' },
+      { t: 'tool', id: 'R1', name: 'Read', summary: 'a.txt', parent: 'A1' },
+    ])
+  })
+  it('68: 끝 알림을 못 받은 하위 작업은 프로세스가 끝나거나 갈라 띄우며 떼어 낼 때 멈춤으로 닫는다', () => {
+    const started = (id: string) => ({ type: 'system', subtype: 'task_started', task_id: `t-${id}`, tool_use_id: id, description: 'd', is_backgrounded: true })
+    const { s, children, events } = setup()
+    s.send('x')
+    children[0]!.out(started('A1'))
+    children[0]!.out(started('A2'))
+    children[0]!.out({ type: 'system', subtype: 'task_notification', task_id: 't-A2', tool_use_id: 'A2', status: 'completed', summary: 'ok' })
+    children[0]!.out(result)
+    children[0]!.emit('exit', 0, null)
+    expect(events.filter((e) => e.t === 'agent' && e.phase === 'end')).toEqual([
+      { t: 'agent', id: 'A2', phase: 'end', status: 'done', summary: 'ok' },
+      { t: 'agent', id: 'A1', phase: 'end', status: 'stopped' },
+    ])
+    // 다음 프로세스는 빈 목록에서 시작하고, fork 로 떼어 낼 때도 닫는다
+    s.send('y')
+    children[1]!.out(started('B1'))
+    children[1]!.out(result)
+    s.fork('s', 'u-1')
+    expect(events.at(-1)).toEqual({ t: 'agent', id: 'B1', phase: 'end', status: 'stopped' })
+    expect(events.filter((e) => e.t === 'agent' && e.phase === 'end' && e.id === 'A1')).toHaveLength(1)
+  })
   it('fork(): 떠 있는 것을 끝내고 다음 띄우기에 --fork-session --resume-session-at, init 뒤에는 그냥 --resume', () => {
     const { s, children, calls } = setup('s-old')
     s.send('x')
@@ -232,5 +269,55 @@ describe('ClaudeSession — 22단계', () => {
     s.answer('q1', { how: 'answer', answers: { 고르기: ['A', 'C'] } })
     const ans = children[0]!.sent().at(-1) as { response: { response: { updatedInput: { answers: Record<string, string> } } } }
     expect(ans.response.response.updatedInput.answers).toEqual({ 고르기: 'A, C' })
+  })
+})
+
+// 68단계: e2e 가 쓸 가짜 claude 대본(subagent · bgagent)을 실제 node 프로세스로 adapter 에 물려 한 번 받아 본다 — 앱은 띄우지 않는다
+describe('가짜 claude 하위 에이전트 대본 (68단계)', () => {
+  const FAKE = join(__dirname, '../fixtures/fake-claude.mjs')
+  const run = (word: string, until: (ev: ChatEvent[]) => boolean) =>
+    new Promise<{ events: ChatEvent[]; atTurnEnd: ChatEvent[] }>((resolve, reject) => {
+      const events: ChatEvent[] = []
+      let atTurnEnd: ChatEvent[] = []
+      const s: ClaudeSession = new ClaudeSession({
+        bin: process.execPath,
+        env: { PATH: process.env['PATH'] ?? '' },
+        cwd: realpathSync(mkdtempSync(join(tmpdir(), 'fake-sub-'))), // macOS 임시 폴더는 링크 — 가짜의 cwd 와 같게
+        permission: 'ask',
+        spawn: (bin, args, o) => spawn(bin, [FAKE, ...args], { cwd: o.cwd, env: o.env }) as unknown as ChildLike,
+        onEvent: (e) => {
+          events.push(e)
+          if (e.t === 'turn_end') atTurnEnd = [...events]
+          if (until(events)) {
+            clearTimeout(timer)
+            s.kill()
+            resolve({ events, atTurnEnd })
+          }
+        },
+        onExit: () => {},
+      })
+      const timer = setTimeout(() => (s.kill(), reject(new Error('시간 넘김: ' + JSON.stringify(events)))), 8000)
+      s.send(word)
+    })
+  const card = (events: ChatEvent[]) => {
+    const b = foldBlocks(events).find((x) => x.kind === 'agent')
+    if (!b || b.kind !== 'agent') throw new Error('Agent 카드 없음')
+    return b.item
+  }
+  it('subagent: 하위 Read 는 카드 아래 · 하위 글은 본 흐름에 없음 · anchor 는 본 줄', async () => {
+    const { events } = await run('subagent 써 줘', (ev) => ev.some((e) => e.t === 'turn_end'))
+    expect(foldBlocks(events).map((b) => b.kind)).toEqual(['agent', 'text', 'done'])
+    expect(events.some((e) => e.t === 'text' && e.text.includes('중간 글'))).toBe(false)
+    const item = card(events)
+    expect(item.sub.map((i) => [i.name, i.summary, i.state])).toEqual([['Read', 'a.ts', 'ok']])
+    expect(agentCard(item)).toEqual({ tone: 'ok', label: '✓ 끝남', progress: '도구 1번 · 마지막 Read · 2초', summary: '1줄이에요' })
+    expect(events.find((e) => e.t === 'turn_end')).toMatchObject({ anchor: expect.stringMatching(/^u-/) })
+  })
+  it('bgagent: 턴이 끝날 때 카드는 진행 중, 턴 뒤에 온 알림이 끝남 · 요약을 채운다', async () => {
+    const { events, atTurnEnd } = await run('bgagent 써 줘', (ev) => ev.some((e) => e.t === 'agent' && e.phase === 'end'))
+    expect(agentCard(card(atTurnEnd))).toMatchObject({ tone: 'run', label: '진행 중' })
+    expect(foldBlocks(events).map((b) => b.kind)).toEqual(['agent', 'text', 'done'])
+    expect(agentCard(card(events))).toMatchObject({ tone: 'ok', summary: '1줄이에요' })
+    expect(card(events).sub.map((i) => i.name)).toEqual(['Read'])
   })
 })

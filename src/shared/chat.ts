@@ -1,5 +1,6 @@
 // 대화 pane (21단계) — 에이전트 출력을 공통 이벤트로 바꾸고, 화면 블록 · 상태를 만든다. 순수 함수라 단위 시험한다.
 // Claude 모양은 2026-11-11 스파이크(claude 2.1.322, stream-json + --permission-prompt-tool stdio)로 확인했다 — tests/fixtures/claude/*.jsonl
+import { formatDuration } from './activity'
 import { isDangerous } from './danger'
 import { isAbsolutePath, pathInside } from './platform'
 import { isObj, type Obj } from './guards'
@@ -41,6 +42,12 @@ export function isChatDecision(v: unknown): v is ChatDecision {
 
 export type ErrorKind = 'login' | 'limit' | 'missing' | 'crash' | 'other'
 export type AnswerHow = 'allow' | 'always' | 'deny' | 'answer' | 'lost'
+export type AgentPhase = 'start' | 'progress' | 'end'
+export type AgentEnd = 'done' | 'fail' | 'stopped'
+const AGENT_PHASES = new Set<unknown>(['start', 'progress', 'end'])
+const AGENT_ENDS = new Set<unknown>(['done', 'fail', 'stopped'])
+/** 하위 에이전트를 띄우는 도구 이름 — claude 2.1.325 는 Agent, 그 전 이름은 Task */
+export const AGENT_TOOLS: ReadonlySet<string> = new Set(['Agent', 'Task'])
 
 /** 에이전트가 무엇이든 화면 · 디스크는 이 모양만 안다 */
 export type ChatEvent =
@@ -48,8 +55,11 @@ export type ChatEvent =
   | { t: 'user'; text: string; at: number; images?: string[] }
   | { t: 'session'; id: string; model?: string }
   | { t: 'text'; text: string }
-  | { t: 'tool'; id: string; name: string; summary: string }
+  /** parent: 하위 에이전트가 부른 도구 — 그 Agent 도구의 id(stream-json `parent_tool_use_id`, 68단계). 없으면 본 에이전트 것 */
+  | { t: 'tool'; id: string; name: string; summary: string; parent?: string }
   | { t: 'tool_end'; id: string; ok: boolean; tail: string }
+  /** 하위 에이전트 진행 (68단계, claude 의 system task_started · task_progress · task_notification) — id 는 그 Agent 도구의 id */
+  | { t: 'agent'; id: string; phase: AgentPhase; bg?: boolean; doing?: string; tools?: number; last?: string; ms?: number; status?: AgentEnd; summary?: string }
   | { t: 'permission'; id: string; tool: string; summary: string; why: string; danger: boolean }
   | { t: 'question'; id: string; questions: ChatQuestion[] }
   | { t: 'answered'; id: string; how: AnswerHow }
@@ -58,7 +68,8 @@ export type ChatEvent =
   | { t: 'stopped' }
   | { t: 'error'; kind: ErrorKind; message: string; code?: number; resetsAt?: number; uncertain?: boolean }
 
-const EVENT_TYPES = new Set(['user', 'session', 'text', 'tool', 'tool_end', 'permission', 'question', 'answered', 'turn_end', 'stopped', 'error'])
+const EVENT_TYPES = new Set(['user', 'session', 'text', 'tool', 'tool_end', 'agent', 'permission', 'question', 'answered', 'turn_end', 'stopped', 'error'])
+const optional = (v: unknown, type: 'string' | 'number' | 'boolean') => v === undefined || typeof v === type
 /** 디스크 · IPC 에서 읽은 값 — 종류와 그 종류의 글 칸만 본다(화면은 모르는 칸을 쓰지 않는다) */
 export function isChatEvent(v: unknown): v is ChatEvent {
   if (!isObj(v) || typeof v['t'] !== 'string' || !EVENT_TYPES.has(v['t'])) return false
@@ -67,7 +78,17 @@ export function isChatEvent(v: unknown): v is ChatEvent {
     case 'text':
       return typeof v['text'] === 'string'
     case 'tool':
-      return typeof v['id'] === 'string' && typeof v['name'] === 'string' && typeof v['summary'] === 'string'
+      return typeof v['id'] === 'string' && typeof v['name'] === 'string' && typeof v['summary'] === 'string' && optional(v['parent'], 'string')
+    case 'agent':
+      return (
+        typeof v['id'] === 'string' &&
+        AGENT_PHASES.has(v['phase']) &&
+        (v['status'] === undefined || AGENT_ENDS.has(v['status'])) &&
+        optional(v['bg'], 'boolean') &&
+        optional(v['tools'], 'number') &&
+        optional(v['ms'], 'number') &&
+        ['doing', 'last', 'summary'].every((k) => optional(v[k], 'string'))
+      )
     case 'tool_end':
       return typeof v['id'] === 'string' && typeof v['tail'] === 'string'
     case 'permission':
@@ -142,6 +163,34 @@ function ctxPercent(o: Obj): number | undefined {
   return Math.min(100, Math.round((used / win) * 100))
 }
 
+const AGENT_SUMMARY_MAX = 1000
+/**
+ * 하위 작업 사건(task_started · task_progress · task_notification) → agent 이벤트. task_updated 는 tool_use_id 가 없어 여기 오지 않는다 —
+ * 같은 상태가 task_notification 으로 바로 뒤에 온다(2026-11-19 실측 두 번). status 값은 claude 2.1.325 스키마의 completed · failed · stopped.
+ */
+function taskEvent(o: Obj, id: string): ChatEvent | null {
+  const usage = isObj(o['usage']) ? o['usage'] : {}
+  const counts = {
+    ...(typeof usage['tool_uses'] === 'number' ? { tools: usage['tool_uses'] } : {}),
+    ...(typeof usage['duration_ms'] === 'number' ? { ms: usage['duration_ms'] } : {}),
+  }
+  switch (o['subtype']) {
+    case 'task_started':
+      return { t: 'agent', id, phase: 'start', bg: o['is_backgrounded'] === true }
+    case 'task_progress': {
+      const doing = str(o['summary']) || str(o['description'])
+      const last = str(o['last_tool_name'])
+      return { t: 'agent', id, phase: 'progress', ...(doing ? { doing: clip(doing, 200) } : {}), ...(last ? { last: clip(last, 100) } : {}), ...counts }
+    }
+    case 'task_notification': {
+      const status: AgentEnd = o['status'] === 'completed' ? 'done' : o['status'] === 'failed' ? 'fail' : 'stopped'
+      return { t: 'agent', id, phase: 'end', status, summary: clip(str(o['summary']).trim(), AGENT_SUMMARY_MAX), ...counts }
+    }
+    default:
+      return null
+  }
+}
+
 /** stream-json 한 줄(JSON 으로 읽은 것) → 공통 이벤트. 모르는 줄 · 모양이 틀린 줄은 빈 배열 */
 export function claudeLineToEvents(o: unknown, cwd: string): ChatEvent[] {
   if (!isObj(o)) return []
@@ -149,9 +198,22 @@ export function claudeLineToEvents(o: unknown, cwd: string): ChatEvent[] {
   if (type === 'system' && o['subtype'] === 'init' && typeof o['session_id'] === 'string') {
     return [{ t: 'session', id: o['session_id'], ...(typeof o['model'] === 'string' ? { model: o['model'] } : {}) }]
   }
+  if (type === 'system' && typeof o['tool_use_id'] === 'string') {
+    const ev = taskEvent(o, o['tool_use_id'])
+    return ev ? [ev] : []
+  }
   if (type === 'assistant' && isObj(o['message'])) {
     const content = o['message']['content']
     if (!Array.isArray(content)) return []
+    // 68단계: 하위 에이전트의 줄 — 도구 부르기만 그 Agent 카드 아래로. 글 · 오류는 본 흐름에 넣지 않는다(끝 글 · 실패는 task_notification 이 알린다)
+    const parent = o['parent_tool_use_id']
+    if (typeof parent === 'string') {
+      return content.flatMap((c): ChatEvent[] =>
+        isObj(c) && c['type'] === 'tool_use' && typeof c['id'] === 'string' && typeof c['name'] === 'string' && c['name'] !== 'AskUserQuestion'
+          ? [{ t: 'tool', id: c['id'], name: c['name'], summary: toolSummary(c['name'], c['input'], cwd), parent }]
+          : [],
+      )
+    }
     if (o['error'] === 'authentication_failed' || (isObj(o['message']) && o['message']['model'] === '<synthetic>' && o['error'])) {
       const msg = content.map((c) => (isObj(c) ? str(c['text']) : '')).join(' ')
       return [{ t: 'error', kind: o['error'] === 'authentication_failed' ? 'login' : 'other', message: clip(msg, 300) }]
@@ -265,6 +327,8 @@ export function redactEvent(ev: ChatEvent, opts: SecretOptions = {}): ChatEvent 
       return { ...ev, summary: r(ev.summary) }
     case 'tool_end':
       return { ...ev, tail: r(ev.tail) }
+    case 'agent':
+      return { ...ev, ...(ev.doing !== undefined ? { doing: r(ev.doing) } : {}), ...(ev.last !== undefined ? { last: r(ev.last) } : {}), ...(ev.summary !== undefined ? { summary: r(ev.summary) } : {}) }
     case 'permission':
       return { ...ev, summary: r(ev.summary), why: r(ev.why) }
     case 'question':
@@ -278,18 +342,34 @@ export function redactEvent(ev: ChatEvent, opts: SecretOptions = {}): ChatEvent 
 
 // ─── 화면 블록 ─────────────────────────────────────────────
 
+/** 하위 에이전트 진행 (68단계) — task 사건이 하나라도 온 Agent 도구에만 있다 */
+export interface AgentInfo {
+  status: 'run' | AgentEnd
+  bg: boolean
+  /** 지금 하는 일(task_progress 의 description) — 끝나면 지운다 */
+  doing: string
+  tools: number
+  last: string
+  ms: number
+  summary: string
+}
 export interface ToolItem {
   id: string
   name: string
   summary: string
   state: 'run' | 'ok' | 'err'
   tail: string
+  /** 이 도구(Agent)가 띄운 하위 에이전트가 부른 도구 (68단계) */
+  sub: ToolItem[]
+  agent?: AgentInfo
 }
 export type ChatBlock =
   /** index: 이벤트 목록 안 자리 · at: 보낸 시각 — 되감기 · 나누기가 main 에 자리를 알리고 main 이 같은 메시지인지 다시 본다 */
   | { kind: 'user'; key: string; text: string; images: string[]; index: number; at: number }
   | { kind: 'text'; key: string; text: string }
   | { kind: 'tools'; key: string; items: ToolItem[] }
+  /** Agent · Task 도구 하나 — 도구 묶음에 넣지 않고 카드로 (68단계) */
+  | { kind: 'agent'; key: string; item: ToolItem }
   | { kind: 'permission'; key: string; id: string; tool: string; summary: string; why: string; danger: boolean; answer: AnswerHow | null }
   | { kind: 'question'; key: string; id: string; questions: ChatQuestion[]; answer: AnswerHow | null }
   | { kind: 'band'; key: string; tone: 'err' | 'warn'; error: ErrorKind | 'fail'; message: string; code?: number; resetsAt?: number; ms?: number }
@@ -305,6 +385,10 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
   const loseOpenCards = () => {
     for (const c of cards.values()) if (c.answer === null) c.answer = 'lost'
   }
+  /** 도는 하위 에이전트를 멈춤으로 — 멈춤(interrupt)은 포그라운드만, 프로세스가 죽으면 백그라운드까지. 나중에 진짜 알림이 오면 그것이 이긴다 */
+  const stopAgents = (withBackground: boolean) => {
+    for (const t of toolAt.values()) if (t.agent?.status === 'run' && (withBackground || !t.agent.bg)) t.agent.status = 'stopped'
+  }
   events.forEach((ev, i) => {
     const key = String(i)
     switch (ev.t) {
@@ -316,8 +400,21 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
         out.push({ kind: 'text', key, text: ev.text })
         break
       case 'tool': {
-        const item: ToolItem = { id: ev.id, name: ev.name, summary: ev.summary, state: 'run', tail: '' }
+        const item: ToolItem = { id: ev.id, name: ev.name, summary: ev.summary, state: 'run', tail: '', sub: [] }
+        if (ev.parent !== undefined) {
+          // 하위 에이전트의 도구 — 부모 카드 아래로만. 부모를 모르면(잘린 기록 등) 본 흐름에 섞지 않고 버린다
+          const parent = toolAt.get(ev.parent)
+          if (parent) {
+            toolAt.set(ev.id, item)
+            parent.sub.push(item)
+          }
+          break
+        }
         toolAt.set(ev.id, item)
+        if (AGENT_TOOLS.has(ev.name)) {
+          out.push({ kind: 'agent', key, item })
+          break
+        }
         const last = out[out.length - 1]
         if (last?.kind === 'tools') last.items.push(item)
         else out.push({ kind: 'tools', key, items: [item] })
@@ -328,6 +425,26 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
         if (item) {
           item.state = ev.ok ? 'ok' : 'err'
           item.tail = ev.tail
+          // 포그라운드 하위 에이전트는 Agent 도구 결과가 곧 끝 — 알림이 없었어도 닫는다(백그라운드의 결과는 '맡겼다' 는 답일 뿐)
+          if (item.agent?.status === 'run' && !item.agent.bg) item.agent.status = ev.ok ? 'done' : 'fail'
+        }
+        break
+      }
+      case 'agent': {
+        const item = toolAt.get(ev.id)
+        if (!item || !AGENT_TOOLS.has(item.name)) break // 모르는 id · Agent 아닌 도구(백그라운드 셸 등)의 사건
+        const a = (item.agent ??= { status: 'run', bg: false, doing: '', tools: 0, last: '', ms: 0, summary: '' })
+        if (ev.phase === 'progress' && a.status !== 'run') break // 끝난 뒤 늦게 온 진행
+        if (ev.phase === 'start') a.status = 'run'
+        if (ev.bg !== undefined) a.bg = ev.bg
+        if (ev.tools !== undefined) a.tools = ev.tools
+        if (ev.ms !== undefined) a.ms = ev.ms
+        if (ev.last !== undefined) a.last = ev.last
+        if (ev.phase === 'progress' && a.status === 'run' && ev.doing !== undefined) a.doing = ev.doing
+        if (ev.phase === 'end') {
+          a.status = ev.status ?? 'stopped'
+          a.summary = ev.summary ?? ''
+          a.doing = ''
         }
         break
       }
@@ -350,7 +467,10 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
       }
       case 'error':
         turnHadError = true
-        if (ev.kind === 'crash' || ev.kind === 'missing') loseOpenCards()
+        if (ev.kind === 'crash' || ev.kind === 'missing') {
+          loseOpenCards()
+          stopAgents(true)
+        }
         out.push({
           kind: 'band',
           key,
@@ -369,6 +489,7 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
       case 'stopped':
         loseOpenCards()
         for (const t of toolAt.values()) if (t.state === 'run') t.state = 'err'
+        stopAgents(false)
         out.push({ kind: 'stopped', key })
         break
       case 'session':
@@ -376,6 +497,32 @@ export function foldBlocks(events: readonly ChatEvent[]): ChatBlock[] {
     }
   })
   return out
+}
+
+/** Agent 카드 글자 (68단계) — 상태 · 진행 줄(하는 일 · 도구 N번 · 마지막 도구 · 걸린 시간) · 끝난 뒤 요약. 진행을 모르는 옛 기록은 도구 상태만 */
+export function agentCard(item: ToolItem): { tone: 'run' | 'ok' | 'err' | 'stop'; label: string; progress: string; summary: string } {
+  const a = item.agent
+  const status = a ? a.status : item.state === 'run' ? 'run' : item.state === 'ok' ? 'done' : 'fail'
+  const [tone, label] = ({ run: ['run', '진행 중'], done: ['ok', '✓ 끝남'], fail: ['err', '✕ 실패'], stopped: ['stop', '멈춤'] } as const)[status]
+  const tools = a?.tools || item.sub.length
+  const parts = [
+    a && status === 'run' ? a.doing : '',
+    tools ? `도구 ${tools}번` : '',
+    a?.last ? `마지막 ${a.last}` : '',
+    a?.ms ? formatDuration(a.ms) : '',
+  ]
+  return { tone, label, progress: parts.filter(Boolean).join(' · '), summary: a && status !== 'run' ? a.summary : '' }
+}
+
+/** 시작은 했는데 끝 알림이 없는 하위 작업의 id — 프로세스 없이 다시 열 때 멈춤으로 닫는다 (68단계) */
+export function openAgents(events: readonly ChatEvent[]): string[] {
+  const open = new Set<string>()
+  for (const ev of events) {
+    if (ev.t !== 'agent') continue
+    if (ev.phase === 'end') open.delete(ev.id)
+    else open.add(ev.id)
+  }
+  return [...open]
 }
 
 export type ChatState = 'new' | 'run' | 'wait' | 'done' | 'fail' | 'stopped'

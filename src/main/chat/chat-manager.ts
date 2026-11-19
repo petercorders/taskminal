@@ -1,7 +1,7 @@
 // 대화 pane 들의 주인 (main) — paneId 마다 Claude 프로세스 하나. 이벤트를 가려서 창 · 디스크로 보낸다.
 import { homedir } from 'node:os'
 import { expandHome } from '../../shared/cwd'
-import { chatStatus, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
+import { chatStatus, openAgents, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
 import { agentLaunch, type AgentBin } from './find-bin'
@@ -228,13 +228,18 @@ export class ChatManager {
     const events = await this.d.store.read(paneId)
     // 떠 있는 프로세스가 없는데 턴이 열려 있다 = 앱이 턴 도중 끝났거나 죽었다(멈춤을 쓰기 전에) → 멈춤으로 닫는다.
     // 그대로 두면 화면이 '실행 중' 에 굳어 다시 보낼 수 없다.
+    if (this.panes.has(paneId) || this.starting.has(paneId)) return { events, upTo }
+    // 프로세스가 없어 그 사이 다른 이벤트는 없다 — 닫는 이벤트를 덧붙인 번호가 곧 upTo
+    let n = upTo
     const st = chatStatus(events).state
-    if (!this.panes.has(paneId) && !this.starting.has(paneId) && (st === 'run' || st === 'wait')) {
-      const ev: ChatEvent = { t: 'stopped' }
+    const closing: ChatEvent[] = st === 'run' || st === 'wait' ? [{ t: 'stopped' }] : []
+    // 68: 끝 알림을 못 받은 하위 작업(백그라운드 · 턴 도중 끝남)도 프로세스와 함께 끝났다
+    for (const id of openAgents(events)) closing.push({ t: 'agent', id, phase: 'end', status: 'stopped' })
+    for (const ev of closing) {
       events.push(ev)
-      return { events, upTo: this.record(paneId, ev) } // 프로세스가 없어 그 사이 다른 이벤트는 없다
+      n = this.record(paneId, ev)
     }
-    return { events, upTo }
+    return { events, upTo: n }
   }
 
   /** pane 을 닫았다 — 프로세스를 끝낸다. forget 이면 화면 기록도 지운다(되돌리기 기회가 지난 뒤) */

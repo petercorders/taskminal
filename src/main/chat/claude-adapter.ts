@@ -74,6 +74,8 @@ export class ClaudeSession implements AgentSession {
   private seq = 0
   /** 이번 턴의 마지막 assistant 줄 uuid — 턴 끝 anchor (되감기 · 나누기가 여기서 가른다) */
   private lastUuid: string | undefined
+  /** 68: 시작했는데 끝 알림을 못 받은 하위 작업(Agent 도구 id) — 이 프로세스가 끝나면 멈춤으로 닫는다 */
+  private openTasks = new Set<string>()
   /** 턴이 열려 있다 (보냈고 result · 멈춤을 아직 못 받음) */
   busy = false
   private stopping = false
@@ -88,6 +90,7 @@ export class ClaudeSession implements AgentSession {
     const gen = ++this.gen
     this.buf = ''
     this.stderr = ''
+    this.openTasks.clear()
     // 58b: 안내는 이 실행의 인자로만 — 새 대화 · 이어 하기(--resume) · 갈라 띄우기 모두 여기서 띄운다
     const guide = this.o.agentGuide?.() ? ['--append-system-prompt', agentGuide()] : []
     const child = this.o.spawn(this.o.bin, [...claudeArgs(this.o.permission, this.o.sessionId, this.o.forkAt),...(this.o.model?['--model',this.o.model]:[]),...(this.o.effort?['--effort',this.o.effort]:[]),...guide], { cwd: this.o.cwd, env: this.o.env })
@@ -107,6 +110,7 @@ export class ClaudeSession implements AgentSession {
     this.child = null
     this.gen++ // 같은 프로세스의 error + exit 가 두 번 오지 않게
     this.pending.clear()
+    this.closeTasks()
     if (this.busy && !this.stopping) {
       const msg = (err ?? this.stderr.trim().split('\n').slice(-2).join(' ')) || 'Claude 가 갑자기 끝났어요'
       this.o.onEvent({ t: 'error', kind: 'crash', message: msg.slice(0, 300), ...(code !== null ? { code } : {}) })
@@ -140,7 +144,8 @@ export class ClaudeSession implements AgentSession {
       this.o.sessionId = o['session_id']
       delete this.o.forkAt // 갈라진 새 세션이 떴다 — 다음에 다시 띄우면 그냥 --resume
     }
-    if (o['type'] === 'assistant' && typeof o['uuid'] === 'string') this.lastUuid = o['uuid']
+    // 하위 에이전트의 줄(parent_tool_use_id)은 본 세션 기록에 없는 자리라 anchor 로 쓰지 않는다 (68)
+    if (o['type'] === 'assistant' && typeof o['uuid'] === 'string' && typeof o['parent_tool_use_id'] !== 'string') this.lastUuid = o['uuid']
     if (o['type'] === 'rate_limit_event' && isObj(o['rate_limit_info'])) this.o.onUsage?.(o['rate_limit_info'])
     if (o['type'] === 'control_request' && typeof o['request_id'] === 'string' && isObj(o['request']) && o['request']['subtype'] === 'can_use_tool') {
       const r = o['request']
@@ -155,6 +160,10 @@ export class ClaudeSession implements AgentSession {
     }
     const events = claudeLineToEvents(o, this.o.cwd)
     for (const ev of events) {
+      if (ev.t === 'agent') {
+        if (ev.phase === 'end') this.openTasks.delete(ev.id)
+        else this.openTasks.add(ev.id)
+      }
       if (ev.t === 'turn_end' || ev.t === 'stopped') {
         this.busy = false
         this.stopping = false
@@ -232,6 +241,7 @@ export class ClaudeSession implements AgentSession {
     this.busy = false
     this.stopping = false
     this.pending.clear()
+    this.closeTasks()
     if (c) {
       try {
         c.stdin?.end()
@@ -243,6 +253,12 @@ export class ClaudeSession implements AgentSession {
     this.o.sessionId = at ? sessionId : undefined
     if (at) this.o.forkAt = at
     else delete this.o.forkAt
+  }
+
+  /** 이 프로세스의 하위 작업은 프로세스와 함께 끝난다 — 알림을 못 받은 것을 멈춤으로 닫는다 */
+  private closeTasks() {
+    for (const id of this.openTasks) this.o.onEvent({ t: 'agent', id, phase: 'end', status: 'stopped' })
+    this.openTasks.clear()
   }
 
   kill() {

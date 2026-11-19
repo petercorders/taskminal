@@ -33,6 +33,19 @@ describe('ChatStore', () => {
     expect(back.at(-1)).toEqual({ t: 'text', text: '줄 39 ' + 'x'.repeat(20) })
     expect(back.length).toBeLessThan(40)
   })
+  it('68: 옛 기록 줄과 새 줄(parent · agent)을 함께 읽고, 하위 에이전트 요약도 가려 쓴다', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'chat-'))
+    writeFileSync(join(dir, 'p1.jsonl'), '{"t":"user","text":"a","at":1}\n{"t":"tool","id":"A1","name":"Agent","summary":"d"}\n{"t":"tool_end","id":"A1","ok":true,"tail":""}\n')
+    const s = new ChatStore(dir)
+    await s.append('p1', [
+      { t: 'tool', id: 'R1', name: 'Read', summary: 'a.txt', parent: 'A1' },
+      { t: 'agent', id: 'A1', phase: 'end', status: 'done', summary: `키 ${KEY}` },
+    ])
+    expect(readFileSync(join(dir, 'p1.jsonl'), 'utf8')).not.toContain(KEY)
+    const back = await s.read('p1')
+    expect(back.map((e) => e.t)).toEqual(['user', 'tool', 'tool_end', 'tool', 'agent'])
+    expect(back[3]).toEqual({ t: 'tool', id: 'R1', name: 'Read', summary: 'a.txt', parent: 'A1' })
+  })
   it('지우기', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'chat-'))
     appendFileSync(join(dir, 'p1.jsonl'), '{"t":"stopped"}\n')

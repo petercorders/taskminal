@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { RemoteApi, RemoteConnection, RemoteWorkspace, RemoteGit } from '../shared/remote-workspace'
 import type { EditableFile } from '../shared/workspace'
-import { foldBlocks, chatStatus, type ChatBlock, type ChatDecision } from '../shared/chat'
+import { agentCard, foldBlocks, chatStatus, type ChatBlock, type ChatDecision } from '../shared/chat'
 import { ConfirmDialog } from './ConfirmDialog'
 import { AgentIcon } from './AgentIcon'
 import { RemoteTerminal } from './RemoteTerminal'
@@ -279,6 +279,7 @@ export function RemotePanel({ api }: { api: RemoteApi }) {
             if (block.kind === 'user' || block.kind === 'text') return <pre key={block.key}>{block.kind === 'user' ? '나: ' : ''}{block.text}</pre>
             if (block.kind === 'tools') return <details key={block.key}><summary>도구 {block.items.length}개</summary>{block.items.map((item) => <pre key={item.id}>{item.name} · {item.state}\n{item.summary}\n{item.tail}</pre>)}</details>
             if (block.kind === 'band') return <p key={block.key} role="status">{block.message}</p>
+            if (block.kind === 'agent') { const card = agentCard(block.item); return <details key={block.key}><summary>{block.item.name} · {block.item.summary} · {card.label}{card.progress ? ` · ${card.progress}` : ''}</summary>{card.summary && <pre>{card.summary}</pre>}{block.item.sub.map((item) => <pre key={item.id}>{item.name} · {item.state}\n{item.summary}</pre>)}</details> }
             return <p key={block.key}>{block.kind === 'done' ? '대화 완료' : '대화 중지됨'}</p>
           })}</div><form onSubmit={(event) => { event.preventDefault(); void sendChat() }}><label className="field"><span>원격 대화 지시</span><textarea value={inputs.get(chatKey) ?? ''} onChange={(event) => input(chatKey, event.target.value)} /></label><div className="remote-actions"><button className="button primary" disabled={busy || !historyReady || !inputs.get(chatKey)?.trim() || ['run', 'wait'].includes(chatStatus(events).state)}>지시 보내기</button><button type="button" className="button" disabled={busy} onClick={() => { const connection = panel.connection!, selected = panel.workspace, chat = panel.chat; void write(async () => { await api.interrupt(connection.id, selected, chat); report('대화 중단을 요청했어요.') }) }}>현재 턴 중단</button></div></form></>}
         </div>}
