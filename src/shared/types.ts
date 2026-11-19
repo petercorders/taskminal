@@ -107,7 +107,7 @@ export interface Task {
 
 /** 53 '밖에서 시작한 세션' 하나 — id 로 main 이 다시 찾아 이어 한다. summary 는 main 이 가린 뒤 160자 */
 export interface SessionHint {
-  agent: 'claude' | 'codex'
+  agent: ChatAgent
   id: string
   summary: string
   /** 그 세션 기록의 마지막 시각(ms) */

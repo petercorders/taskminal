@@ -35,7 +35,8 @@ type Phase =
   | { kind: 'running'; preview: ImportPreview; source: string }
   | { kind: 'done'; preview: ImportPreview; source: string; report: ImportReport }
 
-const message = (e: unknown) => (e instanceof Error && e.message ? e.message : '저장소를 읽지 못했어요')
+/** main 이 던진 오류 — Electron 이 붙이는 'Error invoking remote method …: Error: ' 는 걷어 낸다(App · 백업 화면과 같이) */
+const message = (e: unknown) => (e instanceof Error && e.message ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : '저장소를 읽지 못했어요')
 
 export function ImportRepoDialog({ root, api = window.taskminal.repoImport, state, newId, onApply, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>(root ? { kind: 'reading', root } : { kind: 'picking' })
@@ -122,6 +123,13 @@ export function ImportRepoDialog({ root, api = window.taskminal.repoImport, stat
     return 'create' in g ? `새 묶음 ‘${g.create}’` : `있는 묶음 ‘${s.settings.groups.find((x) => x.id === g.reuse)?.name ?? preview.repo}’`
   })() : ''
   const busy = phase.kind === 'picking' || phase.kind === 'reading' || phase.kind === 'running'
+  // 리뷰 5: reducer 가 그 사이 생긴 같은 폴더 일감 때문에 거른 일감은 '만듦' 이 아니다 — 지금 상태에 있는 것만 만든 것으로
+  const result = phase.kind === 'done' ? (() => {
+    const have = new Set(state().tasks.map((t) => t.id))
+    const made = phase.report.created.filter((c) => have.has(c.taskId))
+    const lost = phase.report.created.filter((c) => !have.has(c.taskId)).map((c) => ({ path: c.path, label: c.name, reason: '그 사이 같은 폴더의 일감이 생겨 만들지 않았어요' }))
+    return { made, skipped: [...phase.report.skipped, ...lost], group: made.length ? phase.report.group : null }
+  })() : null
   const toggle = (path: string) => setPicked((old) => { const next = new Set(old); if (next.has(path)) next.delete(path); else next.add(path); return next })
 
   return (
@@ -134,7 +142,7 @@ export function ImportRepoDialog({ root, api = window.taskminal.repoImport, stat
         {phase.kind === 'picking' ? '저장소 폴더를 고르는 중…'
           : phase.kind === 'reading' ? '저장소를 읽는 중…'
           : phase.kind === 'running' ? '다시 확인하고 일감을 만드는 중… 지금 닫으면 만들지 않아요.'
-          : phase.kind === 'done' ? `${phase.report.created.length}개 일감을 만들었어요${phase.report.group ? ` — 묶음 ‘${phase.report.group}’` : ''}${phase.report.skipped.length ? ` · ${phase.report.skipped.length}개는 건너뛰었어요` : ''}`
+          : result ? `${result.made.length}개 일감을 만들었어요${result.group ? ` — 묶음 ‘${result.group}’` : ''}${result.skipped.length ? ` · ${result.skipped.length}개는 건너뛰었어요` : ''}`
           : ''}
       </div>
       {phase.kind === 'error' && <p role="alert" className="repo-import-error">{phase.message}</p>}
@@ -147,9 +155,9 @@ export function ImportRepoDialog({ root, api = window.taskminal.repoImport, stat
           {rows.map((r) => <ImportRowView key={r.path} row={r} checked={picked.has(r.path) && importable(r)} now={now} onToggle={() => toggle(r.path)} />)}
         </fieldset>
       </>}
-      {phase.kind === 'done' && <section className="repo-import-report" aria-label="가져오기 결과">
-        {!!phase.report.created.length && <ul>{phase.report.created.map((c) => <li key={c.taskId}><strong>{c.name}</strong> · <span className="repo-import-path">{c.path}</span>{c.hints ? ` · 이어 하기 후보 ${c.hints}개` : ''}</li>)}</ul>}
-        {!!phase.report.skipped.length && <ul className="repo-import-skipped">{phase.report.skipped.map((s) => <li key={s.path}><strong>{s.label}</strong> · <span className="repo-import-path">{s.path}</span> — {s.reason}</li>)}</ul>}
+      {result && <section className="repo-import-report" aria-label="가져오기 결과">
+        {!!result.made.length && <ul>{result.made.map((c) => <li key={c.taskId}><strong>{c.name}</strong> · <span className="repo-import-path">{c.path}</span>{c.hints ? ` · 이어 하기 후보 ${c.hints}개` : ''}</li>)}</ul>}
+        {!!result.skipped.length && <ul className="repo-import-skipped">{result.skipped.map((s) => <li key={s.path}><strong>{s.label}</strong> · <span className="repo-import-path">{s.path}</span> — {s.reason}</li>)}</ul>}
       </section>}
       <footer className="dialog-actions">
         {phase.kind === 'done' ? (
@@ -178,6 +186,7 @@ function ImportRowView({ row, checked, now, onToggle }: { row: ImportRow; checke
           {merge && <span className={`repo-import-chip ${row.merge!.state}`} title={row.merge!.reason}>{merge}</span>}
         </span>
         <span className="repo-import-path">{row.path}</span>
+        {row.nearby && !row.existing && !row.blocked && <span className="repo-import-meta">이 폴더 안쪽을 쓰는 일감이 있어요 — {row.nearby.name}. 그래도 가져올 수 있어요(기본으로 고르지 않음)</span>}
         {row.existing ? <span className="repo-import-meta">이미 일감 있음 — {row.existing.name}</span>
           : row.blocked ? <span className="repo-import-meta">가져올 수 없어요 — {row.blocked}</span>
           : row.sessions.length ? <span className="repo-import-meta">이어 하기 후보: {row.sessions.map((h) => (

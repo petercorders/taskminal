@@ -59,7 +59,7 @@ const entry = (over: Partial<ManagedWorktree>): ManagedWorktree => ({
 })
 const row = (over: Partial<ImportRow>): ImportRow => ({
   path: '/r/x', commonDir: '/r/main/.git', head: 'a'.repeat(40), branch: 'refs/heads/x', label: 'x', name: 'x', primary: false, locked: false,
-  merge: null, existing: null, blocked: null, sessions: [], ...over,
+  merge: null, existing: null, nearby: null, blocked: null, sessions: [], ...over,
 })
 const preview = (rows: ImportRow[], over: Partial<ImportPreview> = {}): ImportPreview => ({ root: '/r/main', commonDir: '/r/main/.git', repo: 'main', home: '/h', rows, ...over })
 
@@ -96,6 +96,36 @@ describe('미리보기 줄 — porcelain 해석 결과(bare · 잠김 · prunabl
     expect(at(locked)).toMatchObject({ locked: true, blocked: null, name: 'locked' })
     expect(at(gone).blocked).toBeTruthy()
     expect(at(det)).toMatchObject({ label: '분리된 HEAD', name: 'det', blocked: null })
+  })
+})
+
+describe('리뷰 고침 — 시간 제한 이유 · 안쪽 폴더 일감', () => {
+  it('39 list() 의 시간 제한으로 상태를 못 본 줄은 \'바뀜\' 이 아니라 \'확인 못 함\' 이유', () => {
+    const view: WorktreeView = { root: '/r/main', commonDir: '/r/main/.git', entries: [
+      entry({ path: '/r/late', branch: 'refs/heads/late', canOpen: false, statusKnown: false, reasons: ['전체 조회 시간 제한 — 새로 읽어 주세요'] }),
+    ] }
+    const [late] = importRows(view, () => null, new Map())
+    expect(late!.blocked).toContain('시간 안에')
+    const plan = importPlan([{ path: '/r/late', commonDir: '/r/main/.git', label: 'late' }], preview([late!]), [])
+    expect(plan.skipped[0]!.reason).toContain('다시 확인하지 못했어요')
+  })
+  it('worktree 안쪽 폴더를 일감 폴더로 쓰는 일감이 있으면 가져올 수는 있지만 기본으로 고르지 않는다 — 더 안쪽 worktree 의 일감은 그 worktree 것', async () => {
+    const r = repository()
+    const wt = r.add('mono')
+    mkdirSync(join(wt, 'packages', 'app'), { recursive: true })
+    const nested = join(wt, 'nested')
+    git(r.root, 'worktree', 'add', '-b', 'nested', nested, 'main')
+    const s = emptyState()
+    const inApp = task(s, '앱 일감', join(wt, 'packages', 'app'))
+    const inNested = task(s, '안쪽', join(nested, 'src'))
+    mkdirSync(join(nested, 'src'))
+    const p = await buildImportPreview({ worktrees: r.service, tasks: () => [inApp, inNested], home: '/h', sessions: async () => emptyList() }, r.root)
+    const mono = p.rows.find((x) => x.path === wt)!
+    expect(mono.nearby).toEqual({ taskId: inApp.id, name: '앱 일감' })
+    expect(mono.existing).toBeNull()
+    expect(pickedByDefault(mono)).toBe(false)
+    expect(p.rows.find((x) => x.path === nested)!.nearby).toEqual({ taskId: inNested.id, name: '안쪽' })
+    expect(p.rows.find((x) => x.path === r.root)!.nearby).toBeNull()
   })
 })
 

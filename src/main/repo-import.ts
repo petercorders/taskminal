@@ -1,9 +1,9 @@
 // 70단계: 저장소째 옮겨 오기의 main 쪽 — 같은 폴더 신원 검사(39 '일감으로 열기' 와 같이 쓴다) · 고른 폴더 권한 · 미리보기 만들기. 읽기만 한다.
 import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import type { AgentSessionList } from '../shared/agent-sessions'
+import { DEADLINE_MS, withDeadline, type AgentSessionList } from '../shared/agent-sessions'
 import { expandHome } from '../shared/cwd'
-import { assignSessions, importRows, repoName, type ImportPreview } from '../shared/repo-import'
+import { assignSessions, deepestFolder, importRows, repoName, type ImportPreview } from '../shared/repo-import'
 import type { Task } from '../shared/types'
 import type { WorktreeManagement } from './worktree-management'
 
@@ -54,21 +54,24 @@ export interface PreviewDeps {
   sessionsMs?: number
 }
 
-const within = <T,>(promise: Promise<T>, ms: number): Promise<T> => new Promise((done, fail) => {
-  const timer = setTimeout(() => fail(new Error('시간 넘김')), ms)
-  promise.then((v) => { clearTimeout(timer); done(v) }, (e: unknown) => { clearTimeout(timer); fail(e) })
-})
-
 /** 미리보기 — 39 `list()`(등록 · 폴더 · 상태 · 67 병합) + 39 신원 검사 + 53 세션(15초 한도, 못 읽으면 세션 없이) */
 export async function buildImportPreview(d: PreviewDeps, root: string): Promise<ImportPreview> {
-  const sessions = within(d.sessions(), d.sessionsMs ?? 15_000).then((list) => ({ list, note: undefined as string | undefined }))
+  const sessions = withDeadline(d.sessions(), d.sessionsMs ?? DEADLINE_MS, '세션 기록 읽기 시간 넘김').then((list) => ({ list, note: undefined as string | undefined }))
     .catch(() => ({ list: null, note: '세션 기록을 읽지 못했어요 — 이어 하기 후보 없이 가져와요' }))
   const [view, read] = await Promise.all([d.worktrees.list(root, []), sessions])
   const owners = await taskFolders(d.tasks, d.home)
   // 세션 cwd 는 기록에 적힌 그대로 — worktree 경로(realpath)와 같은 꼴로 맞춘다
   const cwds = [...new Set((read.list?.sessions ?? []).map((s) => s.cwd))]
   const reals = new Map(await Promise.all(cwds.map(async (c) => [c, await realpath(c).catch(() => c)] as const)))
-  const assigned = assignSessions((read.list?.sessions ?? []).map((s) => ({ ...s, cwd: reals.get(s.cwd) ?? s.cwd })), view.entries.filter((e) => !e.bare).map((e) => e.path))
-  const rows = importRows(view, (path) => { const o = owners.get(path); return o ? { taskId: o.id, name: o.name } : null }, assigned)
+  const paths = view.entries.filter((e) => !e.bare).map((e) => e.path)
+  const assigned = assignSessions((read.list?.sessions ?? []).map((s) => ({ ...s, cwd: reals.get(s.cwd) ?? s.cwd })), paths)
+  // 리뷰 6: 이 worktree 안쪽 폴더(더 안쪽 worktree 는 빼고)를 일감 폴더로 쓰는 일감 — 가져올 수는 있지만 기본으로 고르지 않는다
+  const nearby = new Map<string, FolderOwner>()
+  for (const [real, owner] of owners) {
+    const at = deepestFolder(paths, real)
+    if (at && at !== real && !nearby.has(at)) nearby.set(at, owner)
+  }
+  const pick = (map: Map<string, FolderOwner>) => (path: string) => { const o = map.get(path); return o ? { taskId: o.id, name: o.name } : null }
+  const rows = importRows(view, pick(owners), assigned, pick(nearby))
   return { root: view.root, commonDir: view.commonDir, repo: repoName(view), home: d.home, rows, ...(read.note ? { sessionsNote: read.note } : {}) }
 }

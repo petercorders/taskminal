@@ -3,6 +3,7 @@
 import type { ChatAgent } from './chat'
 import { expandHome } from './cwd'
 import { createTask, type NewId } from './model'
+import { pathInside } from './platform'
 import type { AppState, Group, Id, SessionHint, Task } from './types'
 import { openable, type ManagedWorktree, type MergeInfo, type WorktreeView } from './worktree-management'
 
@@ -24,6 +25,8 @@ export interface ImportRow {
   merge: MergeInfo | null
   /** 39 '일감으로 열기' 신원 검사 — 이 폴더를 일감 폴더로 쓰는 보관 안 된 로컬 일감 */
   existing: { taskId: string; name: string } | null
+  /** 이 폴더 안쪽(더 안쪽 worktree 는 빼고)을 일감 폴더로 쓰는 일감 — 가져올 수는 있지만 기본으로 고르지 않는다(리뷰 6) */
+  nearby: { taskId: string; name: string } | null
   /** 가져올 수 없는 이유 — null 이면 가져올 수 있다 */
   blocked: string | null
   /** 이 폴더(와 그 안쪽, 더 안쪽 worktree 는 빼고)의 최근 세션 — 에이전트마다 하나 */
@@ -64,14 +67,18 @@ function blockedReason(entry: ManagedWorktree): string | null {
   if (entry.prunable) return `폴더가 없거나 등록을 복구해야 해요${entry.prunableReason ? ` — ${entry.prunableReason}` : ''}`
   if (entry.path === entry.commonDir) return 'Git 정보 폴더예요'
   if (entry.unknownAttributes.length) return '모르는 Git 속성이 있어 상태를 확인해야 해요'
+  // 39 list() 의 15초 한도 — 바뀐 것이 아니라 확인을 못 한 것(리뷰 2)
+  if (entry.reasons.some((r) => r.startsWith('전체 조회 시간 제한'))) return '저장소가 커서 시간 안에 상태를 확인하지 못했어요 — 다시 읽어 주세요'
   return '폴더 · 상태를 확인하지 못했어요 — 다시 읽어 주세요'
 }
 
-/** 등록 목록 → 미리보기 줄. existing 은 39 신원 검사(main), sessions 는 assignSessions 결과 */
+type Owner = { taskId: string; name: string }
+/** 등록 목록 → 미리보기 줄. existing 은 39 신원 검사(main), nearby 는 안쪽 폴더의 일감, sessions 는 assignSessions 결과 */
 export function importRows(
   view: WorktreeView,
-  existing: (path: string) => { taskId: string; name: string } | null,
+  existing: (path: string) => Owner | null,
   sessions: ReadonlyMap<string, SessionHint[]>,
+  nearby: (path: string) => Owner | null = () => null,
 ): ImportRow[] {
   return view.entries.map((entry) => {
     const branch = shortBranch(entry.branch)
@@ -82,13 +89,19 @@ export function importRows(
       name: branch ?? (lastName(entry.path) || 'checkout'),
       primary: entry.primary, locked: entry.locked, merge: entry.merge ?? null,
       existing: blocked ? null : existing(entry.path),
+      nearby: blocked ? null : nearby(entry.path),
       blocked,
       sessions: blocked ? [] : (sessions.get(entry.path) ?? []).map((h) => ({ ...h })),
     }
   })
 }
 
-const inside = (folder: string, path: string) => path === folder || path.startsWith(folder === '/' ? '/' : `${folder}/`)
+/** p 를 담은 가장 깊은 폴더 — 같은 폴더 · 하위 폴더만(`/x/app` 과 `/x/app-2` 는 다름), 안쪽 worktree 것은 안쪽으로 */
+export function deepestFolder(folders: readonly string[], p: string): string | null {
+  let best: string | null = null
+  for (const f of folders) if (pathInside(f, p) && (best === null || f.length > best.length)) best = f
+  return best
+}
 
 export interface SessionLike { agent: ChatAgent; id: string; summary: string; updatedAt: number; cwd: string }
 
@@ -97,10 +110,9 @@ export interface SessionLike { agent: ChatAgent; id: string; summary: string; up
  * worktree 마다 에이전트별 최신 하나. cwd 와 경로는 같은 꼴(main 이 realpath)이어야 한다.
  */
 export function assignSessions(sessions: readonly SessionLike[], paths: readonly string[]): Map<string, SessionHint[]> {
-  const deepest = [...new Set(paths)].sort((a, b) => b.length - a.length)
   const best = new Map<string, Map<ChatAgent, SessionLike>>()
   for (const s of sessions) {
-    const at = deepest.find((p) => inside(p, s.cwd))
+    const at = deepestFolder(paths, s.cwd)
     if (!at) continue
     const byAgent = best.get(at) ?? new Map<ChatAgent, SessionLike>()
     const old = byAgent.get(s.agent)
@@ -136,7 +148,7 @@ export function importGroup(
 ): { reuse: Id } | { create: string } {
   const base = repo.trim() || '저장소'
   const ours = (g: Group) => state.tasks.filter((t) => t.groupId === g.id)
-    .every((t) => !t.host && paths.some((p) => inside(p, folderOf(t.cwd, home))))
+    .every((t) => !t.host && paths.some((p) => pathInside(p, folderOf(t.cwd, home))))
   for (let n = 1; n <= 1000; n++) {
     const name = n === 1 ? base : `${base} (${n})`
     const same = state.settings.groups.filter((g) => g.name.trim().toLowerCase() === name.toLowerCase())
@@ -161,7 +173,7 @@ export function importPlan(picked: readonly ImportPick[], fresh: ImportPreview, 
     seen.add(p.path)
     const row = fresh.rows.find((r) => r.path === p.path && r.commonDir === p.commonDir)
     if (!row) { skip('미리보기 뒤 사라졌어요 — 만들지 않았어요'); continue }
-    if (row.blocked) { skip(`미리보기 뒤 바뀌었어요 — ${row.blocked}. 만들지 않았어요`); continue }
+    if (row.blocked) { skip(`미리보기 뒤 바뀌었거나 다시 확인하지 못했어요 — ${row.blocked}. 만들지 않았어요`); continue }
     const has = row.existing ?? (() => { const t = sameFolderTask(tasks, row.path, fresh.home); return t ? { taskId: t.id, name: t.name } : null })()
     if (has) { skip(`이미 일감이 있어요 — ${has.name}`); continue }
     if (create.length >= IMPORT_MAX) { skip(`한 번에 ${IMPORT_MAX}개까지 가져와요 — 다시 가져오기로 나머지를`); continue }
@@ -252,6 +264,6 @@ export async function runImport(root: string, picked: readonly ImportPick[], dep
   }
 }
 
-/** 기본으로 고르는 줄 — 가져올 수 있고 · 일감 없고 · 병합됨 아님(67 정리 대상) */
-export const pickedByDefault = (row: ImportRow): boolean => !row.blocked && !row.existing && row.merge?.state !== 'merged'
+/** 기본으로 고르는 줄 — 가져올 수 있고 · 일감 없고(안쪽 폴더 일감도) · 병합됨 아님(67 정리 대상) */
+export const pickedByDefault = (row: ImportRow): boolean => !row.blocked && !row.existing && !row.nearby && row.merge?.state !== 'merged'
 export const importable = (row: ImportRow): boolean => !row.blocked && !row.existing

@@ -1174,7 +1174,7 @@ export function App() {
     // 53단계 에이전트 세션 패널은 여기서 닫지 않는다 — 일감 지우기 · 보관이 closeDialogs 를 부르는데, 연 일감이 사라지면 패널이 남아 막고 안내한다
     setConversationRestore(null)
     setCreating(null)
-    setImporting(null)
+    // 70단계 가져오기 대화상자도 여기서 닫지 않는다 — 일감에 묶이지 않아, 일감 지우기 · 보관이 부르는 closeDialogs 가 가져오는 중인 것을 말없이 취소하지 않게(리뷰 8)
     setRemoving(null)
     setConfirming(null)
     setSavingTemplate(null)
@@ -1631,8 +1631,9 @@ export function App() {
     return keys
   }, [state.tasks])
   /** 대화 · 터미널로 이어 하기 — 이미 열린 대화면 그리로. main 이 id 로 세션 · 폴더를 다시 찾고, 15초 안에 답이 없으면 오류(탭은 아직 안 만듦).
-   *  같은 세션을 같은 프레임에 두 번: 여기 열쇠 · main 의 합치기(첫 pane 만)로 하나. 열쇠는 성공 뒤 상태가 그려질 때까지 잠깐 더 잡는다. */
-  const resumeAgentSession = async (s: Pick<AgentSession, 'agent' | 'id' | 'summary'>, how: ResumeHow, taskId: string) => {
+   *  같은 세션을 같은 프레임에 두 번: 여기 열쇠 · main 의 합치기(첫 pane 만)로 하나. 열쇠는 성공 뒤 상태가 그려질 때까지 잠깐 더 잡는다.
+   *  70단계: 열었거나 열린 대화로 옮겼으면 true, 다른 요청이 같은 세션을 여는 중이라 아무것도 안 했으면 false(이어 하기 후보를 지우지 않게) */
+  const resumeAgentSession = async (s: Pick<AgentSession, 'agent' | 'id' | 'summary'>, how: ResumeHow, taskId: string): Promise<boolean> => {
     const key = sessionKey(s)
     const moveTo = () => {
       const hit = findSessionPane(stateRef.current, s.agent, s.id)
@@ -1643,7 +1644,8 @@ export function App() {
       setWorkTool(null)
       return true
     }
-    if (moveTo() || resumingSessions.current.has(key)) return
+    if (moveTo()) return true
+    if (resumingSessions.current.has(key)) return false
     const live = () => stateRef.current.tasks.find((t) => t.id === taskId && t.archivedAt === undefined && !t.host)
     const gone = () => new Error('연 일감이 사라졌어요. 다른 일감에서 다시 열어 주세요.')
     if (!live()) throw gone()
@@ -1652,7 +1654,8 @@ export function App() {
     try {
       const paneId = newId(), tabId = newId()
       const r = await withDeadline(window.taskminal.agentSessions.open({ agent: s.agent, id: s.id, paneId, how }), DEADLINE_MS, '응답이 없어요. 다시 시도해 주세요.')
-      if (r.paneId !== paneId || moveTo()) return
+      if (r.paneId !== paneId) return false
+      if (moveTo()) return true
       if (!live()) throw gone()
       if (how === 'chat') dispatch({ type: 'chat/resume-tab', taskId, tabId, paneId, agent: r.agent, sessionId: r.sessionId, cwd: r.cwd, ...(s.summary ? { title: s.summary.slice(0, 40) } : {}) })
       else {
@@ -1663,6 +1666,7 @@ export function App() {
       setOverviewOpen(false)
       setWorkTool(null)
       hold = true
+      return true
     } finally {
       if (hold) setTimeout(() => resumingSessions.current.delete(key), 1000)
       else resumingSessions.current.delete(key)
@@ -2586,7 +2590,7 @@ export function App() {
           onClose={closeDialogs}
         />
       )}
-      {agentSessionsFor&&<AgentSessionsPanel taskId={agentSessionsFor.taskId} initialQuery={seedFor('sessions')} onSwitch={openFind} tasks={state.tasks} openKeys={openSessionKeys} onResume={resumeAgentSession} onClose={()=>{setAgentSessionsFor(null);refocus()}}/>}
+      {agentSessionsFor&&<AgentSessionsPanel taskId={agentSessionsFor.taskId} initialQuery={seedFor('sessions')} onSwitch={openFind} tasks={state.tasks} openKeys={openSessionKeys} onResume={async (s, how, taskId) => { await resumeAgentSession(s, how, taskId) }} onClose={()=>{setAgentSessionsFor(null);refocus()}}/>}
       {conversationOpen&&<ConversationSearch initialQuery={seedFor('conversation')} onSwitch={openFind} tasks={state.tasks} activeTaskId={state.activeTaskId} onOpen={openConversation} onClose={()=>{setConversationOpen(false);refocus()}}/>}
       {conversationRestore&&<ConfirmDialog title="보관한 일감을 되살릴까요?" message="일감을 되살린 뒤 검색 결과를 다시 눌러 주세요. 메시지는 보내지 않아요." confirmLabel="되살리기" onConfirm={()=>{unarchive([conversationRestore.taskId]);setConversationRestore(null)}} onCancel={()=>setConversationRestore(null)}/>}
       {archiveOpen && (
