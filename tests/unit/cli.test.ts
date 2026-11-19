@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cliSocketPath, formatRows, isCliRequest, listRows, parseArgs, parseDuration, parseUiReply, resolvePane, resolveTask, type CliRequest } from '../../src/shared/cli'
+import { cliSocketPath, formatRows, isCliRequest, listRows, parseArgs, parseDuration, parseUiReply, resolvePane, resolveTask, retryHint, withRequestId, type CliRequest } from '../../src/shared/cli'
 import { addTab, createTask, emptyState, renameTab, splitActivePane } from '../../src/shared/model'
 import type { AppState, Task } from '../../src/shared/types'
 
@@ -256,5 +256,56 @@ describe('parseUiReply', () => {
     expect(parseUiReply({ ok: false })).toBeNull()
     expect(parseUiReply({ ok: true, exit: 999 })).toBeNull()
     expect(parseUiReply('ok')).toBeNull()
+  })
+})
+
+describe('task new --worktree (69)', () => {
+  it('브랜치 · 기준 · 요청 번호를 읽는다 — 기준 · 번호는 없어도 된다', () => {
+    expect(req(['task', 'new', '로그인 고침', '--worktree', 'feat/login', '--base', 'origin/main', '--request', 'r-1'])).toEqual({ op: 'task.new', name: '로그인 고침', worktree: 'feat/login', base: 'origin/main', request: 'r-1' })
+    expect(req(['task', 'new', 'x', '--worktree=feat/x', '--template', 'Claude'])).toEqual({ op: 'task.new', name: 'x', worktree: 'feat/x', template: 'Claude' })
+  })
+
+  it('--cwd 와 함께 · --base/--request 만 · 틀린 브랜치 · worker 브랜치 · 틀린 번호는 사용법 오류', () => {
+    expect(usageOf(['task', 'new', 'x', '--worktree', 'b', '--cwd', '/tmp'])).toMatch(/--cwd/)
+    expect(usageOf(['task', 'new', 'x', '--base', 'main'])).toMatch(/--worktree/)
+    expect(usageOf(['task', 'new', 'x', '--request', 'r1'])).toMatch(/--worktree/)
+    expect(usageOf(['task', 'new', 'x', '--worktree', 'a b'])).toMatch(/빈칸/)
+    expect(usageOf(['task', 'new', 'x', '--worktree', 'taskminal/worker-1'])).toMatch(/worker/)
+    expect(usageOf(['task', 'new', 'x', '--worktree', 'b', '--request', '../x'])).toMatch(/--request/)
+    expect(usageOf(['task', 'new', 'x', '--worktree', 'b', '--base', ' '])).toMatch(/--base/)
+  })
+
+  it('소켓 모양: worktree 면 요청 번호가 꼭 있어야 하고, cwd 와 함께 · 번호만 · 틀린 브랜치는 거절', () => {
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1' })).toBe(true)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', base: 'HEAD~1' })).toBe(true)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', cwd: '/tmp' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', request: 'r1' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', base: 'main' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: '-b', request: 'r1' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'a/b' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', base: 'a\0b' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', from: 'relative/dir' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', from: '/w' })).toBe(false)
+  })
+
+  it('요청 번호 · 친 폴더: 없으면 CLI 가 번호를 만들어 붙이고 친 폴더를 실어 보낸다, worktree 가 아니면 붙이지 않는다. 다시 하기 안내는 그 번호로', () => {
+    const made = withRequestId(req(['task', 'new', 'x', '--worktree', 'b']), () => 'gen-1', '/w/repo/sub')
+    expect(made).toMatchObject({ worktree: 'b', request: 'gen-1', from: '/w/repo/sub' })
+    expect(isCliRequest(made)).toBe(true)
+    expect(withRequestId(req(['task', 'new', 'x', '--worktree', 'b', '--request', 'mine']), () => 'gen-2', '/w')).toMatchObject({ request: 'mine', from: '/w' })
+    const plain = withRequestId(req(['task', 'new', 'x']), () => 'gen-3', '/w')
+    expect(plain).not.toHaveProperty('request')
+    expect(plain).not.toHaveProperty('from')
+    expect(retryHint(made)).toContain('--request gen-1')
+    expect(retryHint(req(['task', 'new', 'x']))).toBeNull()
+    expect(retryHint(req(['list']))).toBeNull()
+  })
+
+  it('창의 답: sender 모양을 본다', () => {
+    const target = { paneId: 'p1', label: 'A › b', kind: 'terminal', cwd: '/x', pending: false }
+    expect(parseUiReply({ ok: true, target, sender: '[taskminal: A › b (p2) 에서 보냄]' })).not.toBeNull()
+    expect(parseUiReply({ ok: true, target, sender: 5 })).toBeNull()
+    expect(parseUiReply({ ok: true, target, sender: 'a\nb' })).toBeNull()
   })
 })

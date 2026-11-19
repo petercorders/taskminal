@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
-  isWorktreeOid, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
+  isWorktreeBase, isWorktreeBranchText, isWorktreeOid, isWorktreeRequestId, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
   type CreateWorktree, type ManagedWorktree, type MergeInfo, type WorktreeCleanItem, type WorktreeCleanResult,
   type WorktreeCreateReceipt, type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
   type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
@@ -343,9 +343,7 @@ export class WorktreeManagement {
 
   async create(root: string, input: CreateWorktree): Promise<WorktreeCreateResult> {
     this.writable()
-    if (!input || typeof input.requestId !== 'string' || !/^[\w-]{1,100}$/.test(input.requestId) ||
-      typeof input.branch !== 'string' || !input.branch || input.branch.length > 100 || /[\s\0]/.test(input.branch) || input.branch.startsWith('-') ||
-      typeof input.base !== 'string' || !input.base.trim() || input.base.length > 256 || input.base.includes('\0')) throw new Error('요청 번호·브랜치·기준 커밋을 확인해 주세요')
+    if (!input || !isWorktreeRequestId(input.requestId) || !isWorktreeBranchText(input.branch) || !isWorktreeBase(input.base)) throw new Error('요청 번호·브랜치·기준 커밋을 확인해 주세요')
     const path = await canonicalLoose(absolutePath(input.path))
     const initial = await this.repository(root)
     return locked(initial.commonDir, async () => {
@@ -359,6 +357,10 @@ export class WorktreeManagement {
       }
       if (!await absent(path) || registry.entries.some((entry) => inside(path, entry.path)) || inside(registry.commonDir, path) || inside(path, registry.commonDir)) throw new Error('이미 있거나 Git 정보와 겹치는 경로예요')
       if ((await this.git(registry.root, ['check-ref-format', '--branch', input.branch])).trim() !== input.branch) throw new Error('브랜치 이름을 확인해 주세요')
+      // 69단계: 이미 있는 브랜치는 기록 전에 막는다 — worktree add -b 가 실패해 '결과 모름' 영수증만 남기지 않게(잠금 안이라 겹친 요청도 여기서 갈린다)
+      const taken = await this.run(registry.root, ['rev-parse', '--verify', '-q', '--end-of-options', 'refs/heads/' + input.branch])
+      if (taken.timedOut || taken.truncated || (taken.code !== 0 && taken.code !== 1)) throw failure()
+      if (taken.code === 0) throw new Error('이미 있는 브랜치예요. 다른 이름을 쓰거나 그 브랜치의 워크트리를 열어 주세요.')
       const baseOid = (await this.git(registry.root, ['rev-parse', '--verify', '--end-of-options', input.base + '^{commit}'])).trim()
       if (!isWorktreeOid(baseOid)) throw new Error('기준 커밋을 확인하지 못했어요')
       const receipt: WorktreeCreateReceipt = {

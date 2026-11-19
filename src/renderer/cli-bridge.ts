@@ -2,8 +2,9 @@
 // 순수: 상태 · 활동 · 시계 · id 를 받아 할 일(dispatch 목록 · 띄울 탭 · 지우기 · 알림)과 답을 돌려준다. App 이 실행한다.
 import type { PaneActivity } from '../shared/activity'
 import { formatRows, listRows, resolvePane, resolveTask, runningCount, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
+import { senderOf } from '../shared/delegation'
 import { hasPane } from '../shared/layout'
-import { createTask, defaultTaskCwd, tabShownLabel, templateIdCount } from '../shared/model'
+import { createTask, defaultTaskCwd, findPaneTask, tabShownLabel, templateIdCount } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 import { reducer, type Action } from './store'
 
@@ -34,6 +35,17 @@ const failed = (error: string, candidates?: string[]): CliEffect => done(candida
 /** 상태 · 묶음 · 템플릿: id → 이름(대소문자 무시) */
 function byName<T extends { id: Id; name: string }>(list: readonly T[], ref: string): T | null {
   return list.find((x) => x.id === ref) ?? list.find((x) => x.name === ref) ?? list.find((x) => x.name.toLowerCase() === ref.trim().toLowerCase()) ?? null
+}
+
+/** 새 일감의 템플릿 · 상태 · 묶음 이름 → id — task new 와 69 위임이 같이 쓴다. 없는 이름이면 후보와 함께 거절 */
+function pickNew(s: AppState['settings'], req: { template?: string; status?: string; group?: string }): { templateId: Id | null; statusId: Id; groupId: Id | null } | CliEffect {
+  const tpl = req.template !== undefined ? byName(s.templates, req.template) : null
+  if (req.template !== undefined && !tpl) return failed(`'${req.template}' 템플릿이 없어요`, s.templates.map((t) => t.name))
+  const status = req.status !== undefined ? byName(s.statuses, req.status) : s.statuses[0]!
+  if (!status) return failed(`'${req.status}' 상태가 없어요`, s.statuses.map((x) => x.name))
+  const group = req.group !== undefined ? byName(s.groups, req.group) : null
+  if (req.group !== undefined && !group) return failed(`'${req.group}' 묶음이 없어요`, s.groups.map((g) => g.name))
+  return { templateId: tpl?.id ?? s.defaultTemplateId, statusId: status.id, groupId: group?.id ?? null }
 }
 
 function tabOfPane(task: Task, paneId: Id) {
@@ -68,15 +80,11 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
     }
     case 'task.new': {
       const s = state.settings
-      const tpl = req.template !== undefined ? byName(s.templates, req.template) : null
-      if (req.template !== undefined && !tpl) return failed(`'${req.template}' 템플릿이 없어요`, s.templates.map((t) => t.name))
-      const status = req.status !== undefined ? byName(s.statuses, req.status) : s.statuses[0]!
-      if (!status) return failed(`'${req.status}' 상태가 없어요`, s.statuses.map((x) => x.name))
-      const group = req.group !== undefined ? byName(s.groups, req.group) : null
-      if (req.group !== undefined && !group) return failed(`'${req.group}' 묶음이 없어요`, s.groups.map((g) => g.name))
+      const picked = pickNew(s, req)
+      if ('reply' in picked) return picked
       const selfTask = self ? state.tasks.find((t) => Object.hasOwn(t.panes, self)) : undefined
       const cwd = req.cwd ?? (self && selfTask ? selfTask.panes[self]!.cwd : defaultTaskCwd(state))
-      const task = createTask({ name: req.name.trim(), cwd, templateId: tpl?.id ?? s.defaultTemplateId, statusId: status.id, groupId: group?.id ?? null, color: null }, s, ctx.newId, ctx.now)
+      const task = createTask({ name: req.name.trim(), cwd, ...picked, color: null }, s, ctx.newId, ctx.now)
       // 만들기는 그 일감을 연다(reducer) — 사람이 보던 화면은 그대로 둔다. 시작 명령이 돌게 첫 탭은 띄운다
       const back: Action[] = state.activeTaskId ? [{ type: 'task/select', id: state.activeTaskId }] : []
       return done({ ok: true, text: `일감 '${task.name}' 을 만들었어요 (${task.id})`, data: { task: task.id } }, [{ type: 'task/create', task }, ...back], task.activeTabId ? [task.activeTabId] : [])
@@ -177,7 +185,41 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       if (!r.ok) return failed(r.error, r.candidates)
       const task = state.tasks.find((x) => x.id === r.value.taskId)!
       const target = paneTarget(task, r.value.paneId)
-      return target ? done({ ok: true, target }, [], [r.value.tabId]) : failed('그 pane 을 찾지 못했어요')
+      if (!target) return failed('그 pane 을 찾지 못했어요')
+      // 69: 다른 pane 이 부르면 보낸 이 머리 — main 이 대화에 보낼 글에 붙인다(터미널 pane send 에는 붙이지 않는다)
+      const sender = senderOf(state, self, target.paneId)
+      return done({ ok: true, target, ...(sender ? { sender } : {}) }, [], [r.value.tabId])
+    }
+    case 'delegate.source': {
+      const id = self ? findPaneTask(state, self) : null
+      const t = id === null ? undefined : state.tasks.find((x) => x.id === id)
+      if (!self || !t) return failed('이 터미널은 Taskminal 의 일감 안이 아니에요 — 일감 안의 터미널 · 대화에서 불러 주세요')
+      if (t.host) return failed('원격 일감에서는 worktree 를 만들 수 없어요 — 이 Mac 의 일감에서 불러 주세요')
+      const data = { taskId: t.id, paneId: self, cwd: t.panes[self]!.cwd }
+      // 같은 요청으로 이미 만든 일감(같은 부모) — main 이 worktree 를 다시 따지지 않고 그 일감을 알린다(그 사이 커밋해도, 69 리뷰)
+      const has = state.tasks.find((x) => x.id === req.taskId)
+      if (has && has.parent?.taskId === t.id) return done({ ok: true, data: { ...data, existing: { cwd: has.cwd } } })
+      const picked = pickNew(state.settings, req)
+      if ('reply' in picked) return picked
+      return done({ ok: true, data })
+    }
+    case 'delegate.prepare': {
+      // 같은 요청을 다시 보냈다(응답 유실 · 일감 만들기 실패 뒤) — 같은 폴더 · 같은 부모면 그대로, 아니면 겹침
+      const has = state.tasks.find((t) => t.id === req.taskId)
+      if (has) {
+        return has.cwd === req.cwd && has.parent?.taskId === req.parent.taskId
+          ? done({ ok: true, data: { task: has.id, existing: true } })
+          : done({ ok: false, error: '다른 일감과 번호가 겹쳐요 — 새 요청 번호로 다시 해 주세요', exit: 1 })
+      }
+      if (state.tasks.some((t) => Object.hasOwn(t.panes, req.taskId) || t.tabs.some((tab) => tab.id === req.taskId))) return done({ ok: false, error: '이미 쓰는 번호예요', exit: 1 })
+      const picked = pickNew(state.settings, req)
+      if ('reply' in picked) return picked
+      const task = createTask({ name: req.name.trim(), cwd: req.cwd, ...picked, color: null }, state.settings, ctx.newId, ctx.now)
+      task.id = req.taskId
+      task.parent = { taskId: req.parent.taskId, paneId: req.parent.paneId }
+      // 만들기는 그 일감을 연다(reducer) — 사람이 보던 화면은 그대로. 시작 명령이 돌게 첫 탭은 띄운다(task new 와 같다)
+      const back: Action[] = state.activeTaskId ? [{ type: 'task/select', id: state.activeTaskId }] : []
+      return done({ ok: true, data: { task: task.id, existing: false } }, [{ type: 'task/create', task }, ...back], task.activeTabId ? [task.activeTabId] : [])
     }
     case 'chat.panes': {
       if (req.all) {
@@ -238,7 +280,8 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const after = run(state, actions).tasks.find((x) => x.id === t.id)!
       const target = paneTarget(after, paneId)
       if (!target) return failed('대화 pane 을 만들지 못했어요')
-      return done({ ok: true, target }, actions, [tabOfPane(after, paneId)!.id])
+      const sender = senderOf(state, self, paneId)
+      return done({ ok: true, target, ...(sender ? { sender } : {}) }, actions, [tabOfPane(after, paneId)!.id])
     }
   }
 }

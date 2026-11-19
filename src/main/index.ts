@@ -23,6 +23,8 @@ import { controlPathFits, isRemotePath, isSshHost, parseSshConfigHosts, sshArgs 
 import type { AppState, Settings } from '../shared/types'
 import { installAppMenu, onCliInstall, onQuitAll } from './menu'
 import { CliServer } from './cli-server'
+import { delegateTask } from './delegation'
+import type { WorktreeManagement } from './worktree-management'
 import { installCli } from './cli-install'
 import { cliSocketPath, parseUiReply, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
 import { PaneWatch } from '../shared/pane-watch'
@@ -114,6 +116,8 @@ let lastState: AppState | null = null
 let agentAccounts: Accounts | null = null
 let workspaceBrowser:WorkspaceBrowser|null=null
 let workflowRunner: WorkflowRunner | null = null
+// 69단계: 39 화면과 같은 worktree 서비스 — CLI 위임(task new --worktree)이 같은 생성 기록을 쓴다(기록 파일에 주인은 하나)
+let worktreeService: WorktreeManagement | null = null
 const paneWatch = new PaneWatch({ now: Date.now, later: (fn, ms) => ((t) => () => clearTimeout(t))(setTimeout(fn, ms)) })
 // 51단계: 터미널에서 띄운 claude · codex 의 훅 — ready 뒤 만든다(userData)
 let agentEvents: AgentEvents | null = null
@@ -187,6 +191,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 function startCliServer(): void {
   cliServer = new CliServer({
     sockPath: cliSockPath,
+    delegate(req) {
+      const worktrees = worktreeService
+      if (!worktrees) return Promise.resolve({ ok: false, error: 'worktree 관리를 준비하지 못했어요 — 잠시 뒤 다시 해 주세요', exit: 1 })
+      return delegateTask(req, { askUi, worktrees })
+    },
     workflow(command){
       const runner=workflowRunner;if(!runner)throw Error('작업 흐름을 준비하지 못했어요')
       if(command.action==='view')return runner.view()
@@ -670,7 +679,7 @@ if (!app.requestSingleInstanceLock()) {
     available:()=>!!stateFile?.canWrite&&!!lastState&&!!mainWindow&&!mainWindow.isDestroyed()&&!mainWindow.webContents.isCrashed()&&!mainWindow.webContents.isLoading(),
     redact:text=>redact(text,secretOpts),report:error=>report('error','schedules','예약 실행을 멈췄어요',error),
   })
-  installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],
+  worktreeService = installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],
     liveCwds:async()=>{
       await control().ready
       if(control().view().state!=='connected')throw new Error('셸 지킴이 상태를 확인하지 못했어요')

@@ -3,9 +3,10 @@ import type { BrowserCommand } from '../shared/browser-automation'
 // 화면 상태를 바꾸는 일은 창(renderer)에 묻고, 셸 입출력 · 기다리기 · 대화 보내기는 여기서 지킴이 · ChatManager 로 한다.
 import { chmodSync, existsSync, lstatSync, unlinkSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
-import { chatStatus, lastTurnText, type ChatEvent, type ChatState } from '../shared/chat'
+import { chatStatus, lastTurnText, turnStop, type ChatEvent, type ChatState } from '../shared/chat'
 import { CLI_PROTOCOL, EXIT, isCliRequest, type CliReply, type CliRequest, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
 import { formatDuration } from '../shared/activity'
+import { withSender } from '../shared/delegation'
 import type { PaneWatch, WaitResult } from '../shared/pane-watch'
 
 /** 한 줄 요청의 상한 (보낼 글 100k + 여유) */
@@ -14,6 +15,8 @@ const MAX_LINE = 256 * 1024
 export const SESSION_WAIT_MS = 5000
 
 export interface CliServerDeps {
+  /** 69: `task new --worktree` — 39 의 worktree 만들기 + 부모를 기록한 일감 */
+  delegate?(req: Extract<CliRequest, { op: 'task.new' }>): Promise<CliReply>
   workflow?(command:Extract<CliRequest,{op:'workflow'}>):Promise<unknown>|unknown
   browser?(command: BrowserCommand):Promise<unknown>
   sockPath: string
@@ -146,6 +149,9 @@ export class CliServer {
         if(!this.d.browser)return err('브라우저 도구를 사용할 수 없어요')
         try{const data=await this.d.browser(req);return {ok:true,data,text:JSON.stringify(data,null,2)}}catch(error){return err(error instanceof Error?error.message:'브라우저 작업에 실패했어요')}
       }
+      case 'task.new':
+        if (req.worktree === undefined) return this.d.askUi(req)
+        return this.d.delegate ? this.d.delegate(req) : err('worktree 위임을 준비하지 못했어요 — 잠시 뒤 다시 해 주세요')
       case 'pane.send':
       case 'pane.read':
       case 'pane.wait': {
@@ -153,6 +159,7 @@ export class CliServer {
         if ('error' in t) return t.error
         const { target } = t
         if (req.op === 'pane.send') {
+          // 69: 터미널에는 보낸 이를 붙이지 않는다 — 키 입력이라 셸이면 명령으로 돌고, TUI 의 메뉴 · 허락 선택을 머리 글자가 고를 수 있다(69 리뷰)
           if (!this.d.pane.write(target.paneId, req.text + (req.enter ? '\r' : ''))) return err('그 터미널에 보내지 못했어요')
           this.d.watch.sent(target.paneId, req.enter)
           return { ok: true }
@@ -172,7 +179,7 @@ export class CliServer {
         const r = await this.d.askUi(req)
         if (!r.ok) return r
         if (!r.target || r.target.kind !== 'chat') return err('대화 pane 을 만들지 못했어요')
-        const sent = await this.d.chat.send(r.target, req.text)
+        const sent = await this.d.chat.send(r.target, withSender(req.text, r.sender))
         // pane 은 이미 생겼다 — 다시 시도할 곳을 알려 준다(chat send <pane>)
         if (sent !== 'ok') return err(`${sendError(sent)} · 대화 pane ${r.target.paneId} 은 만들었어요 (chat send ${r.target.paneId} "…" 로 다시)`)
         return { ok: true, text: `대화 pane ${r.target.paneId} 를 만들고 보냈어요 (${r.target.label})`, data: { pane: r.target.paneId, label: r.target.label } }
@@ -180,7 +187,7 @@ export class CliServer {
       case 'chat.send': {
         const t = await this.chatTarget(req.pane, self)
         if ('error' in t) return t.error
-        const sent = await this.d.chat.send(t.target, req.text)
+        const sent = await this.d.chat.send(t.target, withSender(req.text, t.sender))
         return sent === 'ok' ? { ok: true } : err(sendError(sent))
       }
       case 'chat.read': {
@@ -218,11 +225,12 @@ export class CliServer {
     return { target }
   }
 
-  private async chatTarget(pane: string, self: { self?: string }): Promise<{ target: PaneTarget } | { error: CliReply }> {
+  /** sender = 창이 준 보낸 이 머리(부른 pane 이 받는 pane 과 다를 때만) */
+  private async chatTarget(pane: string, self: { self?: string }): Promise<{ target: PaneTarget; sender?: string } | { error: CliReply }> {
     const r = await this.d.askUi({ op: 'pane.resolve', pane, ...self })
     if (!r.ok) return { error: r }
     if (!r.target || r.target.kind !== 'chat') return { error: err(`${r.target?.label ?? pane} 은 대화 pane 이 아니에요 — pane send · read · wait 를 써 주세요`, EXIT.usage) }
-    return { target: r.target }
+    return { target: r.target, ...(r.sender ? { sender: r.sender } : {}) }
   }
 
   /** 대화마다 턴이 끝나거나(끝남 · 실패 · 멈춤) 허락 · 질문을 기다릴 때까지. 시간이 다 되면 그때의 상태 */
@@ -236,7 +244,7 @@ export class CliServer {
     const off = this.d.chat.subscribe((paneId, ev) => {
       const i = paneIds.indexOf(paneId)
       if (i < 0 || settled[i]) return
-      const next = stopState(ev)
+      const next = turnStop(ev)
       if (next) {
         states[i] = next
         settled[i] = true
@@ -289,23 +297,6 @@ export class CliServer {
 }
 
 const CHAT_LABEL: Record<ChatState, string> = { new: '새 대화', run: '실행 중', wait: '허락 · 답을 기다려요', done: '끝남', fail: '실패', stopped: '멈춤' }
-
-/** 기다리기를 멈추는 이벤트 → 그때의 상태 */
-function stopState(ev: ChatEvent): ChatState | null {
-  switch (ev.t) {
-    case 'turn_end':
-      return ev.ok ? 'done' : 'fail'
-    case 'stopped':
-      return 'stopped'
-    case 'error':
-      return 'fail'
-    case 'permission':
-    case 'question':
-      return 'wait'
-    default:
-      return null
-  }
-}
 
 function sendError(r: 'busy' | 'missing' | 'no-window'): string {
   return r === 'busy' ? '그 대화는 실행 중이에요 — chat wait 로 끝나길 기다린 뒤 보내 주세요' : r === 'missing' ? '에이전트 명령(claude · codex)을 찾지 못했어요' : '앱 창이 없어요 — 창을 연 뒤 다시 해 주세요'

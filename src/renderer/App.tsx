@@ -26,7 +26,8 @@ import { useHistory } from './history-state'
 import { HistoryPanel } from './history-ui'
 import { FIND_MEMO, GlobalFind, type FindMemo, type FindTarget } from './GlobalFind'
 import type { CommandDone } from './TerminalPane'
-import type { ChatPermission } from '../shared/chat'
+import { isChatEvent, type ChatPermission } from '../shared/chat'
+import { delegateSignal, isDelegatedPane, parentNotice, type TurnOpen } from '../shared/delegation'
 import type { MaskSettings } from './secret-mask'
 import { Toast, type ToastSpec } from './Toast'
 import { dateClock } from './settings/BackupSection'
@@ -639,6 +640,8 @@ export function App() {
   const [notesOpen, setNotesOpen] = useState<{ taskId: string; signal: number } | null>(null)
   // 대화 pane 의 마지막 턴 글(가린 것) · 끝난 시각 — 런타임 값. 아래 chat.onEvent 가 채운다
   const chatTurns = useRef(new Map<string, { buf: string[]; doneAt?: number; text?: string }>())
+  // 69단계: 맡긴 일감의 대화 턴마다 부모에 한 번 — pane 별 '아직 안 알림'
+  const delegateTurns = useRef<TurnOpen>(new Map())
   // 아래쪽에서 만드는 값(명령 기록 · 화면 가리기)을 이 효과가 읽게
   const resumeInputs = useRef<{ history: readonly HistoryEntry[]; mask: ((s: string) => string) | null }>({ history: [], mask: null })
   const evalResume = (why: 'select' | 'late') => {
@@ -1313,7 +1316,7 @@ export function App() {
         if (e.seeTabs.length > 0) setSeenTabs((cur) => (e.seeTabs.every((t) => cur.has(t)) ? cur : new Set([...cur, ...e.seeTabs])))
         if (e.notify) updateActivityRef.current(e.notify.paneId, { type: 'notify', text: e.notify.text })
         // 실행기가 첫 지시를 보내기 전에 예약한 pane 이 디스크와 main 상태에 있어야 한다.
-        if (['workflow.prepare', 'issue.prepare'].includes((raw as UiRequest).op) && e.reply.ok) {
+        if (['workflow.prepare', 'issue.prepare', 'delegate.prepare'].includes((raw as UiRequest).op) && e.reply.ok) {
           try { await window.taskminal.state.save(stateRef.current) }
           catch (err) { return window.taskminal.cli.reply(id, { ok: false, error: `실행 대화를 저장하지 못했어요: ${String(err)}` }) }
         }
@@ -1329,6 +1332,14 @@ export function App() {
     () =>
       window.taskminal.chat.onEvent((paneId, ev) => {
         if (typeof paneId !== 'string' || typeof ev !== 'object' || ev === null) return
+        // 69단계: 맡긴 일감(부모가 기록된 일감)의 턴이 멈추면 부모에 — CLI notify 와 같은 길(확인 필요 · 알림 · 받은편지함).
+        // 부모 · 맡긴 pane 은 알릴 때마다 지금 상태에서 다시 찾는다. 부모가 지워졌거나 보관됐으면 조용히.
+        // 표에는 맡긴 일감의 pane 만 넣는다 — 다른 대화마다 칸이 쌓이지 않게(69 리뷰)
+        if (isChatEvent(ev) && isDelegatedPane(stateRef.current, paneId)) {
+          const stop = delegateSignal(delegateTurns.current, paneId, ev)
+          const notice = stop ? parentNotice(stateRef.current, paneId, stop) : null
+          if (notice) updateActivityRef.current(notice.paneId, { type: 'notify', text: notice.text })
+        }
         const e = ev as { t?: unknown; id?: unknown; text?: unknown }
         if (e.t === 'session' && typeof e.id === 'string') dispatch({ type: 'chat/session', paneId, sessionId: e.id })
         // 이어받기 요약의 '에이전트 말' — 턴마다 글을 모아 두고 턴이 끝나면 그 시각과 함께 남긴다(main 이 가린 뒤 보낸다)

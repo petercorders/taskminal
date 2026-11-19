@@ -99,6 +99,8 @@ export interface Task {
   host?: string
   /** 원격 일감에서 서버의 tmux 로 '끊겨도 계속 돌게' (25단계, 기본 켬) */
   remoteTmux?: boolean
+  /** 이 일감을 맡긴 일감 (69단계 `taskminal task new --worktree`) — 이 일감의 대화 턴이 멈추면 부모에 알린다. paneId = 맡긴 pane */
+  parent?: { taskId: Id; paneId?: Id }
 }
 
 export interface Note {

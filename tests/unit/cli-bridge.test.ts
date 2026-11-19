@@ -161,3 +161,58 @@ describe('issue.prepare 내부 생성 계약', () => {
     expect(apply(next, { ...req, root: '/other' }).e.reply.ok).toBe(false)
   })
 })
+
+describe('위임 · 보낸 이 (69)', () => {
+  it('delegate.source: 부른 pane 의 일감 · pane 폴더, 일감 밖이면 종료 2, 원격 · 없는 템플릿 이름은 쓰기 전에 거절', () => {
+    const s = base()
+    const self = firstPane(s, 0)
+    expect(apply(s, { op: 'delegate.source', taskId: 'd1', self }).e.reply).toEqual({ ok: true, data: { taskId: s.tasks[0]!.id, paneId: self, cwd: '/srv' } })
+    expect(apply(s, { op: 'delegate.source', taskId: 'd1' }).e.reply).toMatchObject({ ok: false, exit: 2 })
+    expect(apply(s, { op: 'delegate.source', taskId: 'd1', self: 'nowhere' }).e.reply).toMatchObject({ ok: false, exit: 2 })
+    expect(apply(s, { op: 'delegate.source', taskId: 'd1', self, template: '없는 템플릿' }).e.reply).toMatchObject({ ok: false, exit: 2 })
+    const remote = { ...s, tasks: [{ ...s.tasks[0]!, host: 'dev' }, s.tasks[1]!] }
+    expect(apply(remote, { op: 'delegate.source', taskId: 'd1', self }).e.reply).toMatchObject({ ok: false, exit: 2, error: expect.stringContaining('원격') })
+  })
+
+  it('delegate.source: 같은 요청으로 이미 만든 일감(같은 부모)이 있으면 그 폴더를 알린다 — 다른 부모의 것은 알리지 않는다 (69 리뷰)', () => {
+    const s = base()
+    const self = firstPane(s, 0)
+    const parent = { taskId: s.tasks[0]!.id, paneId: self }
+    const made = apply(s, { op: 'delegate.prepare', taskId: 'd1', name: 'x', cwd: '/srv-worktrees/x', parent }).next
+    expect(apply(made, { op: 'delegate.source', taskId: 'd1', self }).e.reply).toMatchObject({ ok: true, data: { existing: { cwd: '/srv-worktrees/x' } } })
+    expect(apply(made, { op: 'delegate.source', taskId: 'd1', self: firstPane(s, 1) }).e.reply).not.toHaveProperty('data.existing')
+  })
+
+  it('delegate.prepare: 정한 id 로 부모를 기록한 일감 · 보던 일감 그대로 · 첫 탭은 띄움, 같은 요청이면 그대로(existing), 다른 것과 겹치면 거절', () => {
+    const s = base()
+    const parent = { taskId: s.tasks[0]!.id, paneId: firstPane(s, 0) }
+    const req: UiRequest = { op: 'delegate.prepare', taskId: 'delegated-1', name: ' 로그인 고침 ', cwd: '/srv-worktrees/feat-login', parent, status: '대기', self: parent.paneId }
+    const { e, next } = apply(s, req)
+    expect(e.reply).toEqual({ ok: true, data: { task: 'delegated-1', existing: false } })
+    const made = next.tasks.find((t) => t.id === 'delegated-1')!
+    expect(made).toMatchObject({ name: '로그인 고침', cwd: '/srv-worktrees/feat-login', parent, statusId: 'wait' })
+    expect(next.activeTaskId).toBe(s.activeTaskId)
+    expect(e.seeTabs).toEqual([made.activeTabId])
+    const again = apply(next, req)
+    expect(again.e.reply).toEqual({ ok: true, data: { task: 'delegated-1', existing: true } })
+    expect(again.e.actions).toEqual([])
+    expect(apply(next, { ...req, cwd: '/elsewhere' }).e.reply).toMatchObject({ ok: false })
+    expect(apply(next, { ...req, parent: { taskId: s.tasks[1]!.id, paneId: firstPane(s, 1) } }).e.reply).toMatchObject({ ok: false })
+    expect(apply(s, { ...req, taskId: firstPane(s, 1) }).e.reply).toMatchObject({ ok: false })
+    expect(apply(s, { ...req, group: '없는 묶음' }).e.reply).toMatchObject({ ok: false })
+  })
+
+  it('pane resolve · chat new: 다른 pane 이 부르면 보낸 이 머리, 같은 pane · 앱 밖이면 없음', () => {
+    const s = base()
+    const from = firstPane(s, 0)
+    const to = firstPane(s, 1)
+    const r = apply(s, { op: 'pane.resolve', pane: to, self: from }).e.reply
+    expect(r).toMatchObject({ ok: true, sender: expect.stringMatching(/^\[taskminal: 배포 › .+ \(id\d+\) 에서 보냄\]$/), target: { paneId: to } })
+    const plain = apply(s, { op: 'pane.resolve', pane: to, self: to }).e.reply
+    expect(plain).not.toHaveProperty('sender')
+    expect(plain).toMatchObject({ ok: true, target: { paneId: to } })
+    expect(apply(s, { op: 'pane.resolve', pane: to }).e.reply).not.toHaveProperty('sender')
+    expect(apply(s, { op: 'chat.new', task: 'UX', agent: 'claude', where: 'tab', text: '일', self: from }).e.reply).toMatchObject({ ok: true, sender: expect.stringContaining('배포 ›') })
+    expect(apply(s, { op: 'chat.new', task: 'UX', agent: 'claude', where: 'tab', text: '일' }).e.reply).not.toHaveProperty('sender')
+  })
+})

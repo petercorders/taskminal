@@ -1,7 +1,7 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-19 (67 병합된 worktree 정리 · 68 하위 에이전트 진행 보기 — 둘 다 e2e 미실행, 돌려야 할 목록은 `docs/stages/67-merged-worktree-cleanup.md` · `docs/stages/68-subagent-progress.md`. 그 앞: 66 알림 받은편지함 · 61~65 Orca 비교 v5 · 0.2.0 공개 — 태그 `v0.2.0` = `057a736`)
+마지막 갱신: 2026-11-19 (69 에이전트가 일을 맡기기 — e2e 미실행, 돌려야 할 목록은 `docs/stages/69-agent-delegation.md`. 그 앞: 67 병합된 worktree 정리 · 68 하위 에이전트 진행 보기 — 둘 다 e2e 미실행, 돌려야 할 목록은 `docs/stages/67-merged-worktree-cleanup.md` · `docs/stages/68-subagent-progress.md`. 그 앞: 66 알림 받은편지함 · 61~65 Orca 비교 v5 · 0.2.0 공개 — 태그 `v0.2.0` = `057a736`)
 
 2026-11-16 사용자 지시 "main 반영해주고 공개 릴리스는 아직"에 따라 PR #2를 포함한 최신 기능을 main에 통합한다. 기존 표의 'main 미병합'은 각 단계 완료 당시 기록이다. 다음 독립 작업은 최신 `origin/main`에서 작업별 브랜치로 시작한다. 새 공개 릴리스·태그·공증·배포는 계속 보류한다.
 
@@ -59,6 +59,7 @@
 | 66 알림 받은편지함 | 보고 있지 않은 pane 의 알림(기다림 · 끝남 · 실패 · 셸 닫힘)을 `<userData>/inbox.json`(0600 · 가림 · 300개 · 30일)에 남기고 전체 보기 '지난 알림' · 사이드바 '· 알림 N' 으로 보인다. 보면 읽음 · 눌러 열기 · 모두 읽음 · 비우기. 단위1,594·변이 12+4·리뷰 9/10. **e2e 미실행(사용자 지시)** — `docs/stages/66-notification-inbox.md` |
 | 67 병합된 worktree 정리 | worktree 패널 · 연결 일감 카드(사이드바 · 전체 보기)에 '병합됨' · '병합 모름'(기준 origin/HEAD → main/master 의 조상 + 브랜치 reflog 의 만든 지점 · 커밋 줄 — 커밋 없는 새 worktree · 받아 오기만 한 브랜치는 병합됨 아님, squash 는 모름, 네트워크 없음. 카드는 병합됨만) · '병합된 것 정리…' 미리보기 → 고른 것만 확인 → 다시 읽기 · 연결 일감 보관 → main 이 줄마다 다시 찾아 39 안전 검사로 지움(결과 모름이면 멈춤). 단위1,617·변이 10+4·리뷰 8/10 고침. **e2e 미실행(사용자 지시)** — `docs/stages/67-merged-worktree-cleanup.md` |
 | 68 하위 에이전트 진행 보기 | 대화 pane 이 stream-json 의 `parent_tool_use_id` · `task_*` 사건을 읽어, 하위 에이전트(Agent · Task)가 부른 도구를 본 흐름에 섞지 않고 그 Agent 카드 아래로 접는다(하위 도구 N개 펼치기). 카드: 하는 일 · 도구 N번 · 마지막 도구 · 걸린 시간 · 상태 · 끝난 뒤 요약(가림 · 1000자). 백그라운드 알림이 턴 뒤에 와도 맞는 카드 · 프로세스가 끝나거나 다시 열 때 못 받은 것은 '멈춤'. 되감기 anchor 는 본 줄 uuid 만. 기록에 `agent` 종류 · `tool.parent` 칸(옛 기록 그대로 읽힘). 실측 claude 2.1.325 두 번을 줄인 재료. 단위1,618·변이 10+3·리뷰 8/10. **e2e 미실행(사용자 지시)** · 백그라운드 실제 순서 미확인 — `docs/stages/68-subagent-progress.md` |
+| 69 에이전트가 일을 맡기기 | `taskminal task new <이름> --worktree <브랜치> [--base] [--request]` — CLI 를 친 폴더의 저장소에 39 의 worktree 만들기(같은 생성 기록 · 요청 번호, 같은 번호 재전송은 새로 안 만들고 이미 만든 일감을 알림)로 `<저장소>-worktrees/<브랜치 slug>` 를 만들고 부모를 기록한 일감(id 는 요청 번호에서). 저장소 아님 · 원격 · 일감 밖은 종료 2. 이미 있는 브랜치는 39 `create` 가 기록 전에 거절(화면도). 다른 pane 의 `chat send` · `chat new` 에 `[taskminal: 일감 › 탭 (pane) 에서 보냄]`(터미널 `pane send` 는 TUI 메뉴를 고를 수 있어 안 붙임 · `/` 명령 글도 안 붙임). 맡긴 일감의 대화 턴이 멈추면(턴 끝 · 실패 · 허락/질문 · 멈춤, 한 턴에 한 번, 하위 에이전트 사건 제외) 부모에 notify(확인 필요 · 받은편지함), 부모가 지워졌거나 보관이면 조용히. 45 와 기록 · 번호 · 브랜치가 따로(문서 0절). 단위1,679·변이10+리뷰 고침9 모두 잡음·리뷰 10건 모두 고침. **e2e 미실행(사용자 지시)** — `docs/stages/69-agent-delegation.md` |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
