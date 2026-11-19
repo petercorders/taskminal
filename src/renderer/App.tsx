@@ -54,6 +54,8 @@ import { GitWorkflow } from './GitWorkflow'
 import { WorkflowPanel } from './WorkflowPanel'
 import { SchedulePanel } from './SchedulePanel'
 import { WorktreePanel } from './WorktreePanel'
+import { ImportRepoDialog } from './ImportRepoDialog'
+import { SessionHintBand } from './SessionHintBand'
 import { IssuesPanel } from './IssuesPanel'
 import { JiraTaskHead, jiraSidebarText } from './JiraTaskHead'
 import { loadIssueLinks, useIssueLinks } from './issue-links'
@@ -210,6 +212,9 @@ export function App() {
   const [conversationOpen,setConversationOpen]=useState(false)
   // 53단계 에이전트 세션 패널 — 연 순간의 일감 id
   const [agentSessionsFor,setAgentSessionsFor]=useState<{taskId:string|null}|null>(null)
+  // 70단계 저장소째 가져오기 — root 가 없으면 열자마자 폴더 고르기. back = 닫은 뒤 포커스를 돌려줄 단추(워크트리 패널)
+  const [importing,setImporting]=useState<{root?:string}|null>(null)
+  const importBack=useRef<HTMLElement|null>(null)
   const resumingSessions=useRef(new Set<string>())
   const [conversationJump,setConversationJump]=useState<{paneId:string;fingerprint:string;at:number;n:number}|null>(null)
   const [conversationRestore,setConversationRestore]=useState<ConversationHit|null>(null)
@@ -1169,6 +1174,7 @@ export function App() {
     // 53단계 에이전트 세션 패널은 여기서 닫지 않는다 — 일감 지우기 · 보관이 closeDialogs 를 부르는데, 연 일감이 사라지면 패널이 남아 막고 안내한다
     setConversationRestore(null)
     setCreating(null)
+    setImporting(null)
     setRemoving(null)
     setConfirming(null)
     setSavingTemplate(null)
@@ -1422,7 +1428,7 @@ export function App() {
     setWorkTool(null)
     refocus()
   }
-  const dialogOpen = creating !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null || agentSessionsFor !== null
+  const dialogOpen = creating !== null || importing !== null || removing !== null || confirming !== null || savingTemplate !== null || paletteOpen || settingsOpen || hostConfirm !== null || firstRun !== null || globalFind || clearingHistory || archiveOpen || weeklyOpen || conversationOpen || conversationRestore !== null || agentSessionsFor !== null
 
   // 사이드바 '안 본 것'(21단계) — 일감을 떠날 때 · 고를 때 본 시각을 남긴다(저장하지 않는 값)
   const [seenAt, setSeenAt] = useState<Record<string, number>>({})
@@ -1626,7 +1632,7 @@ export function App() {
   }, [state.tasks])
   /** 대화 · 터미널로 이어 하기 — 이미 열린 대화면 그리로. main 이 id 로 세션 · 폴더를 다시 찾고, 15초 안에 답이 없으면 오류(탭은 아직 안 만듦).
    *  같은 세션을 같은 프레임에 두 번: 여기 열쇠 · main 의 합치기(첫 pane 만)로 하나. 열쇠는 성공 뒤 상태가 그려질 때까지 잠깐 더 잡는다. */
-  const resumeAgentSession = async (s: AgentSession, how: ResumeHow, taskId: string) => {
+  const resumeAgentSession = async (s: Pick<AgentSession, 'agent' | 'id' | 'summary'>, how: ResumeHow, taskId: string) => {
     const key = sessionKey(s)
     const moveTo = () => {
       const hit = findSessionPane(stateRef.current, s.agent, s.id)
@@ -2205,7 +2211,7 @@ export function App() {
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} {...(workTool.file?{openFile:workTool.file}:{})} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)} onSendToChat={text=>{const id=activeTask.id;if(!stateRef.current.tasks.some(task=>task.id===id&&task.archivedAt===undefined))return showToast({text:'일감이 사라졌어요.'});askChat(id,text);setWorkTool(null);refocus()}} onOpenReview={()=>{setWorkTool(null);openReview(activeTask.id,'diff')}}/>}
-              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onArchive={archiveForCleanup} busy={id=>Object.values(stateRef.current.tasks.find(t=>t.id===id)?.panes??{}).some(p=>activityRef.current[p.id]?.busy)} onMerge={view=>setWorktreeMerge(old=>({...old,...mergeBadges(view)}))} onPrepare={(path,preview)=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path,...(preview?{preview:true}:{})}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
+              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onImportRepo={()=>{importBack.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setImporting({root:activeTask.cwd})}} onArchive={archiveForCleanup} busy={id=>Object.values(stateRef.current.tasks.find(t=>t.id===id)?.panes??{}).some(p=>activityRef.current[p.id]?.busy)} onMerge={view=>setWorktreeMerge(old=>({...old,...mergeBadges(view)}))} onPrepare={(path,preview)=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path,...(preview?{preview:true}:{})}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
                 if(signal?.aborted||workToolRef.current!==workTool||stateRef.current.activeTaskId!==activeTask.id)return
                 const current=stateRef.current
                 if(taskId){const existing=current.tasks.find(t=>t.id===taskId&&!t.host&&t.archivedAt===undefined);if(!existing||existing.cwd!==expectedCwd)return showToast({text:'연결된 일감이 바뀌었어요. 다시 열어 주세요.'});dispatch({type:'task/select',id:taskId})}
@@ -2230,6 +2236,13 @@ export function App() {
                 aria-hidden={!taskActive}
               >
                 {(() => { const link = issueLinks.find((item) => item.taskId === task.id && item.issue.provider === 'jira'); return link ? <JiraTaskHead link={link} active={taskActive} /> : null })()}
+                {!task.host && !!task.sessionHints?.length && (
+                  <SessionHintBand
+                    hints={task.sessionHints}
+                    onResume={(hint, how) => resumeAgentSession(hint, how, task.id)}
+                    onDrop={(id) => dispatch({ type: 'task/hints-drop', taskId: task.id, ...(id !== undefined ? { id } : {}) })}
+                  />
+                )}
                 {(() => {
                   const { shown, more } = quickButtons(task, state.settings.quickCommands)
                   // 27단계: 대화 탭에서 빈 '빠른 명령' 안내 띠는 셸 명령 안내라 자리만 차지한다 — 단추가 생기면 그때 보인다
@@ -2491,7 +2504,23 @@ export function App() {
         />
       )}
       {toast && <Toast toast={toast} onDone={() => setToast((t) => (t?.id === toast.id ? null : t))} />}
-      {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} />}
+      {creating && <NewTaskDialog state={state} initial={creating} onCreate={create} onCancel={closeDialogs} onImportRepo={() => { setCreating(null); importBack.current = null; setImporting({}) }} />}
+      {importing && (
+        <ImportRepoDialog
+          {...(importing.root ? { root: importing.root } : {})}
+          state={() => stateRef.current}
+          newId={newId}
+          onApply={(tasks, group) => dispatch({ type: 'task/import', tasks, group })}
+          onClose={() => {
+            setImporting(null)
+            const back = importBack.current
+            importBack.current = null
+            // 워크트리 패널에서 열었으면 그 단추로(가져온 일감으로 옮겼으면 패널이 숨어 터미널로)
+            if (back?.isConnected && back.getClientRects().length > 0 && !(back as HTMLButtonElement).disabled) back.focus()
+            else refocus()
+          }}
+        />
+      )}
       {paletteOpen && <Palette state={viewState} archived={state.tasks.filter(isArchived)} shortcuts={shortcuts} history={history.entries} ports={paletteports} onRun={runPaletteItem} onClose={closeDialogs} />}
       {popup?.kind === 'quick' && (
         <PopupMenu label="빠른 명령 메뉴" testId="quick-menu" x={popup.x} y={popup.y} items={quickMenuItems(popup)} onClose={(picked) => (setPopup(null), picked || refocus())} />

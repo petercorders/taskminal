@@ -5,6 +5,7 @@ import { AGENT_NAME, isChatAgent, type ChatAgent } from './chat'
 import { parseQuickList, removeQuick, restoreQuick, upsertQuick, type QuickCommand } from './quick'
 import { defaultExtraSettings, parseExtraSettings } from './settings'
 import { isSshHost } from './remote'
+import { isSessionId } from './agent-sessions'
 import { clampRatio, cyclePane, hasPane, paneIds, removePane, setRatioAt, splitPane, type SplitPath } from './layout'
 import type {
   AppState,
@@ -16,6 +17,7 @@ import type {
   NewTaskInput,
   Pane,
   PaneSpec,
+  SessionHint,
   Settings,
   SplitDir,
   Status,
@@ -888,7 +890,20 @@ function parseTask(v: unknown, settings: Settings, newId: NewId, seen: SeenIds):
     ...(typeof v.archivedAt === 'number' && Number.isFinite(v.archivedAt) && v.archivedAt > 0 ? { archivedAt: v.archivedAt } : {}),
     ...(isStr(v.host) && isSshHost(v.host) ? { host: v.host, ...(v.remoteTmux === false ? { remoteTmux: false } : {}) } : {}),
     ...(isObj(v.parent) && isId(v.parent.taskId) && v.parent.taskId !== v.id ? { parent: { taskId: v.parent.taskId, ...(isId(v.parent.paneId) ? { paneId: v.parent.paneId } : {}) } } : {}),
+    ...(parseSessionHints(v.sessionHints).length ? { sessionHints: parseSessionHints(v.sessionHints) } : {}),
   }
+}
+
+/** 70단계: 이어 하기 후보 — 에이전트마다 하나(최대 2), id 는 UUID 모양만(터미널 명령에 들어간다), 요약 160자 */
+export const SESSION_HINT_SUMMARY_MAX = 160
+export function parseSessionHints(v: unknown): SessionHint[] {
+  if (!Array.isArray(v)) return []
+  const out: SessionHint[] = []
+  for (const h of v) {
+    if (!isObj(h) || !isChatAgent(h.agent) || !isSessionId(h.id) || out.some((x) => x.agent === h.agent)) continue
+    out.push({ agent: h.agent, id: h.id, summary: isStr(h.summary) ? h.summary.slice(0, SESSION_HINT_SUMMARY_MAX) : '', at: typeof h.at === 'number' && Number.isFinite(h.at) && h.at > 0 ? h.at : 0 })
+  }
+  return out
 }
 
 function parseNotes(v: unknown): Note[] {

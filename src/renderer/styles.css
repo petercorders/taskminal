@@ -4996,3 +4996,24 @@ input[type='checkbox'] {
   .usage-bars { gap: var(--space-1); }
   .usage-bars-name { display: none; }
 }
+/* 70단계: 가져온 일감의 이어 하기 후보 띠 */
+.session-hint-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--accent-ink);
+  background: var(--raised);
+  font-size: 13px;
+}
+.session-hint-title { color: var(--muted); white-space: nowrap; }
+.session-hint-list { display: flex; flex: 1; flex-wrap: wrap; gap: var(--space-2) var(--space-3); min-width: 0; margin: 0; padding: 0; list-style: none; }
+.session-hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); min-width: 0; }
+.session-hint-text { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.session-hint-band button { white-space: nowrap; }
+.session-hint-error { color: var(--danger); overflow-wrap: anywhere; }
+/* 70단계: 새 일감 대화상자 아래 줄 왼쪽의 '저장소째 가져오기…' */
+.dialog-actions > .dialog-action-start { margin-right: auto; }
+.dialog-actions:has(> .dialog-action-start) { flex-wrap: wrap; }

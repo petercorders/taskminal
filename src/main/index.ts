@@ -679,7 +679,7 @@ if (!app.requestSingleInstanceLock()) {
     available:()=>!!stateFile?.canWrite&&!!lastState&&!!mainWindow&&!mainWindow.isDestroyed()&&!mainWindow.webContents.isCrashed()&&!mainWindow.webContents.isLoading(),
     redact:text=>redact(text,secretOpts),report:error=>report('error','schedules','예약 실행을 멈췄어요',error),
   })
-  worktreeService = installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],
+  worktreeService = installWorktreeIpc(fromOurWindow,{state:()=>lastState,revision:()=>worktreeRevision,pendingPaths:()=>[...pendingWorktreeCwds.values()],sessions:()=>workspaceTools.agentSessions.list(),
     liveCwds:async()=>{
       await control().ready
       if(control().view().state!=='connected')throw new Error('셸 지킴이 상태를 확인하지 못했어요')

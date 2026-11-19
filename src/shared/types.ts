@@ -101,6 +101,17 @@ export interface Task {
   remoteTmux?: boolean
   /** 이 일감을 맡긴 일감 (69단계 `taskminal task new --worktree`) — 이 일감의 대화 턴이 멈추면 부모에 알린다. paneId = 맡긴 pane */
   parent?: { taskId: Id; paneId?: Id }
+  /** 70단계 저장소째 가져오기 — 그 폴더에서 하던 claude · codex 세션(에이전트마다 최신 하나). 일감 머리 띠의 '이어 하기' 후보, 자동으로 시작하지 않는다 */
+  sessionHints?: SessionHint[]
+}
+
+/** 53 '밖에서 시작한 세션' 하나 — id 로 main 이 다시 찾아 이어 한다. summary 는 main 이 가린 뒤 160자 */
+export interface SessionHint {
+  agent: 'claude' | 'codex'
+  id: string
+  summary: string
+  /** 그 세션 기록의 마지막 시각(ms) */
+  at: number
 }
 
 export interface Note {

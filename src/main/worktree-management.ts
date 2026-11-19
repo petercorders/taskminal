@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
-  isWorktreeBase, isWorktreeBranchText, isWorktreeOid, isWorktreeRequestId, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
+  isWorktreeBase, isWorktreeBranchText, isWorktreeOid, isWorktreeRequestId, openable, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
   type CreateWorktree, type ManagedWorktree, type MergeInfo, type WorktreeCleanItem, type WorktreeCleanResult,
   type WorktreeCreateReceipt, type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
   type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
@@ -337,7 +337,7 @@ export class WorktreeManagement {
     validateTarget(target)
     const entry = this.find(await this.registry(root), target)
     await this.inspect(entry, [])
-    if (!entry.canOpen || entry.bare || entry.prunable || entry.unknownAttributes.length) throw new Error('이 워크트리를 열 수 없어요. 경로와 등록을 확인해 주세요.')
+    if (!openable(entry)) throw new Error('이 워크트리를 열 수 없어요. 경로와 등록을 확인해 주세요.')
     return { path: entry.path }
   }
 

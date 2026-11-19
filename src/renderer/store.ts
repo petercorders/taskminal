@@ -1,5 +1,6 @@
 // 화면 상태의 주인. 순수 reducer — 새 id · 시각은 부르는 쪽이 만들어 넘긴다.
 import { clampFontSize } from '../shared/keymap'
+import { applyImport, dropSessionHints } from '../shared/repo-import'
 import type { SplitPath } from '../shared/layout'
 import {
   addGroup,
@@ -55,7 +56,7 @@ import {
 import type { QuickCommand } from '../shared/quick'
 import type { ChatAgent } from '../shared/chat'
 import { archiveTask } from '../shared/archive'
-import type { AppState, Id, Note, Settings, SplitDir, Task, Template } from '../shared/types'
+import type { AppState, Group, Id, Note, Settings, SplitDir, Task, Template } from '../shared/types'
 
 /** 설정 창에서 바로 바꾸는 값 (상태 · 묶음 · 템플릿 목록은 따로) */
 export type SettingsPatch = Partial<Omit<Settings, 'statuses' | 'groups' | 'templates'>>
@@ -65,6 +66,10 @@ export type Action =
   /** 백업에서 되돌리기 · 가져오기 · 지운 일감 되살리기 (17단계) — 셸 정리는 부르는 쪽이 먼저 */
   | { type: 'state/replace'; state: AppState }
   | { type: 'task/create'; task: Task }
+  /** 70단계 저장소째 가져오기 — 묶음 + 일감을 한 번에(같은 폴더 일감은 다시 거름), 첫 일감 선택 */
+  | { type: 'task/import'; tasks: Task[]; group: Group | null }
+  /** 70단계 이어 하기 후보 — 이어 한 것 하나(id) · 닫기(모두) */
+  | { type: 'task/hints-drop'; taskId: Id; id?: string }
   | { type: 'task/select'; id: Id }
   | { type: 'task/remove'; id: Id }
   /** 보관 (25단계) — 셸 끄기는 부르는 쪽이 먼저 */
@@ -142,6 +147,10 @@ export function reducer(state: AppState, action: Action): AppState {
       return action.state
     case 'task/create':
       return { ...state, tasks: [...state.tasks, action.task], activeTaskId: action.task.id }
+    case 'task/import':
+      return applyImport(state, action.tasks, action.group)
+    case 'task/hints-drop':
+      return dropSessionHints(state, action.taskId, action.id)
     case 'task/select':
       return state.tasks.some((t) => t.id === action.id) ? { ...state, activeTaskId: action.id } : state
     case 'task/archive':

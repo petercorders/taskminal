@@ -25,6 +25,8 @@ interface Props {
   busy?(taskId: string): boolean
   /** 67단계: 목록을 읽을 때마다 — 연결 일감 카드의 병합 칩 */
   onMerge?(view: WorktreeView): void
+  /** 70단계: 이 저장소째 가져오기 — 가져오기 대화상자를 이 패널의 폴더로 연다 */
+  onImportRepo?(): void
 }
 
 interface Draft { branch: string; base: string; path: string }
@@ -40,7 +42,7 @@ const CLEAN_STATE: Record<CleanupReportRow['state'], string> = { removed: '정�
 const label = (entry: ManagedWorktree) => entry.bare ? 'bare 저장소' : entry.path === entry.commonDir ? '기본 Git 정보' : entry.branch?.replace(/^refs\/heads\//, '') ?? '분리된 HEAD'
 
 /** Filesystem mutations remain in main; opening a task happens only after a current validated reply. */
-export function WorktreePanel({ root, onOpen, onPrepare, onArchive = () => [], busy: taskBusy = () => false, onMerge, api = window.taskminal.worktrees }: Props) {
+export function WorktreePanel({ root, onOpen, onPrepare, onArchive = () => [], busy: taskBusy = () => false, onMerge, onImportRepo, api = window.taskminal.worktrees }: Props) {
   const [view, setView] = useState<WorktreeView | null>(null)
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [pending, setPending] = useState<PendingCreate | null>(() => pendingCreates.get(root) ?? null)
@@ -230,6 +232,7 @@ export function WorktreePanel({ root, onOpen, onPrepare, onArchive = () => [], b
     <div className="worktree-actions">
       <button type="button" className="button" disabled={!!busy || loading} onClick={() => { setLoading(true); void refresh.current() }}>목록 새로 읽기</button>
       <button ref={cleanTrigger} type="button" className="button" disabled={disabled || !view || flow.kind !== 'idle'} aria-expanded={flow.kind !== 'idle'} onClick={() => { setReport(null); step({ type: 'open' }) }}>병합된 것 정리…{preview?.candidates.length ? ` (${preview.candidates.length})` : ''}</button>
+      {onImportRepo && <button type="button" className="button" disabled={!!busy} onClick={onImportRepo}>이 저장소째 가져오기…</button>}
     </div>
     {readError && <div role="alert" className="worktree-error">{readError} <button type="button" className="button" disabled={!!busy} onClick={() => { setLoading(true); void refresh.current() }}>다시 읽기</button></div>}
     {error && <div role="alert" className="worktree-error">{error}</div>}

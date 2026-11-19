@@ -31,10 +31,12 @@ interface Props {
   initial?: NewTaskInitial
   onCreate(input: NewTaskInput): void
   onCancel(): void
+  /** 70단계: 저장소째 가져오기 — 이 대화상자를 닫고 가져오기 대화상자를 연다(로컬만) */
+  onImportRepo?(): void
 }
 
 /** 새 일감: 이름 · 작업 폴더 · 템플릿 · 상태 · 묶음 · 색. 폴더 · 템플릿의 처음 값은 설정(일반). 템플릿 카드는 12단계. */
-export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
+export function NewTaskDialog({ state, initial, onCreate, onCancel, onImportRepo }: Props) {
   const { settings } = state
   const [name, setName] = useState(initial?.name ?? '')
   const [templateId, setTemplateId] = useState<string>(initial?.templateId ?? settings.defaultTemplateId ?? '')
@@ -325,6 +327,11 @@ export function NewTaskDialog({ state, initial, onCreate, onCancel }: Props) {
         </fieldset>
 
         <footer className="dialog-actions">
+          {onImportRepo && !remote && (
+            <button type="button" className="button dialog-action-start" onClick={onImportRepo} disabled={busy} title="저장소의 worktree 마다 일감을 한꺼번에 만들어요">
+              저장소째 가져오기…
+            </button>
+          )}
           <button type="button" className="button" onClick={onCancel} disabled={busy}>
             취소
           </button>
