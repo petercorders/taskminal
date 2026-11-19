@@ -24,18 +24,24 @@ export function delegatedTaskId(requestId: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
 }
 
-/** 새 worktree 경로 — `<기본 worktree 의 부모>/<이름>-worktrees/<브랜치 slug>`. 같은 브랜치면 늘 같은 경로(다시 시도가 39 의 '경로가 다르면 거절' 에 걸리지 않게) */
+/**
+ * 새 worktree 경로 — `<기본 worktree 의 부모>/<이름>-worktrees/<브랜치 slug>`. 같은 브랜치면 늘 같은 경로(다시 시도가 39 의 '경로가 다르면 거절' 에 걸리지 않게).
+ * slug 는 소문자(macOS 는 대소문자를 가리지 않는다) — 브랜치와 글자가 다르면 브랜치 해시 6자를 붙여 feat/x · feat-x · Feat-X 가 겹치지 않게(69 리뷰)
+ */
 export function delegatePath(primary: string, branch: string): string {
-  const slug = branch.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '').slice(0, 80) || 'worktree'
-  return join(dirname(primary), `${basename(primary)}-worktrees`, slug)
+  const slug = branch.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '').slice(0, 80).toLowerCase() || 'worktree'
+  const name = slug === branch ? slug : `${slug}-${createHash('sha256').update(branch).digest('hex').slice(0, 6)}`
+  return join(dirname(primary), `${basename(primary)}-worktrees`, name)
 }
 
 const fail = (error: string, exit: number = EXIT.error): CliReply => ({ ok: false, error, exit })
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-interface Source { taskId: string; paneId: string; cwd: string }
+/** existing = 같은 요청 번호로 이미 만든 일감(같은 부모)의 폴더 */
+interface Source { taskId: string; paneId: string; cwd: string; existing?: { cwd: string } }
 const isSource = (v: unknown): v is Source =>
-  isObj(v) && typeof v['taskId'] === 'string' && typeof v['paneId'] === 'string' && typeof v['cwd'] === 'string' && v['cwd'].length > 0
+  isObj(v) && typeof v['taskId'] === 'string' && typeof v['paneId'] === 'string' && typeof v['cwd'] === 'string' && v['cwd'].length > 0 &&
+  (v['existing'] === undefined || (isObj(v['existing']) && typeof v['existing']['cwd'] === 'string'))
 
 export async function delegateTask(req: TaskNew, d: DelegateDeps): Promise<CliReply> {
   const branch = req.worktree
@@ -46,17 +52,27 @@ export async function delegateTask(req: TaskNew, d: DelegateDeps): Promise<CliRe
   const names = { ...(req.template !== undefined ? { template: req.template } : {}), ...(req.group !== undefined ? { group: req.group } : {}), ...(req.status !== undefined ? { status: req.status } : {}) }
 
   // 1. 부른 pane 의 일감 · 폴더 (원격 · 틀린 템플릿 이름은 창이 쓰기 전에 거절)
-  const src = await d.askUi({ op: 'delegate.source', ...names, self: req.self })
+  const taskId = delegatedTaskId(request)
+  const src = await d.askUi({ op: 'delegate.source', taskId, ...names, self: req.self })
   if (!src.ok) return src
   if (!isSource(src.data)) return fail('부른 일감을 확인하지 못했어요')
   const source = src.data
+  // 같은 요청으로 이미 만들었다(응답이 끊긴 뒤 다시) — 그 사이 worktree 에 커밋했어도 39 의 '결과 모름' 에 걸리지 않게 git 전에 끝낸다(69 리뷰)
+  if (source.existing) {
+    return {
+      ok: true,
+      text: `일감 '${req.name.trim()}' 을 이미 만들어 두었어요 (${taskId}) · worktree ${source.existing.cwd}`,
+      data: { task: taskId, path: source.existing.cwd, branch, request, existing: true },
+    }
+  }
+  // 저장소는 CLI 를 친 폴더에서(에이전트가 cd 했을 수 있다). 앱 밖에서 온 옛 요청이면 pane 폴더.
   // pane 폴더는 ~ 로 저장될 수 있다 — git -C 는 ~ 를 펼치지 않는다(39 create 는 스스로 펼친다)
-  const cwd = resolve(expandHome(source.cwd, homedir()))
+  const cwd = resolve(expandHome(req.from ?? source.cwd, homedir()))
 
   // 2. 저장소인가 — 아니면 사용법 오류(2), 조회 자체가 실패하면 1
   const probe = await (d.git ?? makeWorktreeGit())(cwd, ['rev-parse', '--is-inside-work-tree'])
   if (probe.timedOut || probe.truncated || (probe.code !== 0 && probe.code !== 128)) return fail('Git 조회에 실패했어요 — 잠시 뒤 다시 해 주세요')
-  if (probe.code === 128 || probe.stdout.trim() !== 'true') return fail(`이 일감의 폴더는 Git 저장소가 아니에요: ${source.cwd}`, EXIT.usage)
+  if (probe.code === 128 || probe.stdout.trim() !== 'true') return fail(`이 폴더는 Git 저장소가 아니에요: ${cwd}`, EXIT.usage)
 
   // 3. 39 의 만들기 — 기록 → worktree add → 등록을 다시 읽어 확인. 던지면 아무것도 쓰지 않은 것
   let result: Awaited<ReturnType<DelegateDeps['worktrees']['create']>>
@@ -70,9 +86,9 @@ export async function delegateTask(req: TaskNew, d: DelegateDeps): Promise<CliRe
   if (result.state !== 'created') return fail(`worktree 만들기 결과를 확인하지 못했어요 (${result.path}) — 폴더 · 브랜치를 확인한 뒤 ${again}`)
 
   // 4. 일감 — id 는 요청 번호에서. 창이 이미 그 일감을 가졌으면 그대로(existing)
-  const taskId = delegatedTaskId(request)
   const made = await d.askUi({ op: 'delegate.prepare', taskId, name: req.name, cwd: result.path, parent: { taskId: source.taskId, paneId: source.paneId }, ...names, self: req.self })
-  if (!made.ok) return fail(`worktree 는 만들었어요(${result.path}) — 일감을 만들지 못했어요: ${made.error} · ${again}`)
+  // 창이 늦게 답하면(시간 넘김) 일감이 뒤늦게 생길 수 있다 — '못 만들었다' 고 단정하지 않는다(69 리뷰)
+  if (!made.ok) return fail(`worktree 는 만들었어요(${result.path}) — 일감을 만들었는지 확인하지 못했어요: ${made.error} · 창에 늦게 생길 수 있어요 · ${again}`)
   const existing = isObj(made.data) && made.data['existing'] === true
   return {
     ok: true,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { turnStop, type ChatEvent } from '../../src/shared/chat'
-import { delegateSignal, parentNotice, senderHeader, senderOf, terminalAgent, validDelegateBranch, withSender } from '../../src/shared/delegation'
+import { delegateSignal, isDelegatedPane, parentNotice, senderHeader, senderOf, validDelegateBranch, withSender } from '../../src/shared/delegation'
 import { createTask, emptyState, normalizeState, tabShownLabel } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
 
@@ -37,21 +37,12 @@ describe('보낸 이 머리 (69)', () => {
     expect(senderOf(s, 'nowhere', to)).toBeUndefined()
   })
 
-  it('대화는 머리 줄 + 글, 터미널 TUI 는 같은 줄, 머리가 없으면 글 그대로', () => {
-    expect(withSender('일해', '[H]', 'block')).toBe('[H]\n일해')
-    expect(withSender('일해', '[H]', 'line')).toBe('[H] 일해')
-    expect(withSender('일해', undefined, 'block')).toBe('일해')
-    expect(withSender('일해', undefined, 'line')).toBe('일해')
-  })
-
-  it('터미널에서 도는 에이전트 — 51 훅 상태, 없으면 실행 중 명령의 첫 낱말. 셸 · 다른 명령은 없음', () => {
-    expect(terminalAgent(undefined)).toBeUndefined()
-    expect(terminalAgent({ state: 'running', busy: true, attention: false, agent: { agent: 'codex', phase: 'working', at: 0, shellBusy: false } })).toBe('codex')
-    expect(terminalAgent({ state: 'running', busy: true, attention: false, command: 'claude --resume x' })).toBe('claude')
-    expect(terminalAgent({ state: 'running', busy: true, attention: false, command: '/opt/bin/codex' })).toBe('codex')
-    expect(terminalAgent({ state: 'running', busy: true, attention: false, command: 'claudette' })).toBeUndefined()
-    expect(terminalAgent({ state: 'done', busy: false, attention: false, command: 'claude' })).toBeUndefined()
-    expect(terminalAgent({ state: 'idle', busy: false, attention: false })).toBeUndefined()
+  it('대화는 머리 줄 + 글, 머리가 없거나 / 로 시작하는 명령 글이면 글 그대로 (69 리뷰)', () => {
+    expect(withSender('일해', '[H]')).toBe('[H]\n일해')
+    expect(withSender('일해', undefined)).toBe('일해')
+    expect(withSender('/compact', '[H]')).toBe('/compact')
+    expect(withSender('  /clear', '[H]')).toBe('  /clear')
+    expect(withSender('경로는 /tmp', '[H]')).toBe('[H]\n경로는 /tmp')
   })
 })
 
@@ -86,6 +77,26 @@ describe('맡긴 일감의 턴 멈춤 → 부모 알림 (69)', () => {
     expect(delegateSignal(open, 'c', ev({ t: 'turn_end', ok: false, ms: 1, reason: 'x' }))).toBeNull()
     expect(delegateSignal(open, 'c', ev({ t: 'user', text: '다시', at: 1 }))).toBeNull()
     expect(delegateSignal(open, 'c', ev({ t: 'turn_end', ok: true, ms: 1, reason: 'x' }))).toBe('done')
+  })
+
+  it('닫은 뒤 본 에이전트의 글 · 도구가 다시 오면 다시 연다 — 오류 뒤 이어진 턴 · 백그라운드 뒤 이어진 턴의 끝도 알린다 (69 리뷰)', () => {
+    const open = new Map<string, boolean>()
+    expect(delegateSignal(open, 'c', ev({ t: 'error', kind: 'limit', message: 'x' }))).toBe('fail')
+    expect(delegateSignal(open, 'c', ev({ t: 'text', text: '이어서' }))).toBeNull()
+    expect(delegateSignal(open, 'c', ev({ t: 'turn_end', ok: true, ms: 1, reason: 'x' }))).toBe('done')
+    expect(delegateSignal(open, 'c', ev({ t: 'tool', id: 't1', name: 'Bash', summary: '' }))).toBeNull()
+    expect(delegateSignal(open, 'c', ev({ t: 'turn_end', ok: true, ms: 1, reason: 'x' }))).toBe('done')
+    // 하위 에이전트의 도구 · 끝은 본 에이전트가 이어 간 것이 아니다
+    expect(delegateSignal(open, 'c', ev({ t: 'tool', id: 't2', name: 'Read', summary: '', parent: 'a' }))).toBeNull()
+    expect(delegateSignal(open, 'c', ev({ t: 'agent', id: 'a', phase: 'end', status: 'done' }))).toBeNull()
+    expect(delegateSignal(open, 'c', ev({ t: 'turn_end', ok: true, ms: 1, reason: 'x' }))).toBeNull()
+  })
+
+  it('맡긴 일감의 pane 만 표에 든다 — 부모가 없는 일감 · 일감 밖 pane 은 아니다', () => {
+    const s = world()
+    expect(isDelegatedPane(s, paneOf(s, 1))).toBe(true)
+    expect(isDelegatedPane(s, paneOf(s, 0))).toBe(false)
+    expect(isDelegatedPane(s, 'nowhere')).toBe(false)
   })
 
   it('허락으로 멈춤 → 답 → 턴 끝은 두 번 알린다. 모르는 pane(창 새로 고침 뒤)은 열림으로 본다', () => {

@@ -2,9 +2,9 @@
 // 순수: 상태 · 활동 · 시계 · id 를 받아 할 일(dispatch 목록 · 띄울 탭 · 지우기 · 알림)과 답을 돌려준다. App 이 실행한다.
 import type { PaneActivity } from '../shared/activity'
 import { formatRows, listRows, resolvePane, resolveTask, runningCount, type PaneTarget, type UiReply, type UiRequest } from '../shared/cli'
-import { senderOf, terminalAgent } from '../shared/delegation'
+import { senderOf } from '../shared/delegation'
 import { hasPane } from '../shared/layout'
-import { createTask, defaultTaskCwd, tabShownLabel, templateIdCount } from '../shared/model'
+import { createTask, defaultTaskCwd, findPaneTask, tabShownLabel, templateIdCount } from '../shared/model'
 import type { AppState, Id, Task } from '../shared/types'
 import { reducer, type Action } from './store'
 
@@ -186,19 +186,22 @@ export function handleCliUi(req: UiRequest, ctx: CliCtx): CliEffect {
       const task = state.tasks.find((x) => x.id === r.value.taskId)!
       const target = paneTarget(task, r.value.paneId)
       if (!target) return failed('그 pane 을 찾지 못했어요')
-      // 69: 터미널에서 도는 에이전트 · 다른 pane 이 부르면 보낸 이 머리 — main 이 보낼 글에 붙인다
-      const runs = target.kind === 'terminal' ? terminalAgent(ctx.activity[target.paneId]) : undefined
-      if (runs) target.runs = runs
+      // 69: 다른 pane 이 부르면 보낸 이 머리 — main 이 대화에 보낼 글에 붙인다(터미널 pane send 에는 붙이지 않는다)
       const sender = senderOf(state, self, target.paneId)
       return done({ ok: true, target, ...(sender ? { sender } : {}) }, [], [r.value.tabId])
     }
     case 'delegate.source': {
-      const t = self ? state.tasks.find((x) => Object.hasOwn(x.panes, self)) : undefined
+      const id = self ? findPaneTask(state, self) : null
+      const t = id === null ? undefined : state.tasks.find((x) => x.id === id)
       if (!self || !t) return failed('이 터미널은 Taskminal 의 일감 안이 아니에요 — 일감 안의 터미널 · 대화에서 불러 주세요')
       if (t.host) return failed('원격 일감에서는 worktree 를 만들 수 없어요 — 이 Mac 의 일감에서 불러 주세요')
+      const data = { taskId: t.id, paneId: self, cwd: t.panes[self]!.cwd }
+      // 같은 요청으로 이미 만든 일감(같은 부모) — main 이 worktree 를 다시 따지지 않고 그 일감을 알린다(그 사이 커밋해도, 69 리뷰)
+      const has = state.tasks.find((x) => x.id === req.taskId)
+      if (has && has.parent?.taskId === t.id) return done({ ok: true, data: { ...data, existing: { cwd: has.cwd } } })
       const picked = pickNew(state.settings, req)
       if ('reply' in picked) return picked
-      return done({ ok: true, data: { taskId: t.id, paneId: self, cwd: t.panes[self]!.cwd } })
+      return done({ ok: true, data })
     }
     case 'delegate.prepare': {
       // 같은 요청을 다시 보냈다(응답 유실 · 일감 만들기 실패 뒤) — 같은 폴더 · 같은 부모면 그대로, 아니면 겹침

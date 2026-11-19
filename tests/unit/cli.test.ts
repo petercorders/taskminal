@@ -285,22 +285,26 @@ describe('task new --worktree (69)', () => {
     expect(isCliRequest({ op: 'task.new', name: 'x', worktree: '-b', request: 'r1' })).toBe(false)
     expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'a/b' })).toBe(false)
     expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', base: 'a\0b' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', worktree: 'b', request: 'r1', from: 'relative/dir' })).toBe(false)
+    expect(isCliRequest({ op: 'task.new', name: 'x', from: '/w' })).toBe(false)
   })
 
-  it('요청 번호: 없으면 CLI 가 하나 만들어 붙이고, 있으면 그대로 · worktree 가 아니면 붙이지 않는다. 다시 하기 안내는 그 번호로', () => {
-    const made = withRequestId(req(['task', 'new', 'x', '--worktree', 'b']), () => 'gen-1')
-    expect(made).toMatchObject({ worktree: 'b', request: 'gen-1' })
-    expect(withRequestId(req(['task', 'new', 'x', '--worktree', 'b', '--request', 'mine']), () => 'gen-2')).toMatchObject({ request: 'mine' })
-    expect(withRequestId(req(['task', 'new', 'x']), () => 'gen-3')).not.toHaveProperty('request')
+  it('요청 번호 · 친 폴더: 없으면 CLI 가 번호를 만들어 붙이고 친 폴더를 실어 보낸다, worktree 가 아니면 붙이지 않는다. 다시 하기 안내는 그 번호로', () => {
+    const made = withRequestId(req(['task', 'new', 'x', '--worktree', 'b']), () => 'gen-1', '/w/repo/sub')
+    expect(made).toMatchObject({ worktree: 'b', request: 'gen-1', from: '/w/repo/sub' })
+    expect(isCliRequest(made)).toBe(true)
+    expect(withRequestId(req(['task', 'new', 'x', '--worktree', 'b', '--request', 'mine']), () => 'gen-2', '/w')).toMatchObject({ request: 'mine', from: '/w' })
+    const plain = withRequestId(req(['task', 'new', 'x']), () => 'gen-3', '/w')
+    expect(plain).not.toHaveProperty('request')
+    expect(plain).not.toHaveProperty('from')
     expect(retryHint(made)).toContain('--request gen-1')
     expect(retryHint(req(['task', 'new', 'x']))).toBeNull()
     expect(retryHint(req(['list']))).toBeNull()
   })
 
-  it('창의 답: sender · target.runs 모양을 본다', () => {
+  it('창의 답: sender 모양을 본다', () => {
     const target = { paneId: 'p1', label: 'A › b', kind: 'terminal', cwd: '/x', pending: false }
-    expect(parseUiReply({ ok: true, target: { ...target, runs: 'claude' }, sender: '[taskminal: A › b (p2) 에서 보냄]' })).not.toBeNull()
-    expect(parseUiReply({ ok: true, target: { ...target, runs: 'bash' } })).toBeNull()
+    expect(parseUiReply({ ok: true, target, sender: '[taskminal: A › b (p2) 에서 보냄]' })).not.toBeNull()
     expect(parseUiReply({ ok: true, target, sender: 5 })).toBeNull()
     expect(parseUiReply({ ok: true, target, sender: 'a\nb' })).toBeNull()
   })

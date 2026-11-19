@@ -140,14 +140,20 @@ export const isWorktreeOid = (value: unknown): value is string =>
 const pathText = (value: unknown): value is string =>
   typeof value === 'string' && isAbsolutePath(value) && value.length <= 4096 && !value.includes('\0')
 
+// 생성 요청의 모양 — 39 화면 · 기록 파일 · 69 CLI 위임이 같은 규칙을 쓴다(69 리뷰)
+export const isWorktreeRequestId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,100}$/.test(v)
+export const isWorktreeBranchText = (v: unknown): v is string =>
+  typeof v === 'string' && v.length > 0 && v.length <= 100 && !/[\s\0]/.test(v) && !v.startsWith('-')
+export const isWorktreeBase = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= 256 && !v.includes('\0')
+export const isWorktreePathText = pathText
+
 export function validWorktreeJournal(value: unknown): value is WorktreeJournalState {
   if (!value || typeof value !== 'object') return false
   const state = value as WorktreeJournalState
   if (state.version !== 1 || !Array.isArray(state.creates) || state.creates.length > 1000) return false
   const seen = new Set<string>()
   return state.creates.every((receipt) => {
-    if (!receipt || typeof receipt !== 'object' || typeof receipt.requestId !== 'string' ||
-      !/^[\w-]{1,100}$/.test(receipt.requestId) || seen.has(receipt.requestId)) return false
+    if (!receipt || typeof receipt !== 'object' || !isWorktreeRequestId(receipt.requestId) || seen.has(receipt.requestId)) return false
     seen.add(receipt.requestId)
     return pathText(receipt.path) && pathText(receipt.commonDir) &&
       typeof receipt.branch === 'string' && receipt.branch.length > 0 && receipt.branch.length <= 100 &&

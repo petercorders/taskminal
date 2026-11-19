@@ -41,7 +41,7 @@ function main(): void {
   // 상대 경로 폴더는 이 명령을 친 폴더 기준 — 앱은 그 폴더를 모른다
   if (parsed.req.op === 'task.new' && parsed.req.cwd && !isAbsolutePath(parsed.req.cwd) && parsed.req.cwd !== '~' && !parsed.req.cwd.startsWith('~/')) parsed.req.cwd = resolve(parsed.req.cwd)
   // 69: worktree 위임은 요청 번호를 여기서 붙인다 — 결과를 모르면 같은 번호로 다시 불러 두 번 만들지 않게
-  const req = withRequestId(parsed.req, randomUUID)
+  const req = withRequestId(parsed.req, randomUUID, process.cwd())
   const hint = retryHint(req)
   const again = () => hint && process.stderr.write(`taskminal: ${hint}\n`)
   const self = process.env['TASKMINAL_PANE_ID']

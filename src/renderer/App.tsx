@@ -27,7 +27,7 @@ import { HistoryPanel } from './history-ui'
 import { FIND_MEMO, GlobalFind, type FindMemo, type FindTarget } from './GlobalFind'
 import type { CommandDone } from './TerminalPane'
 import { isChatEvent, type ChatPermission } from '../shared/chat'
-import { delegateSignal, parentNotice, type TurnOpen } from '../shared/delegation'
+import { delegateSignal, isDelegatedPane, parentNotice, type TurnOpen } from '../shared/delegation'
 import type { MaskSettings } from './secret-mask'
 import { Toast, type ToastSpec } from './Toast'
 import { dateClock } from './settings/BackupSection'
@@ -1333,8 +1333,9 @@ export function App() {
       window.taskminal.chat.onEvent((paneId, ev) => {
         if (typeof paneId !== 'string' || typeof ev !== 'object' || ev === null) return
         // 69단계: 맡긴 일감(부모가 기록된 일감)의 턴이 멈추면 부모에 — CLI notify 와 같은 길(확인 필요 · 알림 · 받은편지함).
-        // 부모 · 맡긴 pane 은 알릴 때마다 지금 상태에서 다시 찾는다. 부모가 지워졌거나 보관됐으면 조용히
-        if (isChatEvent(ev)) {
+        // 부모 · 맡긴 pane 은 알릴 때마다 지금 상태에서 다시 찾는다. 부모가 지워졌거나 보관됐으면 조용히.
+        // 표에는 맡긴 일감의 pane 만 넣는다 — 다른 대화마다 칸이 쌓이지 않게(69 리뷰)
+        if (isChatEvent(ev) && isDelegatedPane(stateRef.current, paneId)) {
           const stop = delegateSignal(delegateTurns.current, paneId, ev)
           const notice = stop ? parentNotice(stateRef.current, paneId, stop) : null
           if (notice) updateActivityRef.current(notice.paneId, { type: 'notify', text: notice.text })

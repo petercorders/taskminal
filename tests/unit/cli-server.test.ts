@@ -284,13 +284,10 @@ describe('보낸 이 머리 · 위임 (69)', () => {
     expect(sent).toEqual([`${H}\n맡길 일`])
   })
 
-  it('pane send: 터미널에서 claude · codex 가 돌 때만 같은 줄 머리, 셸이면 보낸 이가 있어도 글 그대로', async () => {
-    const tui = setup({ askUi: withSender({ ...term, runs: 'claude' }, H) })
-    await tui.server.handle({ op: 'pane.send', pane: 'p1', text: '테스트 돌려', enter: true, self: 'p0' })
-    expect(tui.written).toEqual([['p1', `${H} 테스트 돌려\r`]])
+  it('pane send 는 키 입력이라 보낸 이가 있어도 글 그대로 — 머리 글자가 TUI 메뉴를 고를 수 있다 (69 리뷰)', async () => {
     const shell = setup({ askUi: withSender(term, H) })
-    await shell.server.handle({ op: 'pane.send', pane: 'p1', text: 'npm test', enter: true, self: 'p0' })
-    expect(shell.written).toEqual([['p1', 'npm test\r']])
+    await shell.server.handle({ op: 'pane.send', pane: 'p1', text: '3', enter: false, self: 'p0' })
+    expect(shell.written).toEqual([['p1', '3']])
   })
 
   it('task new --worktree 는 위임으로, 아니면 창에 그대로', async () => {

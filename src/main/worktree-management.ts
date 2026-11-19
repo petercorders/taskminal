@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { expandHome } from '../shared/cwd'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
-  isWorktreeOid, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
+  isWorktreeBase, isWorktreeBranchText, isWorktreeOid, isWorktreeRequestId, parseWorktrees, sameTarget, validWorktreeJournal, WORKTREE_USED_REASON,
   type CreateWorktree, type ManagedWorktree, type MergeInfo, type WorktreeCleanItem, type WorktreeCleanResult,
   type WorktreeCreateReceipt, type WorktreeCreateResult, type WorktreeJournalState, type WorktreeRemoveResult,
   type WorktreeSnapshot, type WorktreeTargets, type WorktreeView,
@@ -343,9 +343,7 @@ export class WorktreeManagement {
 
   async create(root: string, input: CreateWorktree): Promise<WorktreeCreateResult> {
     this.writable()
-    if (!input || typeof input.requestId !== 'string' || !/^[\w-]{1,100}$/.test(input.requestId) ||
-      typeof input.branch !== 'string' || !input.branch || input.branch.length > 100 || /[\s\0]/.test(input.branch) || input.branch.startsWith('-') ||
-      typeof input.base !== 'string' || !input.base.trim() || input.base.length > 256 || input.base.includes('\0')) throw new Error('요청 번호·브랜치·기준 커밋을 확인해 주세요')
+    if (!input || !isWorktreeRequestId(input.requestId) || !isWorktreeBranchText(input.branch) || !isWorktreeBase(input.base)) throw new Error('요청 번호·브랜치·기준 커밋을 확인해 주세요')
     const path = await canonicalLoose(absolutePath(input.path))
     const initial = await this.repository(root)
     return locked(initial.commonDir, async () => {

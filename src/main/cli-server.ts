@@ -159,9 +159,8 @@ export class CliServer {
         if ('error' in t) return t.error
         const { target } = t
         if (req.op === 'pane.send') {
-          // 69: 셸 입력에는 보낸 이를 붙이지 않는다(머리가 명령으로 돈다) — 그 터미널에서 에이전트가 돌 때만 같은 줄로
-          const text = withSender(req.text, target.runs ? t.sender : undefined, 'line')
-          if (!this.d.pane.write(target.paneId, text + (req.enter ? '\r' : ''))) return err('그 터미널에 보내지 못했어요')
+          // 69: 터미널에는 보낸 이를 붙이지 않는다 — 키 입력이라 셸이면 명령으로 돌고, TUI 의 메뉴 · 허락 선택을 머리 글자가 고를 수 있다(69 리뷰)
+          if (!this.d.pane.write(target.paneId, req.text + (req.enter ? '\r' : ''))) return err('그 터미널에 보내지 못했어요')
           this.d.watch.sent(target.paneId, req.enter)
           return { ok: true }
         }
@@ -180,7 +179,7 @@ export class CliServer {
         const r = await this.d.askUi(req)
         if (!r.ok) return r
         if (!r.target || r.target.kind !== 'chat') return err('대화 pane 을 만들지 못했어요')
-        const sent = await this.d.chat.send(r.target, withSender(req.text, r.sender, 'block'))
+        const sent = await this.d.chat.send(r.target, withSender(req.text, r.sender))
         // pane 은 이미 생겼다 — 다시 시도할 곳을 알려 준다(chat send <pane>)
         if (sent !== 'ok') return err(`${sendError(sent)} · 대화 pane ${r.target.paneId} 은 만들었어요 (chat send ${r.target.paneId} "…" 로 다시)`)
         return { ok: true, text: `대화 pane ${r.target.paneId} 를 만들고 보냈어요 (${r.target.label})`, data: { pane: r.target.paneId, label: r.target.label } }
@@ -188,7 +187,7 @@ export class CliServer {
       case 'chat.send': {
         const t = await this.chatTarget(req.pane, self)
         if ('error' in t) return t.error
-        const sent = await this.d.chat.send(t.target, withSender(req.text, t.sender, 'block'))
+        const sent = await this.d.chat.send(t.target, withSender(req.text, t.sender))
         return sent === 'ok' ? { ok: true } : err(sendError(sent))
       }
       case 'chat.read': {
@@ -215,8 +214,7 @@ export class CliServer {
     }
   }
 
-  /** sender = 창이 준 보낸 이 머리(부른 pane 이 받는 pane 과 다를 때만) */
-  private async terminal(pane: string, self: { self?: string }): Promise<{ target: PaneTarget; sender?: string } | { error: CliReply }> {
+  private async terminal(pane: string, self: { self?: string }): Promise<{ target: PaneTarget } | { error: CliReply }> {
     const r = await this.d.askUi({ op: 'pane.resolve', pane, ...self })
     if (!r.ok) return { error: r }
     const target = r.target
@@ -224,9 +222,10 @@ export class CliServer {
     if (target.kind === 'chat') return { error: err(`${target.label} 은 대화 pane 이에요 — chat send · chat read · chat wait 를 써 주세요`, EXIT.usage) }
     if (target.kind === 'review') return { error: err(`${target.label} 은 변경 pane 이에요`, EXIT.usage) }
     if (!(await this.d.pane.ready(target.paneId, SESSION_WAIT_MS))) return { error: err(`${target.label} 의 셸이 뜨지 않았어요`) }
-    return { target, ...(r.sender ? { sender: r.sender } : {}) }
+    return { target }
   }
 
+  /** sender = 창이 준 보낸 이 머리(부른 pane 이 받는 pane 과 다를 때만) */
   private async chatTarget(pane: string, self: { self?: string }): Promise<{ target: PaneTarget; sender?: string } | { error: CliReply }> {
     const r = await this.d.askUi({ op: 'pane.resolve', pane, ...self })
     if (!r.ok) return { error: r }
