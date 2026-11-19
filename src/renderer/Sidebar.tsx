@@ -6,6 +6,7 @@ import type { AppState, Id, Task } from '../shared/types'
 import { ActivityIcon, ACTIVITY_LABEL } from './activity-ui'
 import { countBar, filterTasks, flowSections, lastActive, lastLine, paneCountLabel, shortPath, sidebarSections, timeAgo } from './sidebar-model'
 import type { Branches } from '../shared/git'
+import { MERGE_LABEL, type MergeBadge } from '../shared/worktree-cleanup'
 import { TaskMenu } from './TaskMenu'
 import { chipSummary, SIDEBAR_CHIPS, type PortChip } from '../shared/ports'
 import { SidebarPorts } from './ports-ui'
@@ -67,13 +68,15 @@ interface Props {
   onUsage?(): void
   /** 55단계 연결한 Jira 키 · 마감 — 둘째 줄 칩 (지났으면 빨강 + '마감 지남' 글자) */
   issueOf?(task: Task): { text: string; overdue: boolean; title?: string } | null
+  /** 67단계: 연결 worktree 의 병합 칩(워크트리 패널에서 읽은 때 · 지금 브랜치가 같을 때만) */
+  mergeOf?(task: Task): MergeBadge | null
 }
 
 const DRAG_TYPE = 'application/x-taskminal-task'
 const NO_UNREAD: ReadonlySet<Id> = new Set()
 
 /** 왼쪽 일감 목록 — 묶음별 칸(접을 수 있음), 일감은 두 줄(이름 / 폴더 · 상태) 또는 한 줄(설정). */
-export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, usage, onUsage, issueOf = () => null }: Props) {
+export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activity, loading, onSelect, onNew, onRemove, onEdit, onToggleGroup, onSettings, onSaveTemplate, onMenuClosed, branches, updateChip = null, onUpdateChip = () => {}, portsOf, unread = NO_UNREAD, filterSignal = 0, onView = () => {}, onToggleSection = () => {}, now = Date.now(), onArchive = () => {}, archivedCount = 0, onOpenArchive = () => {}, onWeekly = () => {}, suggestArchive = [], onArchiveMany = () => {}, remoteStateOf = () => null, usage, onUsage, issueOf = () => null, mergeOf }: Props) {
   const sections = sidebarSections(state)
   const flow = state.settings.sidebarView === 'flow'
   const [query, setQuery] = useState('')
@@ -147,6 +150,7 @@ export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activi
     const status = statusOf(task)
     const active = task.id === state.activeTaskId
     const issue = issueOf(task)
+    const merge = mergeOf?.(task) ?? null
     const act = activityOf(task)
     const last = lastOf(task)
     const editing = renaming === task.id && where !== 'attention'
@@ -219,6 +223,7 @@ export function Sidebar({ onOverview, inboxUnread = 0, onWorkTool, state, activi
                     </span>
                   )}
                   {issue && <span className={`task-issue${issue.overdue ? ' overdue' : ''}`} data-testid="task-issue" title={issue.title ?? issue.text}>{issue.text}</span>}
+                  {merge && <span className={`task-merge ${merge.state}`} data-testid="task-merge" title={merge.reason}>{MERGE_LABEL[merge.state]}</span>}
                   <span className="task-where">{task.host ? task.cwd : (branches[task.cwd] ?? shortPath(task.cwd))}</span>
                   {flow ? (
                     groupName(task) && <span className="task-group">{groupName(task)}</span>

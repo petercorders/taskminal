@@ -4328,6 +4328,19 @@ input[type='checkbox'] {
   border-color: var(--failed);
   color: var(--failed);
 }
+/* 67단계: 연결 worktree 의 병합 칩 — 패널에서 읽은 때의 값, 브랜치가 바뀌면 숨김 */
+.task-merge {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 var(--space-1);
+  white-space: nowrap;
+}
+.task-merge.merged {
+  border-color: var(--done);
+}
 .archive-panel,
 .weekly-panel {
   width: min(760px, calc(100vw - 32px));

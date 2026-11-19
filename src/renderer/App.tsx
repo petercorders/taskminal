@@ -60,7 +60,8 @@ import type { ChatImage } from '../shared/chat'
 import { ArchivePanel } from './ArchivePanel'
 import { WeeklyPanel } from './WeeklyPanel'
 import { ARCHIVED_PREFIX } from './Palette'
-import { archiveSuggestions, isArchived, unarchiveTask, visibleTasks, type DeletedTask } from '../shared/archive'
+import { archiveSuggestions, archiveTask, isArchived, unarchiveTask, visibleTasks, type DeletedTask } from '../shared/archive'
+import { mergeBadges, shownBadge, type MergeBadge } from '../shared/worktree-cleanup'
 import { maskActivity, textMasker } from './activity-mask'
 import { adjacentTask, stepStatus, nextAttention, unreadTasks } from './sidebar-model'
 import { reducer } from './store'
@@ -197,6 +198,8 @@ export function App() {
   const [load, setLoad] = useState<LoadStatus>({ phase: 'loading' })
   const [saveError, setSaveError] = useState<string | null>(null)
   const [branches, setBranches] = useState<Branches>({})
+  // 67단계: 워크트리 패널에서 읽은 연결 일감의 병합 상태(메모리만) — 칩은 보기만, 정리는 늘 다시 읽는다
+  const [worktreeMerge, setWorktreeMerge] = useState<Record<string, MergeBadge | null>>({})
   // ⌘F 찾기 막대가 열린 pane (15d) — signal 은 다시 누를 때 입력칸으로 가게
   const [finding, setFinding] = useState<{ paneId: string | null; signal: number; query?: string }>({ paneId: null, signal: 0 })
   // 새 일감 대화상자 — 팔레트에서 열면 이름 · 템플릿을 미리 채운다
@@ -329,6 +332,8 @@ export function App() {
   // 한 번 띄운 셸은 다른 탭 · 일감으로 옮겨도 숨겨 둔 채 유지한다.
   const [seenTabs, setSeenTabs] = useState<ReadonlySet<string>>(() => new Set())
   const loadedRef = useRef<LoadedState['state'] | null>(null)
+  // 67단계: 정리 전에 먼저 보낸 상태 — effect 가 같은 상태를 다시 보내 main 의 revision 을 올려 정리를 막지 않게
+  const sentRef = useRef<AppState | null>(null)
 
   useEffect(() => window.taskminal.state.onError(setSaveError), [])
   useEffect(() => window.taskminal.backup.onError(setBackupError), [])
@@ -361,7 +366,7 @@ export function App() {
   const canSave = load.phase === 'ready' && !load.readOnly
   useEffect(() => {
     // 막 읽은 상태를 그대로 다시 쓰지 않는다 — 바뀐 것이 있을 때만.
-    if (canSave && state !== loadedRef.current) window.taskminal.state.save(state)
+    if (canSave && state !== loadedRef.current && state !== sentRef.current) window.taskminal.state.save(state)
   }, [state, canSave])
 
   const shownTabId = state.tasks.find((t) => t.id === state.activeTaskId)?.activeTabId ?? null
@@ -1204,6 +1209,31 @@ export function App() {
       sub: '탭 · 폴더 · 메모 · 명령 기록은 남아요. 보관함 ⇧⌘E 에서 되살려요.',
       action: { label: '되돌리기', run: () => unarchive(keep) },
     })
+  }
+  /** 67단계: 병합된 worktree 정리와 함께 보관 — 묻지 않는다(명령이 도는 일감은 후보에서 이미 뺐고 확인 대화상자에서 물었다).
+   *  셸을 끄고, main 이 정리 요청보다 먼저 보관 상태를 보도록 상태를 바로 보낸다. 지금 보관 상태인 로컬 일감 id 를 돌려준다 */
+  const archiveForCleanup = (ids: string[]): string[] => {
+    const cur = stateRef.current
+    const local = ids.map((id) => cur.tasks.find((t) => t.id === id)).filter((t): t is Task => !!t && !t.host)
+    // 저장할 수 없으면(읽기 전용) main 이 보관을 못 보므로 보관하지 않는다 — 이미 보관한 것만
+    if (!canSave) return local.filter(isArchived).map((t) => t.id)
+    let next = cur
+    const at = Date.now()
+    for (const t of local) {
+      if (isArchived(t)) continue
+      for (const p of Object.values(t.panes)) {
+        if (p.kind === 'chat') window.taskminal.chat.close(p.id, false)
+        else window.taskminal.pty.kill(p.id)
+      }
+      next = archiveTask(next, t.id, at)
+    }
+    if (next !== cur) {
+      stateRef.current = next
+      dispatch({ type: 'state/replace', state: next })
+      sentRef.current = next
+      window.taskminal.state.save(next)
+    }
+    return local.map((t) => t.id)
   }
   /** 되살리기 — 보관 일감이 아니면(두 번 누름 · 이미 되살림) 건너뛴다. 터미널 pane 은 새 id 로 새 셸 */
   const unarchive = (ids: string[]) => {
@@ -2099,6 +2129,7 @@ export function App() {
         <Sidebar
           inboxUnread={inboxCount}
           issueOf={(t) => jiraSidebarText(issueLinks.find((link) => link.taskId === t.id && link.issue.provider === 'jira'), new Date())}
+          mergeOf={(t) => t.host ? null : shownBadge(worktreeMerge[t.id], branches[t.cwd])}
           onOverview={() => sidebarAction(() => {setOverviewOpen(true);setWorkTool(null)})}
           onWorkTool={value=>sidebarAction(() => pickToolRef.current(value))}
           state={viewState}
@@ -2158,7 +2189,7 @@ export function App() {
             </div>
           </nav>
           {toolMenu&&<PopupMenu label={toolMenu.kind==='task'?'일감 도구':'찾기'} heading={toolMenu.kind==='task'?toolBlocked(WORK_TOOLS[0]!,activeTask)??undefined:undefined} items={toolMenuItems(toolMenu.kind)} x={toolMenu.x} y={toolMenu.y} onClose={picked=>{setToolMenu(null);if(!picked)toolMenuTrigger.current?.focus()}}/>}
-          {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
+          {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} mergeOf={(t) => t.host ? null : shownBadge(worktreeMerge[t.id], branches[t.cwd])} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
           {workTool && workToolShown && <aside ref={workToolPanel} tabIndex={-1} className="work-tool-panel" aria-label="작업 보조 화면" onKeyDown={onWorkToolKey}>
             <header className="work-tools-row"><strong>{commandLabel(toolByKind(workTool.kind)!.command)}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>
@@ -2166,7 +2197,7 @@ export function App() {
               {workTool.kind==='files'&&<WorkspaceFiles key={activeTask.id} root={activeTask.cwd} {...(workTool.file?{openFile:workTool.file}:{})} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='browser'&&<WorkspaceBrowser key={activeTask.id} id={activeTask.id} initialUrl={workTool.url} onAttach={(text,images)=>{askChat(activeTask.id,text,images);setWorkTool(null);refocus()}}/>}
               {workTool.kind==='git'&&<GitWorkflow key={activeTask.id} dir={activeTask.cwd} api={window.taskminal.gitWorkflow} onOpenUrl={url=>window.taskminal.openLink(url)} onSendToChat={text=>{const id=activeTask.id;if(!stateRef.current.tasks.some(task=>task.id===id&&task.archivedAt===undefined))return showToast({text:'일감이 사라졌어요.'});askChat(id,text);setWorkTool(null);refocus()}} onOpenReview={()=>{setWorkTool(null);openReview(activeTask.id,'diff')}}/>}
-              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onPrepare={(path,preview)=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path,...(preview?{preview:true}:{})}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
+              {workTool.kind==='worktree'&&<WorktreePanel key={activeTask.id} root={activeTask.cwd} onArchive={archiveForCleanup} busy={id=>Object.values(stateRef.current.tasks.find(t=>t.id===id)?.panes??{}).some(p=>activityRef.current[p.id]?.busy)} onMerge={view=>setWorktreeMerge(old=>({...old,...mergeBadges(view)}))} onPrepare={(path,preview)=>{const id=activeTask.id;setWorkTool(old=>old?.kind==='worktree'&&old.taskId===id?{taskId:id,kind:'development',target:path,...(preview?{preview:true}:{})}:old)}} onOpen={(path,taskId,signal,expectedCwd)=>{
                 if(signal?.aborted||workToolRef.current!==workTool||stateRef.current.activeTaskId!==activeTask.id)return
                 const current=stateRef.current
                 if(taskId){const existing=current.tasks.find(t=>t.id===taskId&&!t.host&&t.archivedAt===undefined);if(!existing||existing.cwd!==expectedCwd)return showToast({text:'연결된 일감이 바뀌었어요. 다시 열어 주세요.'});dispatch({type:'task/select',id:taskId})}

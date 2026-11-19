@@ -20,6 +20,20 @@ export interface WorktreeRecord {
   unknownAttributes: string[]
 }
 
+/** 67단계: 병합 판정 — merged(기준 브랜치의 조상이고 만든 뒤 커밋이 있었다) · unknown(기준 없음 · 조상 아님(squash 일 수도) · 기록 없음) · fresh(만든 뒤 커밋 없음) */
+export type MergeState = 'merged' | 'unknown' | 'fresh'
+export interface MergeInfo {
+  state: MergeState
+  /** 판정에 쓴 기준 ref(예: refs/remotes/origin/main) — 못 찾았으면 null */
+  base: string | null
+  reason: string
+  /** 병합됨일 때만 — HEAD 커밋 시각(ms) · 제목(200자) */
+  last?: { at: number; subject: string }
+}
+
+/** 39 의 '사용 중' 이유 — 67 정리 후보는 이 이유만 빼고 정리할 수 있는지 본다 */
+export const WORKTREE_USED_REASON = '이 앱의 일감이나 pane이 이 폴더를 사용 중이에요'
+
 export interface ManagedWorktree extends WorktreeRecord, WorktreeSnapshot {
   dirty: boolean
   untracked: boolean
@@ -31,7 +45,14 @@ export interface ManagedWorktree extends WorktreeRecord, WorktreeSnapshot {
   canOpen: boolean
   removable: boolean
   reasons: string[]
-  tasks?: Array<{ id: string; name: string }>
+  /** own: 일감 폴더가 이 worktree 안(아니면 pane 만) · archived: 보관한 일감 (67단계) */
+  tasks?: Array<{ id: string; name: string; own?: boolean; archived?: boolean }>
+  /** 67단계: '사용 중' 만 빼면 정리할 수 있다(변경 · 미추적 · 무시 · 잠금 · 기본 · 중첩 · 상태 미확인이 없다) */
+  cleanable?: boolean
+  /** 67단계: 패널을 연 저장소 뿌리를 담은 worktree */
+  current?: boolean
+  /** 67단계: 기본 · bare · 기준 브랜치 자신이면 null, 조회 시간 제한이면 없음 */
+  merge?: MergeInfo | null
 }
 
 export interface WorktreeView {
@@ -89,12 +110,24 @@ export interface WorktreeRemoveResult {
   message: string
 }
 
+/** 67단계: 병합된 것 정리 — 고른 대상(확인한 사본)과 그 대상을 위해 보관한 연결 일감 */
+export interface WorktreeCleanItem {
+  target: WorktreeSnapshot
+  taskIds: string[]
+}
+export interface WorktreeCleanResult {
+  state: 'removed' | 'unchanged' | 'unknown' | 'skipped'
+  path: string
+  message: string
+}
+
 export interface WorktreeApi {
   list(root: string): Promise<WorktreeView>
   targets(root: string): Promise<WorktreeTargets>
   create(root: string, input: CreateWorktree): Promise<WorktreeCreateResult>
   open(root: string, target: WorktreeSnapshot): Promise<{ path: string; taskId?: string; cwd?: string }>
   remove(root: string, target: WorktreeSnapshot): Promise<WorktreeRemoveResult>
+  clean(root: string, items: WorktreeCleanItem[]): Promise<WorktreeCleanResult[]>
 }
 
 export const isWorktreeOid = (value: unknown): value is string =>

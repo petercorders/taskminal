@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PaneActivity } from '../shared/activity'
 import type { Branches } from '../shared/git'
-import type { AppState, Id } from '../shared/types'
+import type { AppState, Id, Task } from '../shared/types'
+import { MERGE_LABEL, type MergeBadge } from '../shared/worktree-cleanup'
 import { ActivityIcon, activityText } from './activity-ui'
 import { AgentIcon } from './AgentIcon'
 import { inboxRows, overviewSections, overviewTarget } from './overview-model'
@@ -17,6 +18,8 @@ interface Props {
   state: AppState
   activity: Readonly<Record<Id, PaneActivity>>
   branches: Branches
+  /** 67단계: 연결 worktree 의 병합 칩(사이드바와 같은 값) */
+  mergeOf?(task: Task): MergeBadge | null
   unread: ReadonlySet<Id>
   onOpen(taskId: Id, tabId: Id, paneId: Id): void
   onClose(): void
@@ -28,7 +31,7 @@ const KIND_ICON: Record<NotifyKind, ActivityState> = { wait: 'waiting', long: 'd
 const INBOX_SHOWN = 8
 
 /** 전체 보기의 표시 여부는 App이 소유한다. 기존 task-view/터미널은 마운트를 유지한다. */
-export function Overview({ state, activity, branches, unread, onOpen, onClose }: Props) {
+export function Overview({ state, activity, branches, unread, onOpen, onClose, mergeOf }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +116,7 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose }:
             <h3><button type="button" className="link overview-task-open" disabled={!card.target} onClick={() => card.target && open(card.target)} title={card.task.name}>
               {card.task.name}{card.unread && <span className="overview-unread" aria-label="안 읽음"> · 안 읽음</span>}
             </button></h3>
-            <div className="dim small overview-meta" title={card.task.cwd}>{card.group && `${card.group} · `}{shortPath(card.task.cwd)}{card.branch && ` · ${card.branch}`}</div>
+            <div className="dim small overview-meta" title={card.task.cwd}>{card.group && `${card.group} · `}{shortPath(card.task.cwd)}{card.branch && ` · ${card.branch}`}{(() => { const merge = mergeOf?.(card.task); return merge && <span className={`overview-merge ${merge.state}`} title={merge.reason}> · {MERGE_LABEL[merge.state]}</span> })()}</div>
             <p className={`overview-last ${card.line?.tone ?? 'dim'}`}>{card.line?.agent ? <span className="agent-label"><AgentIcon agent={card.line.agent} />{card.line.text}</span> : (card.line?.text ?? '최근 활동이 없습니다.')}</p>
             {card.lastAt !== null && <div className="dim small">최근 활동 {timeAgo(card.lastAt, Date.now())} 전</div>}
             <ul className="overview-panes" aria-label={`${card.task.name} 화면`}>
