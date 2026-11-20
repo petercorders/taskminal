@@ -1,4 +1,6 @@
 import type { ChatAgent } from './chat'
+import type { AgentAccount } from './accounts'
+import { isObj } from './guards'
 import { isAbsolutePath } from './platform'
 export interface WorkflowMessage {id:string;stepId:string;paneId:string;attempt:number;kind:'status'|'question';text:string;answer?:string}
 export const validWorkflowMessages=(v:unknown):v is WorkflowMessage[]=>Array.isArray(v)&&v.length<=500&&new Set(v.map(m=>m?.id)).size===v.length&&v.every(m=>m&&['id','stepId','paneId'].every(k=>typeof m[k]==='string'&&/^[\w-]{1,100}$/.test(m[k]))&&Number.isSafeInteger(m.attempt)&&m.attempt>0&&['status','question'].includes(m.kind)&&typeof m.text==='string'&&m.text.length<=12000&&(m.answer===undefined||typeof m.answer==='string'&&m.answer.length<=12000))
@@ -8,7 +10,17 @@ export type RunStatus='preparing'|'running'|'waiting'|'done'|'failed'|'stopped'|
 export interface RunStep { id:string;paneId:string;status:RunStatus|'pending';attempt:number;result:string;cwd?:string;branch?:string;completedBehindGate?:boolean }
 export interface WorkflowRun {id:string;requestId:string;taskId:string;workflow:Workflow;status:RunStatus;createdAt:number;error?:string;root?:string;baseOid?:string;steps:RunStep[];messages?:WorkflowMessage[]}
 export interface WorkflowView {templates:Workflow[];runs:WorkflowRun[]}
-export interface WorkflowApi {view():Promise<WorkflowView>;save(workflow:Workflow):Promise<void>;remove(id:string):Promise<void>;start(input:{requestId:string;taskId:string;workflowId:string}):Promise<string>;stop(id:string):Promise<void>;retry(id:string):Promise<void>;append(id:string,step:WorkflowStep):Promise<void>;message(id:string,message:WorkflowMessage):Promise<void>;answerMessage(id:string,messageId:string,text:string):Promise<void>}
+export type WorkflowAccountSelection = Partial<Record<ChatAgent, string>>
+export interface WorkflowStart { requestId: string; taskId: string; workflowId: string; expectedAccounts?: WorkflowAccountSelection }
+export const workflowAgents = (workflow: Workflow): ChatAgent[] => [...new Set(workflow.steps.map((step) => step.agent))]
+
+export function workflowAccountSelectionMatches(workflow: Workflow, expected: unknown, accounts: readonly AgentAccount[]): boolean {
+ const agents = workflowAgents(workflow)
+ if (!isObj(expected) || Object.keys(expected).length !== agents.length) return false
+ return agents.every((agent) => typeof expected[agent] === 'string' &&
+  accounts.some((account) => account.selected && account.agent === agent && account.id === expected[agent]))
+}
+export interface WorkflowApi {view():Promise<WorkflowView>;save(workflow:Workflow):Promise<void>;remove(id:string):Promise<void>;start(input:WorkflowStart):Promise<string>;stop(id:string):Promise<void>;retry(id:string):Promise<void>;append(id:string,step:WorkflowStep):Promise<void>;message(id:string,message:WorkflowMessage):Promise<void>;answerMessage(id:string,messageId:string,text:string):Promise<void>}
 const id=(v:unknown):v is string=>typeof v==='string'&&/^[\w-]{1,100}$/.test(v)
 const text=(v:unknown,max:number):v is string=>typeof v==='string'&&v.trim().length>0&&v.length<=max
 export function validWorkflow(v:unknown):v is Workflow {
