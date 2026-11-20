@@ -1,11 +1,13 @@
 # Taskminal 개발 진행 문서
 
 이 문서만 읽고 다음 단계를 이어 갈 수 있게 쓴다. 단계의 범위 · verify 는 `docs/plan.md`, 단계별 상세 계획은 `docs/stages/`.
-마지막 갱신: 2026-11-20 (쌓인 e2e 58 · 59 · 61~70 을 쓰고 돌림 — 새 e2e 64 · 전체 457 통과 · 시험이 찾은 화면 버그 4건 고침, `docs/stages/stacked-e2e-58-70.md`. 그 앞: 70 저장소째 옮겨 오기 — e2e 미실행, 돌려야 할 목록은 `docs/stages/70-import-repo-worktrees.md`. 그 앞: 69 에이전트가 일을 맡기기 — e2e 미실행, `docs/stages/69-agent-delegation.md`. 67 병합된 worktree 정리 · 68 하위 에이전트 진행 보기 — 둘 다 e2e 미실행, 돌려야 할 목록은 `docs/stages/67-merged-worktree-cleanup.md` · `docs/stages/68-subagent-progress.md`. 그 앞: 66 알림 받은편지함 · 61~65 Orca 비교 v5 · 0.2.0 공개 — 태그 `v0.2.0` = `057a736`)
+마지막 갱신: 2026-11-21 (72단계 PR 검증 리포트 생성. 그 앞: 쌓인 e2e 58 · 59 · 61~70 을 쓰고 돌림 — 새 e2e 64 · 전체 457 통과 · 시험이 찾은 화면 버그 4건 고침, `docs/stages/stacked-e2e-58-70.md`. 그 앞: 70 저장소째 옮겨 오기 — e2e 미실행, 돌려야 할 목록은 `docs/stages/70-import-repo-worktrees.md`. 그 앞: 69 에이전트가 일을 맡기기 — e2e 미실행, `docs/stages/69-agent-delegation.md`. 67 병합된 worktree 정리 · 68 하위 에이전트 진행 보기 — 둘 다 e2e 미실행, 돌려야 할 목록은 `docs/stages/67-merged-worktree-cleanup.md` · `docs/stages/68-subagent-progress.md`. 그 앞: 66 알림 받은편지함 · 61~65 Orca 비교 v5 · 0.2.0 공개 — 태그 `v0.2.0` = `057a736`)
 
 2026-11-16 사용자 지시 "main 반영해주고 공개 릴리스는 아직"에 따라 PR #2를 포함한 최신 기능을 main에 통합한다. 기존 표의 'main 미병합'은 각 단계 완료 당시 기록이다. 다음 독립 작업은 최신 `origin/main`에서 작업별 브랜치로 시작한다. 새 공개 릴리스·태그·공증·배포는 계속 보류한다.
 
 2026-11-21 변경: 71단계 PR 검증 근거를 별도 브랜치에서 개발했다. 휴대폰 연동은 보류했다.
+
+72단계에서 로컬 하네스 검사로 PR 검증 리포트를 생성하는 `npm run verify:pr`를 추가했다. [72단계 사용법](stages/72-pr-verification-report.md)
 
 ## 1. 지금 어디까지
 
@@ -65,6 +67,7 @@
 | 70 저장소째 옮겨 오기 | 새 일감(로컬) · 워크트리 패널의 '저장소째 가져오기…' — main 폴더 고르기(고른 폴더만 미리보기 권한) → 39 `list()`(porcelain) 로 worktree 마다 브랜치 · 잠김 · 병합됨(67) · 이미 일감 있음(39 신원 검사를 `taskFolders` 로 빼 39 열기와 같이) · 막힌 이유 · 그 폴더의 최근 claude · codex 세션(53, 가장 깊은 worktree 에 배정 · 에이전트마다 하나) → 고른 것만 누를 때 다시 읽어(사라짐 · 이미 일감은 건너뜀) 한 동작 `task/import` 로 일감 + 저장소 이름 묶음(겹치면 이 저장소 것이면 재사용, 남의 것이면 `(2)`). 세션은 일감 머리 '이 폴더에서 하던 세션' 띠의 이어 하기 후보로만(자동 시작 없음). 수요 근거 약함(v6 5번 판정 보류)을 사용자가 알고 진행. 단위1,704·변이 10/10 + 리뷰 고침 4/4·리뷰 10건(MEDIUM 4 · LOW 6, 9건 고침 · 1건 문서). **e2e 미실행(사용자 지시)** — `docs/stages/70-import-repo-worktrees.md` |
 | 쌓인 e2e (58 · 59 · 61~70) | 사용자 허락(임시 데이터 폴더)으로 58 · 59 · 61~70 의 '돌려야 할 e2e' 를 시험으로 씀 — 새 64개(11 파일 + agent-hooks 1), 기존 '다시 돌리기' 목록은 기존 e2e 전체(394 통과)로. 찾아 고친 것: 65 ⌘P 하위 폴더 파일 안 열림 · 68 하위 에이전트 카드가 머리 배지 클래스와 겹침 · 67 패널 오류 글 IPC 머리 · 70 가져오기 대화상자 좁은/낮은 창. agent-hooks 낡은 기대 정정. 전체 검사 e2e 457 통과 · 변이 9/9 · 리뷰 8건(6 반영 · 2 기록). 안 쓴 것: 67-5(겹침 틈을 붙잡을 장치 없음) · 58a 지연 넣은 묶어 보내기 — `docs/stages/stacked-e2e-58-70.md` |
 | 71 PR 검증 근거 | `feat/pr-verification-evidence`에서 구현. GitHub PR·push의 ‘검증 근거’에서 로컬 보고서의 조건별 결과와 검사 SHA를 현재 PR 커밋과 대조한다. 타입·경계·단위 1,715 통과, 변이 4/4. 사용자 지시 뒤 e2e 건너뜀. [보고서 형식과 검증](stages/71-pr-verification-evidence.md) |
+| 72 PR 검증 리포트 생성 | `feat/pr-verification-report`에서 구현. `npm run verify:pr`로 기존 Electron 하네스의 종료 코드와 검사 전후 SHA를 71단계 JSON 형식으로 생성한다. 타입·경계·단위 1,729 통과, 변이 5/5. E2E 미실행으로 종료 4 확인. [사용법과 검증](stages/72-pr-verification-report.md) |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 
