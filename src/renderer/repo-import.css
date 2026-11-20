@@ -15,6 +15,7 @@
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+  flex-shrink: 0; /* 대화상자(스크롤되는 flex 세로 상자)가 낮으면 목록이 한 줄도 못 담게 눌려 줄이 단추 밑으로 새어 그려졌다 — 대화상자째 스크롤 */
   max-height: 50dvh;
   margin: 0;
   padding: var(--space-2) var(--space-3);
@@ -40,3 +41,6 @@
 .repo-import-session { display: inline-flex; align-items: center; gap: var(--space-1); margin-right: var(--space-2); }
 .repo-import-report ul { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding-left: var(--space-4); font-size: 13px; overflow-wrap: anywhere; }
 .repo-import-skipped { color: var(--muted); }
+/* 좁은 창 · 큰 글자: 단추 넷이 한 줄에 눌려 글자가 세로로 꺾이지 않게 — 넘치면 줄을 넘긴다(e2e 70-5) */
+.repo-import .dialog-actions { flex-wrap: wrap; }
+.repo-import .dialog-actions .button { white-space: nowrap; }

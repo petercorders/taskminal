@@ -135,12 +135,28 @@ test('다른 일감을 보는 동안 턴 실패(StopFailure) → 실패 알림 �
   expect((await sent())[0]!.body).not.toContain('exit')
 })
 
-test('설정을 끄면 새 셸의 claude 를 감싸지 않고 기록 파일 변수도 없다', async () => {
-  await launch({ agentHooks: false })
+// 63단계부터 같은 zsh 함수가 안내(agentGuide, 기본 켬)도 붙인다 — 두 설정을 모두 꺼야 감싸지 않는다.
+test('상태 훅 · 안내 설정을 모두 끄면 새 셸의 claude 를 감싸지 않고 기록 파일 변수도 없다', async () => {
+  await launch({ agentHooks: false, agentGuide: false })
   await term('pane-a').click()
   await waitText('pane-a', /%/)
   await type(`export PATH="${FAKE_BIN}:$PATH"; claude -r abc`)
   await waitText('pane-a', /FAKE ARGS: -r abc/)
+  await type('quit')
+  await waitText('pane-a', /FAKE BYE/)
+  expect(existsSync(join(userData, 'agent-events', 'pane-a.log'))).toBe(false)
+  await type('echo "EV=${TASKMINAL_AGENT_EVENTS-none}"')
+  await waitText('pane-a', /EV=none/)
+})
+
+// 63단계: 두 변수는 따로 온다 — 상태 훅만 끄면 안내만 붙고 --settings · 기록 파일 · 변수는 없다.
+test('상태 훅만 끄면 claude 에 안내만 붙고 --settings · 기록 파일 · 변수는 없다', async () => {
+  await launch({ agentHooks: false })
+  await term('pane-a').click()
+  await waitText('pane-a', /%/)
+  await type(`export PATH="${FAKE_BIN}:$PATH"; claude -r abc`)
+  const [args] = await waitText('pane-a', /FAKE ARGS: --append-system-prompt [\s\S]*?-r abc/)
+  expect(args).not.toContain('--settings')
   await type('quit')
   await waitText('pane-a', /FAKE BYE/)
   expect(existsSync(join(userData, 'agent-events', 'pane-a.log'))).toBe(false)
