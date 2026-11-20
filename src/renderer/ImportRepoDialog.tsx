@@ -12,6 +12,7 @@ import {
   type ImportPreview, type ImportReport, type ImportRow, type RepoImportApi,
 } from '../shared/repo-import'
 import type { AppState, Group, Task } from '../shared/types'
+import { ipcMessage } from './ipc-message'
 import './repo-import.css'
 
 interface Props {
@@ -35,8 +36,8 @@ type Phase =
   | { kind: 'running'; preview: ImportPreview; source: string }
   | { kind: 'done'; preview: ImportPreview; source: string; report: ImportReport }
 
-/** main 이 던진 오류 — Electron 이 붙이는 'Error invoking remote method …: Error: ' 는 걷어 낸다(App · 백업 화면과 같이) */
-const message = (e: unknown) => (e instanceof Error && e.message ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : '저장소를 읽지 못했어요')
+/** main 이 던진 오류 — Electron 이 붙이는 머리는 걷어 낸다(ipcMessage) */
+const message = (e: unknown) => ipcMessage(e, '저장소를 읽지 못했어요')
 
 export function ImportRepoDialog({ root, api = window.taskminal.repoImport, state, newId, onApply, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>(root ? { kind: 'reading', root } : { kind: 'picking' })

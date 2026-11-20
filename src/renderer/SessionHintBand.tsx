@@ -4,6 +4,7 @@ import { AgentIcon } from './AgentIcon'
 import { AGENT_NAME } from '../shared/chat'
 import { sessionAgo, type ResumeHow } from '../shared/agent-sessions'
 import type { SessionHint } from '../shared/types'
+import { ipcMessage } from './ipc-message'
 
 interface Props {
   hints: readonly SessionHint[]
@@ -12,9 +13,6 @@ interface Props {
   /** 이어 한 후보 하나(id) · 닫기(모두) */
   onDrop(id?: string): void
 }
-
-/** main 이 던진 오류 앞에 Electron 이 붙이는 말 — App · 백업 화면과 같이 걷어 낸다 */
-const IPC_PREFIX = /^Error invoking remote method '[^']+': (Error: )?/
 
 export function SessionHintBand({ hints, onResume, onDrop }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
@@ -27,7 +25,7 @@ export function SessionHintBand({ hints, onResume, onDrop }: Props) {
     setError('')
     onResume(hint, how).then(
       (opened) => { setBusy(null); if (opened) onDrop(hint.id); else setError('같은 세션을 다른 곳에서 여는 중이에요 — 끝난 뒤 다시 눌러 주세요.') },
-      (e: unknown) => { setBusy(null); setError(e instanceof Error && e.message ? e.message.replace(IPC_PREFIX, '') : '이어 하지 못했어요. 다시 시도해 주세요.') },
+      (e: unknown) => { setBusy(null); setError(ipcMessage(e, '이어 하지 못했어요. 다시 시도해 주세요.')) },
     )
   }
   return (

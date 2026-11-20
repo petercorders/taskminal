@@ -9,6 +9,7 @@ import {
   type CleanupAction, type CleanupCandidate, type CleanupFlow, type CleanupReportRow,
 } from '../shared/worktree-cleanup'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ipcMessage } from './ipc-message'
 import './worktree-panel.css'
 
 interface Props {
@@ -34,8 +35,8 @@ interface PendingCreate { input: CreateWorktree; state: 'pending' | 'unknown' }
 interface Removal { root: string; target: WorktreeSnapshot; label: string }
 const pendingCreates = new Map<string, PendingCreate>()
 const emptyDraft = (): Draft => ({ branch: '', base: '', path: '' })
-// main 이 던진 오류 — Electron 이 붙이는 'Error invoking remote method …: Error: ' 는 걷어 낸다(App · 백업 · 가져오기 화면과 같이)
-const message = (error: unknown) => error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : '요청 결과를 확인하지 못했어요. 목록을 다시 읽어 주세요.'
+// main 이 던진 오류 — Electron 이 붙이는 머리는 걷어 낸다(ipcMessage)
+const message = (error: unknown) => ipcMessage(error, '요청 결과를 확인하지 못했어요. 목록을 다시 읽어 주세요.', { keepEmpty: true })
 const snapshot = (entry: ManagedWorktree): WorktreeSnapshot => ({ path: entry.path, commonDir: entry.commonDir, head: entry.head, branch: entry.branch })
 const sameInput = (a: Draft, b: Draft) => a.branch === b.branch && a.base === b.base && a.path === b.path
 const day = (at: number) => new Date(at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })

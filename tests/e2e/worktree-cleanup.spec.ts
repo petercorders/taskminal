@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { captureWindow, firstWindow, runCli, seedState, waitLoaded, type SeedTask } from './helpers'
+import { captureWindow, firstWindow, runCli, seedState, visibleTextProblems, waitLoaded, type SeedTask } from './helpers'
 
 // 67단계: 병합된 worktree 를 찾아 정리 — 임시 git 저장소(기준 = 로컬 main, 원격 없음) · 임시 userData 로만.
 // docs/stages/67-merged-worktree-cleanup.md '돌려야 할 e2e' 1~4 · 6~8 (9 는 기존 worktrees · archive e2e).
@@ -268,6 +268,8 @@ for (const theme of ['dark', 'light'] as const) {
       expect(g.cbTop, JSON.stringify(g)).toBeLessThan(g.strongBottom)
       expect(g.cbBottom, JSON.stringify(g)).toBeGreaterThan(g.strongTop)
       expect(g.labelRight, JSON.stringify(g)).toBeLessThanOrEqual(g.viewport + 1)
+      // 상자가 아니라 사용자가 보는 글자 — 줄이 잘리거나 덮이지 않음
+      expect(await visibleTextProblems(items.nth(i))).toEqual([])
     }
     const whole = await win.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
     expect(whole).toBe(true)

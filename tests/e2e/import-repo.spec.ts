@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { captureWindow, firstWindow, runCli, seedState, taskJson, type SeedTask } from './helpers'
+import { captureWindow, firstWindow, runCli, seedState, taskJson, visibleTextProblems, type SeedTask } from './helpers'
 
 // 70단계: 저장소째 가져오기 — 임시 git 저장소 · 가짜 세션 기록(TASKMINAL_AGENT_SESSIONS_HOME) · 가짜 claude/TUI · 임시 userData 로만.
 // 폴더 고르기 대화상자는 main 의 dialog.showOpenDialog 를 시험용으로 바꿔 끼운다.
@@ -309,6 +309,8 @@ for (const theme of ['dark', 'light'] as const) {
         expect(x.sw, JSON.stringify(r)).toBeLessThanOrEqual(x.cw + 1)
       }
     }
+    // 상자가 아니라 사용자가 보는 글자 — 줄이 목록 밖(단추 밑)에 그려지거나 덮이지 않음. PR #24 에서 상자 단정은 이 버그에도 통과했다
+    expect(await visibleTextProblems(list)).toEqual([])
     // 가져오기 단추는 목록이 길어도 닿는다
     await runButton().scrollIntoViewIfNeeded()
     await expect(runButton()).toBeInViewport()
@@ -331,6 +333,7 @@ for (const theme of ['dark', 'light'] as const) {
       expect(b.right, JSON.stringify(b)).toBeLessThanOrEqual(actions.right + 1)
       expect(b.textH, JSON.stringify(b)).toBeLessThan(b.lh * 1.5) // 글자가 두 줄 이상으로 꺾이지 않음
     }
+    expect(await visibleTextProblems(dialog().locator('footer.dialog-actions'))).toEqual([])
     await captureWindow(app!, `${shots}/70-5-import-${theme}.png`)
   })
 }

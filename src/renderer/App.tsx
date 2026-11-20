@@ -90,6 +90,7 @@ import { UpdateBanners, useUpdateView } from './update-ui'
 import { FirstRun } from './FirstRun'
 import { summarizeResume } from '../shared/ptyhost'
 import { terminals } from './terminals'
+import { ipcMessage } from './ipc-message'
 
 type LoadStatus = { phase: 'loading' } | { phase: 'ready'; readOnly: boolean; notice: LoadedState['notice']; recoveredAt?: number | undefined } | { phase: 'failed'; error: string }
 
@@ -1367,7 +1368,7 @@ export function App() {
     try {
       await window.taskminal.backup.mark(mark)
     } catch (e) {
-      const why = e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)
+      const why = ipcMessage(e, String(e), { keepEmpty: true })
       return `지금 모습을 백업하지 못해 바꾸지 않았어요 (${why})`
     }
     // 백업하는 동안 바뀐 것까지 — 지금 상태로 다시 만든다
