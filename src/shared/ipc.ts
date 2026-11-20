@@ -107,6 +107,7 @@ export const IPC = {
   portsKill: 'ports:kill', // invoke(paneId, port, pid) → 'killed' | 'gone' | 'failed' — main 이 다시 조사한 뒤 SIGTERM
   // 21단계 대화
   chatSend: 'chat:send', // invoke(paneId, text, cwd, chat{agent,sessionId?,forkAt?}, images[]) → 'ok' | 'busy' | 'missing'
+  chatHibernation: 'chat:hibernation', // invoke(paneId, sessionId, sleeping)
   chatRewind: 'chat:rewind', // invoke(paneId, index, at, chat) → { events, upTo, forkAt, refill, masked } | null (22단계)
   chatBranch: 'chat:branch', // invoke(fromPaneId, toPaneId, index, at) → { forkAt } | null (22단계)
   chatPickImages: 'chat:pick-images', // invoke() → ChatImage[] — main 의 파일 고르기 (22단계)

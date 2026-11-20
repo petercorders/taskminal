@@ -5021,3 +5021,33 @@ input[type='checkbox'] {
 /* 70단계: 새 일감 대화상자 아래 줄 왼쪽의 '저장소째 가져오기…' */
 .dialog-actions > .dialog-action-start { margin-right: auto; }
 .dialog-actions:has(> .dialog-action-start) { flex-wrap: wrap; }
+
+.chat-continuity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--chat-gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.claude-handoff-dialog {
+  width: min(36rem, calc(100vw - var(--space-6)));
+}
+.claude-handoff-field {
+  display: grid;
+  gap: var(--space-2);
+}
+.claude-handoff-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 6rem;
+  max-height: 55vh;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}

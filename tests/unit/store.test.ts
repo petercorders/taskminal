@@ -231,3 +231,13 @@ describe('pane/cwd (13단계)', () => {
     expect(reducer(s, { type: 'pane/cwd', paneId: 'ghost', cwd: '/tmp' })).toBe(s)
   })
 })
+
+it('인계한 Codex 탭은 같은 일감에 원래 대화의 폴더로 열고 소스 대화를 유지한다', () => {
+  const initial = withTasks('a')
+  const taskId = initial.tasks[0]!.id
+  const source = initial.tasks[0]!
+  const out = reducer(initial, { type: 'chat/add-tab', taskId, tabId: 'new-tab', paneId: 'codex-new', agent: 'codex', cwd: '/tmp/source/subdir' })
+  expect(out.tasks[0]!.panes['codex-new']).toMatchObject({ kind: 'chat', cwd: '/tmp/source/subdir', chat: { agent: 'codex' } })
+  expect(out.tasks[0]!.activeTabId).toBe('new-tab')
+  for (const pane of Object.values(source.panes)) expect(out.tasks[0]!.panes[pane.id]).toBe(pane)
+})

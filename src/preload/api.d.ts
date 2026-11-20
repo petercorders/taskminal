@@ -137,6 +137,7 @@ export interface ChatRefT {
 export interface ChatApi {
   /** 새 턴. 실행 중이면 'busy'(보내지 않음), 실행 파일이 없으면 'missing'. images 는 붙인 그림(메모리에만) */
   send(paneId: string, text: string, cwd: string, chat: ChatRefT, images?: import('../shared/chat').ChatImage[]): Promise<'ok' | 'busy' | 'missing'>
+  setHibernated(paneId: string, sessionId: string, sleeping: boolean): Promise<'ok' | 'busy' | 'unavailable'>
   /** 되감기 (22단계) — 그 메시지 앞까지. 자리가 바뀌었거나 도는 중이면 null */
   rewind(
     paneId: string,
