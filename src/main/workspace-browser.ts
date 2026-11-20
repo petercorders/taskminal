@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, session } from 'electron'
+import { BrowserWindow, WebContentsView, nativeTheme, session } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { redact, type SecretOptions } from '../shared/redact'
 import type { BrowserBounds, BrowserCapture, BrowserState } from '../shared/workspace'
@@ -310,9 +310,20 @@ export class WorkspaceBrowser {
       catch { throw new Error(result.startsWith('{')?'선택한 자료를 확인하지 못했어요.':redact(result,this.secretOptions()).slice(0,200)) }
       return { text: redact(result, this.secretOptions()).slice(0,12000) }
     }
+    const zoom = wc.getZoomFactor(), dark = nativeTheme.shouldUseDarkColors
     const picture = await this.limited(wc.capturePage())
     check()
-    return { text: `웹 화면: ${redact(wc.getURL().replace(/[?#].*$/, ''), this.secretOptions())}`, dataUrl: picture.toDataURL() }
+    const png = picture.toPNG()
+    const address = redact(url.replace(/[?#].*$/, ''), this.secretOptions())
+    return {
+      text: `웹 화면: ${address}`,
+      dataUrl: 'data:image/png;base64,' + png.toString('base64'),
+      conditions: {
+        url: address, viewport: png.length >= 24 ? `${png.readUInt32BE(16)} × ${png.readUInt32BE(20)}` : null,
+        theme: dark === nativeTheme.shouldUseDarkColors ? dark ? 'dark' : 'light' : null,
+        zoom: zoom === wc.getZoomFactor() ? `${Math.round(zoom * 100)}%` : null, head: null,
+      },
+    }
     } finally { entry.capturePending = false; this.cancelPick(entry) }
   }
   private cancelPick(entry: Entry) {

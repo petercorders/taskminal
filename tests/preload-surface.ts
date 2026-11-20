@@ -8,7 +8,7 @@ export const PRELOAD_SURFACE = {
   remote: ['connect','disconnect','workspaces','open','files','read','save','git','terminal','stream','resize','tail','write','stop','chat','send','history','answer','interrupt'],
   development: ['preview','prepare','preparations','cancel','inspect','install','extensions','enable','uninstall'],
   issues: ['list','configure','links','prepare','linkPr','close','repo'],
-  worktrees: ['list','targets','create','open','remove','clean'],
+  worktrees: ['compare','list','targets','create','open','remove','clean'],
   repoImport: ['pick','preview'],
   jira: ['status','save','clear','attach','transitions','transition','comment','writeState','refresh'],
   inbox: ['list','add','read','removeTask','clear'],

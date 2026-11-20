@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { BrowserCapture, BrowserState } from '../shared/workspace'
 import type { BrowserTaskState } from '../shared/browser-tabs'
 import type { ChatImage } from '../shared/chat'
+import { keepCapture, type CaptureForComparison } from '../shared/browser-capture-comparison'
+import { BrowserCaptureComparison } from './BrowserCaptureComparison'
 import './browser-tabs.css'
 interface CapturePreview { tabId:string;navigationEpoch:number;selectionEpoch:number;value:BrowserCapture }
 
@@ -16,6 +18,8 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
   const drafts=useRef(new Map<string,string>()),captureSerial=useRef(0),captureRef=useRef<CapturePreview|null>(null),attachLock=useRef(false),pickLock=useRef(false)
   const [tabs,setTabs]=useState<BrowserTaskState|null>(null),[state,setState]=useState<BrowserState|null>(null),[url,setUrl]=useState('http://localhost:3000')
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[picking,setPicking]=useState(false),[attaching,setAttaching]=useState(false),[capture,setCapture]=useState<CapturePreview|null>(null)
+  const [compareOpen,setCompareOpen]=useState(false)
+  const [comparison,setComparison]=useState<Partial<Record<'before'|'after',CaptureForComparison>>>({})
   const [pendingFocus,setPendingFocus]=useState<{tabId:string;scope:number;owner:number}|null>(null)
   const refresh=useRef<()=>Promise<void>>(async()=>{})
   const apply=(value:BrowserTaskState,s?:BrowserState)=>{
@@ -33,7 +37,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
   useEffect(()=>{
     const scope=++lifecycle.current,isLive=()=>live.current&&lifecycle.current===scope
     live.current=true;ready.current=false;metadata.current=null;reading.current=false;readAgain.current=false
-    setTabs(null);setState(null);setBusy(false);setError('');clearCapture();setAttaching(false);setPendingFocus(null)
+    setTabs(null);setState(null);setBusy(false);setError('');clearCapture();setAttaching(false);setPendingFocus(null);setComparison({});setCompareOpen(false)
     let timer:ReturnType<typeof setTimeout>|undefined
     const read=async()=>{
       if(!ready.current||document.hidden||locked.current)return
@@ -74,7 +78,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
     if(!selected)return
     const layout=()=>{
       const node=box.current,r=node?.getBoundingClientRect(),panel=node?.closest('.work-tool-panel'),parent=panel?.getBoundingClientRect(),header=panel?.querySelector(':scope > header')?.getBoundingClientRect()
-      const hidden=document.hidden||!!document.querySelector('[aria-modal="true"]')||!!capture
+      const hidden=document.hidden||!!document.querySelector('[aria-modal="true"]')||!!capture||compareOpen
       const x=Math.max(0,r?.left??0,parent?.left??0),y=Math.max(0,r?.top??0,parent?.top??0,header?.bottom??0)
       const width=Math.min(innerWidth,r?.right??0,parent?.right??innerWidth)-x,height=Math.min(innerHeight,r?.bottom??0,parent?.bottom??innerHeight)-y
       return api.browserShow(id,!hidden&&width>0&&height>0?{x,y,width,height}:null,selected).catch(()=>{})
@@ -96,7 +100,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
     }
     document.addEventListener('visibilitychange',layout);document.addEventListener('scroll',layout,true);window.addEventListener('resize',resize);layout()
     return()=>{clearInterval(timer);if(resizeFrame!==undefined)cancelAnimationFrame(resizeFrame);observer.disconnect();mutation.disconnect();document.removeEventListener('visibilitychange',layout);document.removeEventListener('scroll',layout,true);window.removeEventListener('resize',resize);void api.browserShow(id,null,selected).catch(()=>{})}
-  },[id,tabs?.selectedTabId,capture])
+  },[id,tabs?.selectedTabId,capture,compareOpen])
   useEffect(()=>{
     if(!pendingFocus||busy)return
     const {tabId,scope,owner}=pendingFocus
@@ -139,7 +143,7 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
   const tabMutation=busy&&lockKind.current==='tab',navigationPending=busy&&lockKind.current==='navigate'
   const shouldStop=navigationPending||!!state?.loading
   const take=async(element:boolean)=>{
-    if(pickLock.current||locked.current||captureRef.current)return
+    if(pickLock.current||locked.current||captureRef.current||compareOpen)return
     const selected=metadata.current?.selectedTabId;if(!selected)return
     const serial=++captureSerial.current,generation=version.current,scope=lifecycle.current
     const current=()=>live.current&&lifecycle.current===scope&&serial===captureSerial.current&&generation===version.current&&metadata.current?.selectedTabId===selected
@@ -160,6 +164,14 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
       const preview={...bound,value};captureRef.current=preview;setCapture(preview)
     }catch(reason){if(current())setError(reason instanceof Error?reason.message:'자료를 가져오지 못했어요.')}
     finally{if(live.current&&lifecycle.current===scope&&serial===captureSerial.current){pickLock.current=false;setPicking(false)}}
+  }
+  const keep=(slot:'before'|'after')=>{
+    const value=captureRef.current?.value
+    if(!value?.conditions||!value.dataUrl)return
+    try{
+      setComparison(keepCapture(comparison,slot,{dataUrl:value.dataUrl,conditions:value.conditions}))
+      setError('');clearCapture()
+    }catch(reason){setError(reason instanceof Error?reason.message:'캡처를 보관하지 못했어요.')}
   }
   const attach=async()=>{
     const preview=captureRef.current
@@ -208,14 +220,19 @@ export function WorkspaceBrowser({ id, initialUrl, onAttach }: { id: string; ini
     <div className="dim small">주소 저장은 기본 꺼짐입니다. 켜도 민감한 주소는 저장하지 않으며, URL의 검색어·# 이후와 폼 입력도 저장하지 않습니다. 다시 열 때 선택한 탭만 불러옵니다.</div>
     <div className="work-tools-row">
       <button className="button" disabled={busy||!state?.url} onClick={()=>action('focus')}>웹 화면으로 이동 · F6로 돌아오기</button>
-      <button className="button" disabled={busy||picking||!!capture||!state?.url} onClick={()=>void take(true)}>요소 선택</button>
-      <button className="button" disabled={busy||picking||!!capture||!state?.url} onClick={()=>void take(false)}>화면 캡처</button>
+      <button className="button" disabled={busy||picking||!!capture||compareOpen||!state?.url} onClick={()=>void take(true)}>요소 선택</button>
+      <button className="button" disabled={busy||picking||!!capture||compareOpen||!state?.url} onClick={()=>void take(false)}>화면 캡처</button>
+      <button type="button" className="button" aria-pressed={compareOpen} disabled={busy||picking||!!capture||!comparison.before||!comparison.after} onClick={()=>setCompareOpen(!compareOpen)}>{compareOpen?'브라우저 돌아가기':`전후 캡처 비교 (${Number(!!comparison.before)+Number(!!comparison.after)}/2)`}</button>
       <button className="button" aria-label="웹 화면 축소" disabled={busy} onClick={()=>action('zoomOut')}>−</button><button className="button" aria-label="웹 화면 확대" disabled={busy} onClick={()=>action('zoomIn')}>+</button>
       <button className="button" disabled={busy||!state?.url} onClick={()=>{if(canAction('external')&&state?.url)void window.taskminal.openLink(state.url)}}>외부 브라우저로 열기</button>
       <button className="button" disabled={busy||!tabs} onClick={()=>void write(()=>api.browserCloseTab(id),true)}>페이지 닫기</button>
     </div>
     {(error||state?.error)&&<p role="alert">{error||state?.error}</p>}
     {picking&&<p role="status">웹 화면에서 요소를 누르세요. Esc로 취소 · 20초 뒤 선택 종료</p>}
-    {capture?<div className="work-capture"><h3>대화에 추가할 자료</h3><pre>{capture.value.text}</pre>{capture.value.dataUrl&&<img className="work-preview-image" src={capture.value.dataUrl} alt="웹 화면 캡처"/>}<button className="button primary" disabled={attaching} onClick={()=>void attach()}>{attaching?'페이지 확인 중…':'대화 입력칸에 추가'}</button><button className="button" onClick={clearCapture}>취소</button></div>:<div ref={box} id={'browser-panel-'+id} role="tabpanel" className="work-browser-surface" aria-label="웹 화면"/>}
+    {capture?<div className="work-capture"><h3>대화에 추가할 자료</h3><pre>{capture.value.text}</pre>{capture.value.dataUrl&&<img className="work-preview-image" src={capture.value.dataUrl} alt="웹 화면 캡처"/>}<button className="button primary" disabled={attaching} onClick={()=>void attach()}>{attaching?'페이지 확인 중…':'대화 입력칸에 추가'}</button>{capture.value.conditions&&capture.value.dataUrl&&<div className="work-tools-row">
+      <button type="button" className="button" onClick={()=>keep('before')}>{comparison.before?'변경 전 캡처 교체':'변경 전으로 보관'}</button>
+      <button type="button" className="button" onClick={()=>keep('after')}>{comparison.after?'변경 후 캡처 교체':'변경 후로 보관'}</button>
+    </div>}<button className="button" onClick={clearCapture}>취소</button></div>
+    :compareOpen&&comparison.before&&comparison.after?<BrowserCaptureComparison before={comparison.before} after={comparison.after} clear={()=>{setComparison({});setCompareOpen(false)}}/>:<div ref={box} id={'browser-panel-'+id} role="tabpanel" className="work-browser-surface" aria-label="웹 화면"/>}
   </section>
 }

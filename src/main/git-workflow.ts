@@ -5,6 +5,8 @@ import { isAbsolute } from 'node:path'
 import { githubRepo, validGitTarget, validRefPart, validWorkflowOptions, type CreatePullRequest, type GitTarget, type GitWorkflowResult, type GitWorkflowView, type MergePullRequest, type PrFeedbackRequest, type PullRequestView, type WorkflowOptions } from '../shared/git-workflow'
 import { FAILED_CHECK_STATES, LOG_CHECKS, failedChecks, logTail, reviewNotes, type FailedCheck, type PrFeedbackResult } from '../shared/ci-feedback'
 
+import { parsePrLinks, type PrDependency } from '../shared/pr-dependencies'
+
 export interface WorkflowOutput { code: number; stdout: string; timedOut: boolean; missing: boolean }
 export type WorkflowRunner = (tool: 'git' | 'gh', args: readonly string[], cwd: string, input?: string) => Promise<WorkflowOutput>
 /** Neither renderer input nor subprocess stderr is ever interpreted as shell source. */
@@ -34,9 +36,9 @@ function within<T, F>(work: Promise<T>, ms: number, fallback: F): Promise<T | F>
 }
 function json(raw: string): unknown { try { return JSON.parse(raw) } catch { return null } }
 function obj(raw: unknown): Record<string, unknown> | null { return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null }
-function parsePr(raw: unknown): PullRequestView | null {
+function parsePr(raw: unknown, allowFork = false): PullRequestView | null {
   const p = obj(raw)
-  if (!p || !Number.isSafeInteger(p.number) || (p.number as number) < 1 || typeof p.headRefOid !== 'string' || typeof p.headRefName !== 'string' || p.isCrossRepository === true || typeof p.baseRefName !== 'string' || typeof p.url !== 'string' || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(p.url)) return null
+  if (!p || !Number.isSafeInteger(p.number) || (p.number as number) < 1 || typeof p.headRefOid !== 'string' || typeof p.headRefName !== 'string' || (!allowFork && p.isCrossRepository === true) || typeof p.baseRefName !== 'string' || typeof p.url !== 'string' || !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(p.url)) return null
   const checks = Array.isArray(p.statusCheckRollup) ? p.statusCheckRollup.map(obj).filter((x): x is Record<string, unknown> => !!x) : []
   const failed = checks.some((c) => FAILED_CHECK_STATES.includes(String(c.conclusion ?? c.state)))
   const pending = checks.some((c) => !['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(String(c.conclusion ?? c.state)))
@@ -114,6 +116,17 @@ export class GitWorkflowService {
     }
     view.target = { root, branch, head, remote, base: base && validRefPart(base) ? base : null, repo, remoteUrl: safeUrl(remoteUrl) }
     return view
+  }
+  async dependencies(dir: string, input: unknown): Promise<PrDependency[]> {
+    const links = parsePrLinks(input)
+    return Promise.all(links.map(async ({ url, number, repository }) => {
+      const unknown: PrDependency = { url, state: 'unknown', checks: 'none', title: '' }
+      const result = await this.run('gh', ['pr', 'view', String(number), '--repo', repository, '--json', fields], dir)
+      const pr = result.code === 0 ? parsePr(json(result.stdout), true) : null
+      if (!pr || pr.url.toLowerCase() !== url.toLowerCase() || pr.number !== number) return unknown
+      const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'OPEN' ? 'open' : pr.state === 'CLOSED' ? 'closed' : 'unknown'
+      return { url, title: pr.title, state, checks: pr.checks }
+    }))
   }
   private async findPr(root: string, repo: string, branch: string, base: string | null): Promise<{ ok: boolean; pr: PullRequestView | null }> {
     const r = await this.run('gh', ['pr', 'list', '--repo', repo, '--head', branch, ...(base ? ['--base', base] : []), '--state', 'open', '--json', fields, '--limit', '2'], root)

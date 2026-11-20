@@ -56,3 +56,16 @@ export async function killPort(shellPid: number, port: number, pid: number): Pro
     return 'gone'
   }
 }
+
+/** 설정에 있는 포트만 읽는다. 포트에 접속하거나 프로세스를 중지하지 않는다. */
+export async function probeConfiguredPorts(ports: readonly number[]): Promise<import('../shared/development-tools').EnvironmentReadiness['ports']> {
+  if (!ports.length) return []
+  if (process.platform === 'win32') return ports.map(port => ({ port, state: 'unknown' }))
+  return new Promise(resolve => execFile(LSOF, [
+    '-nP', '-a', ...ports.map(port => `-iTCP:${port}`), '-sTCP:LISTEN', '-Fpcn',
+  ], { timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, out, stderr) => {
+    const readable = !error || (error.code === 1 && !stderr.trim())
+    const listeners = new Set(parseLsofListen(out, 1).map(row => row.port))
+    resolve(ports.map(port => ({ port, state: listeners.has(port) ? 'listening' : readable ? 'not-observed' : 'unknown' })))
+  }))
+}

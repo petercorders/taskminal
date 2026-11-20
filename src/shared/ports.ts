@@ -55,7 +55,7 @@ export function descendants(tree: ReadonlyMap<number, readonly number[]>, root: 
 }
 
 /** `lsof -nP -iTCP -sTCP:LISTEN -Fpcn` → pid · 이름 · 포트. 같은 pid 의 같은 포트(IPv4 · IPv6)는 한 번, PORT_MIN 미만 제외 */
-export function parseLsofListen(out: string): PortInfo[] {
+export function parseLsofListen(out: string, minimum = PORT_MIN): PortInfo[] {
   const found: PortInfo[] = []
   const seen = new Set<string>()
   let pid = 0
@@ -72,7 +72,7 @@ export function parseLsofListen(out: string): PortInfo[] {
       if (!m) continue
       const port = Number(m[1])
       const key = `${pid}:${port}`
-      if (port < PORT_MIN || port > 65535 || seen.has(key)) continue
+      if (port < minimum || port > 65535 || seen.has(key)) continue
       seen.add(key)
       found.push({ pid, proc, port })
     }

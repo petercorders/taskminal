@@ -9,6 +9,8 @@
 
 72단계에서 로컬 하네스 검사로 PR 검증 리포트를 생성하는 `npm run verify:pr`를 추가했다. [72단계 사용법](stages/72-pr-verification-report.md)
 
+Orca 비교에서 고른 10개 아이디어의 첫 기능을 71~75단계에서 다뤘다. [73단계 받은편지함·계정 사용량](stages/73-action-readiness.md) · [74단계 작업 인계·휴면](stages/74-chat-continuity.md) · [75단계 워크트리·캡처·PR 검토](stages/75-worktree-review-tools.md)
+
 ## 1. 지금 어디까지
 
 | 단계 | 상태 |
@@ -68,6 +70,9 @@
 | 쌓인 e2e (58 · 59 · 61~70) | 사용자 허락(임시 데이터 폴더)으로 58 · 59 · 61~70 의 '돌려야 할 e2e' 를 시험으로 씀 — 새 64개(11 파일 + agent-hooks 1), 기존 '다시 돌리기' 목록은 기존 e2e 전체(394 통과)로. 찾아 고친 것: 65 ⌘P 하위 폴더 파일 안 열림 · 68 하위 에이전트 카드가 머리 배지 클래스와 겹침 · 67 패널 오류 글 IPC 머리 · 70 가져오기 대화상자 좁은/낮은 창. agent-hooks 낡은 기대 정정. 전체 검사 e2e 457 통과 · 변이 9/9 · 리뷰 8건(6 반영 · 2 기록). 안 쓴 것: 67-5(겹침 틈을 붙잡을 장치 없음) · 58a 지연 넣은 묶어 보내기 — `docs/stages/stacked-e2e-58-70.md` |
 | 71 PR 검증 근거 | `feat/pr-verification-evidence`에서 구현. GitHub PR·push의 ‘검증 근거’에서 로컬 보고서의 조건별 결과와 검사 SHA를 현재 PR 커밋과 대조한다. 타입·경계·단위 1,715 통과, 변이 4/4. 사용자 지시 뒤 e2e 건너뜀. [보고서 형식과 검증](stages/71-pr-verification-evidence.md) |
 | 72 PR 검증 리포트 생성 | `feat/pr-verification-report`에서 구현. `npm run verify:pr`로 기존 Electron 하네스의 종료 코드와 검사 전후 SHA를 71단계 JSON 형식으로 생성한다. 타입·경계·단위 1,729 통과, 변이 5/5. E2E 미실행으로 종료 4 확인. [사용법과 검증](stages/72-pr-verification-report.md) |
+| 73 지금 할 일·계정 한도 | 전체 보기의 응답·조사·검토 경로와 워크플로 실행 전 계정 사용량을 추가했다. [검증](stages/73-action-readiness.md) |
+| 74 대화 인계·휴면 | 같은 일감의 Codex 입력으로 Claude 작업 초안을 넘기고 완료된 구조화 대화를 수동 휴면·재개한다. [검증](stages/74-chat-continuity.md) |
+| 75 워크트리·PR 검토 도구 | 두 에이전트 결과와 병합 충돌, 환경 상태, 브라우저 캡처, 여러 저장소 PR 순서를 비교한다. [검증](stages/75-worktree-review-tools.md) |
 | 1차 출시 | [다운로드](https://taskminal.petercoders.com/#downloads) · [Docs](https://taskminal.petercoders.com/docs/) · 실제 환경 미확인은 8절 |
 | (단계 아님) 디자인 맞추기 | `docs/design-gaps.md` — **사용자가 고치는 문서**. 15단계가 끝난 뒤 사용자와 함께 단계로 나눈다. 그 전에는 사용자가 쓴 내용을 고치지 말고, 단계 작업 중 디자인과 다른 점을 새로 찾으면 항목만 더한다 |
 

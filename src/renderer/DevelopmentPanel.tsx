@@ -91,6 +91,11 @@ export function DevelopmentPanel({root,initialTarget,initialPreview,onOpenWorktr
    <strong>{plan.target}</strong>
    <ul>{plan.copies.map(copy=><li key={copy.path}>{copy.path} · {copy.size} bytes · {copy.exists?'기존 파일 보존':'독립 복사'}</li>)}</ul>
    {plan.links.length>0&&<ul aria-label="원본에 연결">{plan.links.map(link=><li key={link.path}>{linkLine(link)}</li>)}</ul>}
+   {plan.readiness && (plan.readiness.paths.length > 0 || plan.readiness.ports.length > 0) && <section aria-label="워크트리 준비 상태">
+    <h3>준비 상태</h3>
+    <ul>{plan.readiness.paths.map(row=><li key={row.path}>{row.path} · {{present:'있음',missing:'필요한 경로가 없음',broken:'끊긴 링크',unknown:'확인 못 함'}[row.state]}</li>)}
+    {plan.readiness.ports.map(row=><li key={row.port}>TCP {row.port} · {{listening:'사용 중', 'not-observed':'수신 프로세스 발견 안 됨',unknown:'확인 못 함'}[row.state]}</li>)}</ul>
+   </section>}
    <p className="development-trust">로컬 명령은 이 컴퓨터의 권한으로 실행됩니다. 저장소와 아래 명령을 신뢰하는 경우에만 확인하세요. {plan.links.length?'연결한 경로는 복사본이 아니라 원본과 함께 쓰여, 워크트리에서 고치거나 지우면 원본도 바뀝니다.':'의존성은 대상 워크트리에서 따로 설치하며 node_modules를 공유하지 않습니다.'}</p>
    {plan.commands.length?plan.commands.map((command,index)=><pre key={index}>{commandLine(command)}</pre>):<p>실행할 초기화 명령 없음</p>}
    <div className="work-tools-row"><button className="button primary" disabled={busy} onClick={()=>prepare({plan,id:crypto.randomUUID()})}>확인하고 환경 준비</button><button className="button" disabled={busy} onClick={()=>setPlan(null)}>미리보기 취소</button></div>
