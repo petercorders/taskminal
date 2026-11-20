@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitWorkflowApi, GitWorkflowResult, GitWorkflowView, MergePullRequest } from '../shared/git-workflow'
 import { CiFeedback } from './CiFeedback'
 import { Modal } from './Modal'
+import { PrVerification } from './PrVerification'
 
 const ghText: Record<GitWorkflowView['gh'], string> = {
   ready: 'GitHub 연결됨',
@@ -24,6 +25,7 @@ interface Props {
 /** 33단계 변경 검토의 원격 작업. 버튼을 누르기 전 본 SHA와 실행 직전 SHA가 같아야 한다. */
 export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }: Props) {
   const [view, setView] = useState<GitWorkflowView | null>(null)
+  const [reportTarget, setReportTarget] = useState<{ repository: string; number: number } | null>(null)
   const [remote, setRemote] = useState('')
   const [base, setBase] = useState('')
   const [baseDraft, setBaseDraft] = useState('')
@@ -58,6 +60,11 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }:
       const v = await api.view(dir, { ...(remote ? { remote } : {}), ...(base ? { base } : {}) })
       if (!mounted.current || id !== seq.current) return
       setView(v)
+      if (v.target?.repo && v.gh === 'ready' && v.pr) {
+        setReportTarget({ repository: v.target.repo, number: v.pr.number })
+      } else if (v.gh !== 'error') {
+        setReportTarget(null)
+      }
       setTitle((old) => old || v.branch || '')
       setBaseDraft((old) => old || v.target?.base || '')
     } catch {
@@ -78,6 +85,7 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }:
     setConfirm(null)
     setView(null)
     setMessage(null)
+    setReportTarget(null)
   }, [dir, remote, base])
   const run = async (action: () => Promise<GitWorkflowResult>) => {
     if (busyRef.current) return
@@ -164,6 +172,14 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }:
               {!pr.mergeable && <div className="dim small">최신 리뷰·체크·충돌을 해결한 뒤 다시 읽어 주세요.</div>}
               <CiFeedback key={`${target.repo}#${pr.number}`} api={api} dir={dir} target={target} pr={pr} {...(onSendToChat ? { onSend: onSendToChat } : {})} {...(onOpenUrl ? { onOpenUrl } : {})} />
             </div>
+          )}
+          {reportTarget && (
+            <PrVerification
+              key={JSON.stringify([dir, remote, base, reportTarget.repository, reportTarget.number])}
+              {...reportTarget}
+              head={disabled || readError ? null : pr?.head ?? null}
+              refreshing={reading || busy}
+            />
           )}
           <h3 className="git-workflow-sub">보내기 설정</h3>
           {view.remotes.length === 0 ? (
