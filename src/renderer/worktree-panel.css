@@ -96,6 +96,6 @@
 .worktree-comparison summary { cursor: pointer; }
 .worktree-comparison-inputs { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block: var(--space-2); }
 .worktree-comparison-inputs label { display: grid; flex: 1 1 12rem; min-width: 0; }
-.worktree-comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-2); }
+.worktree-comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: var(--space-2); }
 .worktree-candidate { min-width: 0; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); }
 .worktree-candidate input { max-width: 100%; }
