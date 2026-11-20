@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { diffStates, groupBackups, mergeState, paneCount, REASON_LABEL, restoreAll, restoreTask, type BackupInfo, type Restored, type StateDiff } from '../../shared/backup'
 import type { BackupMark } from '../../shared/ipc'
 import type { AppState } from '../../shared/types'
+import { ipcMessage } from '../ipc-message'
 
 type RowComp = (p: { title: string; desc?: ReactNode; keywords?: string; control?: ReactNode; children?: ReactNode }) => ReactNode
 
@@ -160,7 +161,7 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
     const no = ++readNo.current
     window.taskminal.backup.read(current.name).then(
       (s) => no === readNo.current && setSnap({ name: current.name, state: s }),
-      (e: unknown) => no === readNo.current && setSnap({ name: current.name, error: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e) }),
+      (e: unknown) => no === readNo.current && setSnap({ name: current.name, error: ipcMessage(e, String(e), { keepEmpty: true }) }),
     )
   }, [current?.name])
 
@@ -225,7 +226,7 @@ export function BackupSection({ state, Row, newId, onRestore }: Props) {
       const r = await window.taskminal.state.importFrom()
       if (r) setImporting(r)
     } catch (e) {
-      setMessage({ ok: false, text: `가져오지 못했어요: ${e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e)}` })
+      setMessage({ ok: false, text: `가져오지 못했어요: ${ipcMessage(e, String(e), { keepEmpty: true })}` })
     }
   }
 
