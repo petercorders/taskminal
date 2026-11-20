@@ -1,9 +1,10 @@
 import type { ChatEvent } from '../shared/chat'
-import { activeRun, validWorkflowMessages, validWorkflow, validWorkflowView, type Workflow, type WorkflowView, type WorkflowRun, type RunStep, type WorkflowStep, type WorkflowMessage } from '../shared/workflows'
+import { activeRun, validWorkflowMessages, validWorkflow, validWorkflowView, type Workflow, type WorkflowView, type WorkflowRun, type RunStep, type WorkflowStep, type WorkflowMessage, type WorkflowStart } from '../shared/workflows'
 interface Journal {load(fallback:WorkflowView):WorkflowView;save(value:WorkflowView):void}
 export interface WorkflowDeps {
  id():string;now():number;validTask(taskId:string):boolean;validPane(taskId:string,paneId:string):boolean
  pin(run:WorkflowRun,step:RunStep,previousPane?:string):void
+ verifyAccounts?(workflow:Workflow,expected:unknown):void
  prepare(run:WorkflowRun,step:RunStep,current?:()=>boolean):Promise<void>
  send(run:WorkflowRun,step:RunStep,text:string):Promise<string>
  close(paneId:string):void
@@ -41,7 +42,7 @@ export class WorkflowRunner {
   this.data.templates=templates;try{this.persist()}catch(e){this.data.templates=old;throw e}
  }
  remove(id:string){this.ready();const old=this.data.templates;this.data.templates=old.filter(w=>w.id!==id);try{this.persist()}catch(e){this.data.templates=old;throw e}}
- start(input:{requestId:string;taskId:string;workflowId:string}):string{
+ start(input:WorkflowStart):string{
   this.ready()
   if(!input||![input.requestId,input.taskId,input.workflowId].every(v=>typeof v==='string'&&/^[\w-]{1,100}$/.test(v)))throw new Error('실행 대상을 확인해 주세요')
   const existing=this.data.runs.find(r=>r.requestId===input.requestId)
@@ -50,6 +51,7 @@ export class WorkflowRunner {
   if(this.data.runs.some(r=>r.taskId===input.taskId&&activeRun(r.status)))throw new Error('이 일감의 앞 실행이 끝난 뒤 시작해 주세요')
   if(this.data.runs.length>=100)throw new Error('실행 이력 100개 한도에 도달했어요')
   const workflow=this.data.templates.find(w=>w.id===input.workflowId);if(!workflow)throw new Error('템플릿이 없어졌어요')
+  if(input.expectedAccounts!==undefined)this.deps.verifyAccounts?.(workflow,input.expectedAccounts)
   const run:WorkflowRun={id:this.deps.id(),requestId:input.requestId,taskId:input.taskId,workflow:structuredClone(workflow),status:'preparing',createdAt:this.deps.now(),steps:workflow.steps.map(s=>({id:s.id,paneId:this.deps.id(),status:'pending',attempt:1,result:''}))}
   for(const step of run.steps)this.deps.pin(run,step)
   this.data.runs.push(run)

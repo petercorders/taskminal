@@ -6,7 +6,7 @@ import type { AppState, Id, Task } from '../shared/types'
 import { MERGE_LABEL, type MergeBadge } from '../shared/worktree-cleanup'
 import { ActivityIcon, activityText } from './activity-ui'
 import { AgentIcon } from './AgentIcon'
-import { inboxRows, overviewSections, overviewTarget } from './overview-model'
+import { activeInboxRows, inboxRows, overviewSections, overviewTarget, type ChatInboxSignal, type InboxAction } from './overview-model'
 import { inboxModel, useInbox } from './inbox'
 import { inboxUnread } from '../shared/inbox'
 import type { NotifyKind } from '../shared/types'
@@ -22,6 +22,8 @@ interface Props {
   mergeOf?(task: Task): MergeBadge | null
   unread: ReadonlySet<Id>
   onOpen(taskId: Id, tabId: Id, paneId: Id): void
+  chatInbox: Readonly<Record<Id, ChatInboxSignal | undefined>>
+  onAction(action: InboxAction): void
   onClose(): void
 }
 
@@ -29,9 +31,10 @@ interface Props {
 const KIND_ICON: Record<NotifyKind, ActivityState> = { wait: 'waiting', long: 'done', fail: 'failed', exit: 'idle' }
 /** 처음에 보이는 지난 알림 수 — 더 있으면 '모두 보기' */
 const INBOX_SHOWN = 8
+const ACTION_LABEL = { answer: '입력·허락 기다림', investigate: '실패 조사', review: '결과 검토' }
 
 /** 전체 보기의 표시 여부는 App이 소유한다. 기존 task-view/터미널은 마운트를 유지한다. */
-export function Overview({ state, activity, branches, unread, onOpen, onClose, mergeOf }: Props) {
+export function Overview({ state, activity, branches, unread, onOpen, onClose, mergeOf, chatInbox, onAction }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [error, setError] = useState<string | null>(null)
@@ -51,6 +54,8 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose, m
   const inbox = useInbox()
   const rows = useMemo(() => inboxRows(state, inbox), [state, inbox])
   const unreadCount = inboxUnread(inbox)
+  const actions = useMemo(() => activeInboxRows(state, activity, chatInbox, branches), [state, activity, chatInbox, branches])
+  const [allActions, setAllActions] = useState(false)
   const [allInbox, setAllInbox] = useState(false)
   const [clearing, setClearing] = useState(false)
   useEffect(() => { input.current?.focus() }, [])
@@ -80,6 +85,20 @@ export function Overview({ state, activity, branches, unread, onOpen, onClose, m
         <span className="dim small" role="status">{total}개 일감</span>
       </div>
       {error && <p role="alert" className="err">{error}</p>}
+      <section className="overview-inbox" aria-labelledby="overview-actions-title">
+        <div className="overview-inbox-head"><h2 id="overview-actions-title">지금 할 일</h2></div>
+        {actions.length === 0 ? <p className="dim small">지금 기다리는 행동이 없어요.</p> : <>
+          <ul className="overview-inbox-list">
+            {(allActions ? actions : actions.slice(0, INBOX_SHOWN)).map((action) => <li key={action.kind === 'review' ? `review:${action.taskId}` : `${action.kind}:${action.target.paneId}`}>
+              <button type="button" className="button overview-inbox-row" onClick={() => onAction(action)}>
+                <span className="overview-inbox-title">{ACTION_LABEL[action.kind]}</span>
+                <span className="overview-inbox-body">{action.taskName}</span>
+              </button>
+            </li>)}
+          </ul>
+          {actions.length > INBOX_SHOWN && <button type="button" className="link" onClick={() => setAllActions((value) => !value)}>{allActions ? '할 일 줄여 보기' : `할 일 모두 보기 (${actions.length})`}</button>}
+        </>}
+      </section>
       <section className="overview-inbox" aria-labelledby="overview-inbox-title" data-testid="overview-inbox">
         <div className="overview-inbox-head">
           <h2 id="overview-inbox-title">지난 알림 {unreadCount > 0 && <span className="dim small">안 읽음 {unreadCount}</span>}</h2>
