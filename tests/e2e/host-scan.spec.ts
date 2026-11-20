@@ -99,6 +99,7 @@ test('다른 데이터 폴더의 지킴이가 줄에 보이고 셸까지 끝내�
   await expect(confirm).toContainText('이 지킴이와 셸 1개가 끝나요')
   await confirm.getByRole('button', { name: '닫기' }).click()
   await expect(confirm).toHaveCount(0)
+  await win.waitForTimeout(1500) // 끝내기는 SIGTERM 뒤 비동기로 끝난다 — 잘못 불렸다면 이 사이에 사라진다
   expect(hostPids(other)).toEqual([otherPid])
 
   // ④ 다시 열어 끝내기 → 그 지킴이가 사라지고 줄도 사라진다

@@ -6,7 +6,9 @@ import { join } from 'node:path'
 import { captureWindow, firstWindow, runCli, seedState, waitLoaded, type SeedTask } from './helpers'
 
 // 67단계: 병합된 worktree 를 찾아 정리 — 임시 git 저장소(기준 = 로컬 main, 원격 없음) · 임시 userData 로만.
-// docs/stages/67-merged-worktree-cleanup.md '돌려야 할 e2e' 1~8 (9 는 기존 worktrees · archive e2e).
+// docs/stages/67-merged-worktree-cleanup.md '돌려야 할 e2e' 1~4 · 6~8 (9 는 기존 worktrees · archive e2e).
+// 5(정리 중 이름 바꾸기 · 되살리기)는 겹치는 틈이 lsof 몇십 ms 뿐이라 시험용 대기 지점 없이는 못 쓴다 — 단계 문서에 남김.
+// 8 의 200px 사이드바는 따로 두지 않고 좁은 창(320 CSS px) · 200% 로만 본다.
 let base: string, repo: string, data: string, wtA: string, wtB: string, wtFresh: string, wtOpen: string
 let app: ElectronApplication | undefined, win: Page
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -113,6 +115,7 @@ test('2: 확인 취소는 git 을 부르지 않고 포커스는 고른 N개 정�
   await confirmDialog().getByRole('button', { name: '취소' }).click()
   await expect(confirmDialog()).toHaveCount(0)
   await expect(preview().getByRole('button', { name: '고른 1개 정리…' })).toBeFocused()
+  await win.waitForTimeout(1000) // renderer 의 invoke 와 main 을 읽는 evaluate 는 다른 길 — 잘못 불렸다면 이 사이에 세어진다
   expect(await cleanCalls()).toBe(0)
   expect(existsSync(wtB)).toBe(true)
   // 미리보기 닫기 → 패널의 '병합된 것 정리…'

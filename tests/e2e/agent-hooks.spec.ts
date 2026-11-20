@@ -155,7 +155,9 @@ test('상태 훅만 끄면 claude 에 안내만 붙고 --settings · 기록 파�
   await term('pane-a').click()
   await waitText('pane-a', /%/)
   await type(`export PATH="${FAKE_BIN}:$PATH"; claude -r abc`)
-  const [args] = await waitText('pane-a', /FAKE ARGS: --append-system-prompt [\s\S]*?-r abc/)
+  // FAKE ARGS 뒤 첫 인자부터 사용자 인자까지 전체 — --settings 가 붙는다면 --append-system-prompt 앞에 온다
+  const [args] = await waitText('pane-a', /FAKE ARGS: [\s\S]*?-r abc/)
+  expect(args).toMatch(/^FAKE ARGS: --append-system-prompt /)
   expect(args).not.toContain('--settings')
   await type('quit')
   await waitText('pane-a', /FAKE BYE/)

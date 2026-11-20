@@ -18,7 +18,7 @@ let bin: string
 let app: ElectronApplication | undefined
 let win: Page
 
-async function launch(settings: Record<string, unknown> = {}) {
+async function launch(settings: Record<string, unknown> = {}, opts: { codexToml?: string } = {}) {
   seedState(
     userData,
     [
@@ -32,6 +32,7 @@ async function launch(settings: Record<string, unknown> = {}) {
   const codexHome = join(userData, 'codex-home')
   mkdirSync(zdot, { recursive: true })
   mkdirSync(codexHome, { recursive: true })
+  if (opts.codexToml !== undefined) writeFileSync(join(codexHome, 'config.toml'), opts.codexToml)
   app = await electron.launch({
     args: ['.'],
     env: {
@@ -184,6 +185,16 @@ test('63 터미널: 기본(켬)이면 codex 는 -c developer_instructions=<안�
   const claude = termArgv('claude')[0]!
   expect(appended(claude)).toBe(agentGuide())
   expect(claude[claude.length - 1]).toBe('첫말')
+})
+
+test('63 터미널: codex 설정에 이미 developer_instructions 가 있으면 codex 에는 안내를 붙이지 않는다(claude 는 붙음)', async () => {
+  await launch({}, { codexToml: 'developer_instructions = "사용자 지침"\n' })
+  await runAgents()
+  const codex = termArgv('codex')[0]!
+  expect(developerArgs(codex)).toEqual([])
+  expect(codex.join(' ')).not.toContain('developer_instructions')
+  const claude = termArgv('claude')[0]!
+  expect(appended(claude)).toBe(agentGuide())
 })
 
 test('63 터미널: 설정을 끄면 새 셸의 codex · claude 에 안내가 없다', async () => {

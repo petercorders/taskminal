@@ -24,7 +24,10 @@
 - 변이 18개 모두 잡음(아이콘 · 데이터 · 탭/사이드바/전체 보기의 에이전트 판정 16 · 고지 파일 검사 2).
 - 코드 리뷰(/code-review medium, 읽기 · 단위만): 9건 — 고침 3(터미널에서 도는 에이전트 탭에 로고가 없음 · 메뉴의 강조색 바탕에서 Claude 주황이 묻힘 · 고지가 asar 안에만 있어 읽을 수 없음), 남김 6(이름 고치는 중 탭 로고가 사라짐 · 대화 둘인 탭에서 포커스가 셸이면 첫 대화의 로고 · 전체 보기 줄의 로고 자리 · 로고+이름 묶음을 공용 컴포넌트로 · 이름 표 중복 · 탭 에이전트 두 번 계산) — 화면을 보지 않고 구조를 바꾸지 않는다.
 
-## 돌려야 할 e2e (돌리지 않음)
+## 돌려야 할 e2e — 2026-11-20 쓰고 돌림
+
+> 결과 · 항목별 시험 · 찾은 버그 · 안 쓴 항목은 `docs/stages/stacked-e2e-58-70.md`. 아래는 당시 목록 그대로.
+
 글자는 그대로라 통과할 것으로 보지만 구조가 바뀐 곳: `ux-polish.spec:58,61` · `chat-codex.spec:61`(배지 `toHaveText('Codex')` 정확 비교) · `chat-entry.spec:48-61` · `chat-first.spec:55,109,122,125` · `agent-hooks.spec:68-110` · `remote-workspace.spec:105,114,121` · `responsive.spec:48-60`(대화 머리 가로 넘침) · `agent-sessions.spec:108,130-160,252` · `conversation-search.spec:45` · `overview.spec:51-85` · `usage.spec:92-95` · `readability.spec`.
 
 ## 계획과 다르게 한 것

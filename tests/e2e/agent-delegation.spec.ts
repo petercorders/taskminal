@@ -275,6 +275,8 @@ for (const how of ['archive', 'remove'] as const) {
     await launch()
     const made = await delegate('X 맡김', 'b')
     if (how === 'remove') {
+      // 지운 부모는 pane 이 없어 받은편지함이 알림을 받아도 버린다 — 이 경우는 '쏟아지거나 오류가 나지 않음' 만 본다.
+      // parentNotice 의 지운 부모 가드 자체는 단위 시험(delegation-model.test '부모가 지워졌거나 …')이 본다.
       expect((await cliAs(null, base, 'task', 'remove', 'P 부모', '--force')).code).toBe(0)
     } else {
       await row('P 부모').click()

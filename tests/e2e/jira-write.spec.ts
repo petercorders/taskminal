@@ -192,6 +192,23 @@ test('전환 응답이 끊김 → 됐는지 모름(상태 줄 그대로 · 새 �
   await expect(changeButton()).toBeEnabled()
 })
 
+test('댓글이 실제로는 남았는데 응답만 끊김 → 다시 확인은 다시 보내지 않고 남겼어요(중복 댓글 없음)', async () => {
+  fake.drop.comment = 'apply'
+  await commentButton().click()
+  const text = () => win.getByRole('textbox', { name: 'PROJ-7 에 남길 댓글' })
+  await text().fill('한 번만 남을 댓글')
+  await win.getByRole('button', { name: '댓글 남기기…' }).click()
+  await confirmDialog().getByRole('button', { name: '댓글 남기기', exact: true }).click()
+  await expect(result()).toContainText('됐는지 모름')
+  expect(fake.comments).toHaveLength(1)
+
+  fake.drop.comment = 'no'
+  await head().getByRole('button', { name: '다시 확인' }).click()
+  await expect(result()).toHaveText('댓글을 남겼어요')
+  expect(posts('comment')).toHaveLength(1) // 이미 남은 것을 찾았으므로 다시 보내지 않았다
+  expect(fake.comments).toHaveLength(1)
+})
+
 test('댓글 응답이 끊기고 실제로도 안 남음 → 다시 확인이 한 번 더 보내 남긴다 · 다음 끊김은 결과 지우기로 넘기면 새 쓰기가 풀린다', async () => {
   fake.drop.comment = 'skip'
   await commentButton().click()
