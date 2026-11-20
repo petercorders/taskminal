@@ -4,12 +4,13 @@ import { join,isAbsolute,dirname } from 'node:path'
 import { execFile,spawn,type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { AtomicJournal } from './atomic-journal'
+import { probeConfiguredPorts } from './port-probe'
 import { redact } from '../shared/redact'
-import type { EnvironmentPlan,Preparation,ExtensionManifest,ExtensionPreview,InstalledExtension } from '../shared/development-tools'
+import type { EnvironmentReadiness,EnvironmentPlan,Preparation,ExtensionManifest,ExtensionPreview,InstalledExtension } from '../shared/development-tools'
 const hash=(v:string|Buffer)=>createHash('sha256').update(v).digest('hex')
 const key=(v:unknown):v is string=>typeof v==='string'&&/^[\w-]{1,100}$/.test(v)
 const string=(v:unknown,max:number):v is string=>typeof v==='string'&&v.length<=max&&!v.includes('\0')
-interface Config {copies:string[];links?:string[];commands:Array<{file:string;args:string[]}>}
+interface Config {copies:string[];links?:string[];requiredPaths?:string[];ports?:number[];commands:Array<{file:string;args:string[]}>}
 interface Journal {preparations:Preparation[];extensions:Array<InstalledExtension&{root:string}>}
 /** Reject symlinks at every component, including an existing destination. leaf=false leaves the last component unchecked: a link destination may already be a link. */
 async function path(root:string,relative:string,missing=false,leaf=true){
@@ -26,7 +27,7 @@ async function read(root:string,relative:string,max=65536){
  try{const s=await fd.stat();if(!s.isFile()||s.size>max)throw Error('파일 형식 또는 크기 한도');const data=Buffer.alloc(max+1),n=(await fd.read(data,0,data.length,0)).bytesRead;const now=await lstat(await path(root,relative));if(n>max||s.dev!==now.dev||s.ino!==now.ino)throw Error('읽는 동안 파일이 바뀌었어요');return data.subarray(0,n)}finally{await fd.close()}
 }
 function git(root:string,args:string[]){return new Promise<{code:number;out:string}>((done)=>execFile('git',args,{cwd:root,encoding:'utf8',timeout:15000,maxBuffer:2_000_000,env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('GIT_')))},(e,out)=>done({code:e?1:0,out:out??''})))}
-function config(v:unknown):v is Config {if(!v||typeof v!=='object')return false;const c=v as Config;return Object.keys(c).every(k=>['copies','links','commands'].includes(k))&&Array.isArray(c.copies)&&c.copies.length<=30&&new Set(c.copies).size===c.copies.length&&c.copies.every(p=>string(p,4096))&&(c.links===undefined||Array.isArray(c.links)&&c.links.length<=10&&new Set(c.links).size===c.links.length&&c.links.every(p=>string(p,4096)))&&Array.isArray(c.commands)&&c.commands.length<=10&&c.commands.every(c=>c&&string(c.file,4096)&&!!c.file&&Array.isArray(c.args)&&c.args.length<=50&&c.args.every(a=>string(a,4096)))}
+function config(v:unknown):v is Config {if(!v||typeof v!=='object')return false;const c=v as Config;return Object.keys(c).every(k=>['copies','links','commands','requiredPaths','ports'].includes(k))&&Array.isArray(c.copies)&&c.copies.length<=30&&new Set(c.copies).size===c.copies.length&&c.copies.every(p=>string(p,4096))&&(c.links===undefined||Array.isArray(c.links)&&c.links.length<=10&&new Set(c.links).size===c.links.length&&c.links.every(p=>string(p,4096)))&&(c.requiredPaths===undefined||Array.isArray(c.requiredPaths)&&c.requiredPaths.length<=30&&new Set(c.requiredPaths).size===c.requiredPaths.length&&c.requiredPaths.every(p=>string(p,4096)))&&(c.ports===undefined||Array.isArray(c.ports)&&c.ports.length<=16&&new Set(c.ports).size===c.ports.length&&c.ports.every(p=>Number.isInteger(p)&&p>0&&p<=65535))&&Array.isArray(c.commands)&&c.commands.length<=10&&c.commands.every(c=>c&&string(c.file,4096)&&!!c.file&&Array.isArray(c.args)&&c.args.length<=50&&c.args.every(a=>string(a,4096)))}
 function manifest(v:unknown):v is ExtensionManifest{
  if(!v||typeof v!=='object')return false;const m=v as ExtensionManifest
  return Object.keys(m).every(k=>['id','name','version','panels','commands'].includes(k))&&key(m.id)&&string(m.name,100)&&!!m.name&&string(m.version,100)&&!!m.version&&Array.isArray(m.panels)&&m.panels.length<=10&&Array.isArray(m.commands)&&m.commands.length<=20&&new Set([...m.panels,...m.commands].map(x=>x.id)).size===m.panels.length+m.commands.length&&m.panels.every(p=>p&&Object.keys(p).every(k=>['id','title','body'].includes(k))&&key(p.id)&&string(p.title,100)&&string(p.body,20000))&&m.commands.every(c=>{if(!c||!Object.keys(c).every(k=>['id','title','url'].includes(k))||!key(c.id)||!string(c.title,100)||!string(c.url,4096))return false;try{const u=new URL(c.url);return u.protocol==='https:'&&!u.username&&!u.password}catch{return false}})
@@ -41,7 +42,23 @@ export class DevelopmentTools {
  private busyTargets=new Set<string>()
  constructor(dir:string,private readonly authorized:(root:string)=>boolean=()=>true,private readonly mask:(text:string)=>string=redact){this.journal=new AtomicJournal(join(dir,'tools.json'),valid);this.data=this.journal.load({preparations:[],extensions:[]});for(const p of this.data.preparations)if(p.state==='running'){p.state='unknown';p.log=this.mask(p.log+'\n앱이 종료됐어요. 만들어진 파일과 실행 결과를 확인하고 새 요청으로 준비하세요.').slice(-20000)}this.persist()}
  private persist(){this.journal.save(this.data)}
- async preview(source:string,destination:string):Promise<EnvironmentPlan>{return (await this.snapshot(source,destination)).plan}
+ async preview(source:string,destination:string):Promise<EnvironmentPlan>{
+  const {plan,config}=await this.snapshot(source,destination)
+  const paths=await Promise.all((config.requiredPaths??[]).map(async (relative):Promise<EnvironmentReadiness['paths'][number]>=>{
+   const file=await path(plan.target,relative,true,false)
+   let state:EnvironmentReadiness['paths'][number]['state']
+   try{
+    const info=await lstat(file)
+    if(info.isSymbolicLink()){
+     try{await realpath(file);state='present'}
+     catch(error){state=(error as NodeJS.ErrnoException).code==='ENOENT'?'broken':'unknown'}
+    }else state='present'
+   }catch(error){state=(error as NodeJS.ErrnoException).code==='ENOENT'?'missing':'unknown'}
+   return {path:relative,state}
+  }))
+  const ports=await probeConfiguredPorts(config.ports??[])
+  return {...plan,readiness:{paths,ports}}
+ }
  private async snapshot(source:string,destination:string){
   const root=await realpath(source),target=await realpath(destination)
   const trees=await git(root,['worktree','list','--porcelain']);if(trees.code||!trees.out.split('\n').includes('worktree '+target)||root===target)throw Error('같은 저장소의 별도 worktree를 골라 주세요')
@@ -61,11 +78,17 @@ export class DevelopmentTools {
    let source='';try{source=await path(root,relative);const s=await lstat(source);if(!s.isDirectory()&&!s.isFile())throw Error('폴더나 일반 파일만 연결할 수 있어요')}catch(e){throw (e as NodeJS.ErrnoException).code==='ENOENT'?Error('연결할 원본이 없어요: '+relative):e}
    const ignored=await git(root,['check-ignore','-q','--',relative]),tracked=await git(target,['ls-files','--error-unmatch','--',relative])
    if(ignored.code!==0||tracked.code===0)throw Error('gitignored이며 추적하지 않는 폴더·파일만 연결할 수 있어요')
-   const dest=await path(target,relative,true,false);let state:'linked'|'kept'|undefined
+   const dest=await path(target,relative,true,false);let state:EnvironmentPlan['links'][number]['state']
    // An existing destination is never touched; only a link that resolves to this source counts as linked.
-   try{state=(await lstat(dest)).isSymbolicLink()&&await realpath(dest).catch(()=>'')===source?'linked':'kept'}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e}
+   try{
+    state='kept'
+    if((await lstat(dest)).isSymbolicLink()){
+     try{if(await realpath(dest)===source)state='linked'}
+     catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')state='broken'}
+    }
+   }catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;state=undefined}
    // 대상 워크트리에서 Git 이 이 경로를 무시하지 않으면(.gitignore 의 `이름/` 은 폴더만 — 링크는 폴더가 아니다) 링크가 `git add -A` 에 섞인다 → 미리보기에 알린다
-   const unignored=state!=='kept'&&(await git(target,['check-ignore','-q','--',relative])).code!==0
+   const unignored=(state===undefined||state==='linked')&&(await git(target,['check-ignore','-q','--',relative])).code!==0
    links.push({path:relative,exists:!!state,...(state?{state}:{}),...(unignored?{unignored:true}:{})})
   }
   const signature=hash(JSON.stringify([root,target,raw.toString('utf8'),signatures,copies,links]))
@@ -78,7 +101,7 @@ export class DevelopmentTools {
   const prior=this.data.preparations.find(p=>p.id===id)
   if(prior){if(prior.root!==plan.root||prior.target!==plan.target||prior.signature!==plan.signature)throw Error('다른 준비에 사용한 번호예요');return this.jobs.get(id)??structuredClone(prior)}
   if(!this.authorized(plan.root))throw Error('일감이 닫혔어요')
-  const latest=await this.preview(root,plan.target);if(latest.signature!==plan.signature)throw Error('준비할 설정이나 파일이 바뀌었어요. 다시 미리 보세요')
+  const {plan:latest}=await this.snapshot(root,plan.target);if(latest.signature!==plan.signature)throw Error('준비할 설정이나 파일이 바뀌었어요. 다시 미리 보세요')
   const duplicate=this.data.preparations.find(p=>p.id===id);if(duplicate){if(duplicate.signature!==plan.signature||duplicate.root!==plan.root||duplicate.target!==plan.target)throw Error('다른 준비에 사용한 번호예요');return this.jobs.get(id)??structuredClone(duplicate)}
   if(this.busyTargets.has(plan.target)||this.data.preparations.length>=100)throw Error('앞 준비가 끝난 뒤 다시 진행해 주세요')
   this.busyTargets.add(plan.target)

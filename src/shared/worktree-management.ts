@@ -122,6 +122,7 @@ export interface WorktreeCleanResult {
 }
 
 export interface WorktreeApi {
+  compare(root: string, input: import("./worktree-comparison").WorktreeComparisonRequest): Promise<import("./worktree-comparison").WorktreeComparison>
   list(root: string): Promise<WorktreeView>
   targets(root: string): Promise<WorktreeTargets>
   create(root: string, input: CreateWorktree): Promise<WorktreeCreateResult>

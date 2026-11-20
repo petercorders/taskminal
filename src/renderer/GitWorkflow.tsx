@@ -3,6 +3,7 @@ import type { GitWorkflowApi, GitWorkflowResult, GitWorkflowView, MergePullReque
 import { CiFeedback } from './CiFeedback'
 import { Modal } from './Modal'
 import { PrVerification } from './PrVerification'
+import { PrDependencies } from './PrDependencies'
 
 const ghText: Record<GitWorkflowView['gh'], string> = {
   ready: 'GitHub 연결됨',
@@ -13,6 +14,7 @@ const ghText: Record<GitWorkflowView['gh'], string> = {
 }
 const checksText = { passed: '체크 통과', pending: '체크 진행 중', failed: '체크 실패', none: '등록된 체크 없음' }
 interface Props {
+  taskId: string
   dir: string
   api: GitWorkflowApi
   onOpenUrl?(url: string): void
@@ -23,7 +25,7 @@ interface Props {
 }
 
 /** 33단계 변경 검토의 원격 작업. 버튼을 누르기 전 본 SHA와 실행 직전 SHA가 같아야 한다. */
-export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }: Props) {
+export function GitWorkflow({ taskId, dir, api, onOpenUrl, onSendToChat, onOpenReview }: Props) {
   const [view, setView] = useState<GitWorkflowView | null>(null)
   const [reportTarget, setReportTarget] = useState<{ repository: string; number: number } | null>(null)
   const [remote, setRemote] = useState('')
@@ -256,6 +258,7 @@ export function GitWorkflow({ dir, api, onOpenUrl, onSendToChat, onOpenReview }:
           )}
         </>
       )}
+      <PrDependencies key={taskId} taskId={taskId} dir={dir} load={api.dependencies} onOpenUrl={onOpenUrl} />
       {busy && <div role="status">GitHub 작업 중… 화면을 닫아도 이미 시작한 작업은 끝날 수 있어요.</div>}
       {message && (
         <div role={message.state === 'ok' ? 'status' : 'alert'}>

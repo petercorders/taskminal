@@ -9,3 +9,8 @@
 .work-tool-panel > .work-browser { flex:0 0 auto; }
 .work-browser > .work-browser-surface { flex:none; min-height:160px; height:clamp(160px,40vh,600px); }
 .browser-remember > input { padding:0; flex:none; }
+
+.capture-comparison { overflow: auto; overflow-wrap: anywhere; }
+.capture-comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-3); }
+.capture-comparison-grid figure { min-width: 0; margin: 0; }
+.capture-comparison-grid img { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); }

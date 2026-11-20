@@ -45,7 +45,7 @@ const api: TaskminalApi = {
     interrupt: (id,w,chat) => ipcRenderer.invoke(IPC.remoteRequest,'interrupt',[id,w,chat]),
   },
   issues: { list: (provider, source, cursor) => ipcRenderer.invoke(IPC.issuesList, provider, source, cursor), configure: token => ipcRenderer.invoke(IPC.issuesConfigure, token), links: () => ipcRenderer.invoke(IPC.issuesLinks), prepare: input => ipcRenderer.invoke(IPC.issuesPrepare, input), linkPr: (taskId, url) => ipcRenderer.invoke(IPC.issuesLinkPr, taskId, url), close: taskId => ipcRenderer.invoke(IPC.issuesClose, taskId), repo: root => ipcRenderer.invoke(IPC.issuesRepo, root) },
-  worktrees: {list:root=>ipcRenderer.invoke(IPC.worktreesList,root),targets:root=>ipcRenderer.invoke(IPC.worktreesTargets,root),create:(root,input)=>ipcRenderer.invoke(IPC.worktreesCreate,root,input),open:(root,target)=>ipcRenderer.invoke(IPC.worktreesOpen,root,target),remove:(root,target)=>ipcRenderer.invoke(IPC.worktreesRemove,root,target),clean:(root,items)=>ipcRenderer.invoke(IPC.worktreesClean,root,items)},
+  worktrees: {compare:(root,input)=>ipcRenderer.invoke(IPC.worktreesCompare,root,input),list:root=>ipcRenderer.invoke(IPC.worktreesList,root),targets:root=>ipcRenderer.invoke(IPC.worktreesTargets,root),create:(root,input)=>ipcRenderer.invoke(IPC.worktreesCreate,root,input),open:(root,target)=>ipcRenderer.invoke(IPC.worktreesOpen,root,target),remove:(root,target)=>ipcRenderer.invoke(IPC.worktreesRemove,root,target),clean:(root,items)=>ipcRenderer.invoke(IPC.worktreesClean,root,items)},
   // 70단계: 저장소째 가져오기 — 고르기는 main 대화상자, 미리보기는 읽기만
   repoImport: {pick:()=>ipcRenderer.invoke(IPC.worktreesImportPick),preview:root=>ipcRenderer.invoke(IPC.worktreesImportPreview,root)},
   schedules: {view:()=>ipcRenderer.invoke(IPC.schedulesView),save:value=>ipcRenderer.invoke(IPC.schedulesSave,value),remove:id=>ipcRenderer.invoke(IPC.schedulesRemove,id),runNow:(id,request)=>ipcRenderer.invoke(IPC.schedulesRunNow,id,request)},
@@ -82,6 +82,7 @@ const api: TaskminalApi = {
     browserCapture: (id, element,tabId) => ipcRenderer.invoke(IPC.browserCapture, id, element,tabId),
   },
   gitWorkflow: {
+    dependencies: (dir, links) => ipcRenderer.invoke(IPC.gitWorkflowDependencies, dir, links),
     view: (dir, options) => ipcRenderer.invoke(IPC.gitWorkflowView, dir, options),
     push: (dir, target) => ipcRenderer.invoke(IPC.gitWorkflowPush, dir, target),
     create: (dir, input) => ipcRenderer.invoke(IPC.gitWorkflowCreate, dir, input),

@@ -9,6 +9,7 @@ import {
   type CleanupAction, type CleanupCandidate, type CleanupFlow, type CleanupReportRow,
 } from '../shared/worktree-cleanup'
 import { ConfirmDialog } from './ConfirmDialog'
+import { WorktreeComparisonPanel } from './WorktreeComparisonPanel'
 import { ipcMessage } from './ipc-message'
 import './worktree-panel.css'
 
@@ -236,6 +237,7 @@ export function WorktreePanel({ root, onOpen, onPrepare, onArchive = () => [], b
       <button ref={cleanTrigger} type="button" className="button" disabled={disabled || !view || flow.kind !== 'idle'} aria-expanded={flow.kind !== 'idle'} onClick={() => { setReport(null); step({ type: 'open' }) }}>병합된 것 정리…{preview?.candidates.length ? ` (${preview.candidates.length})` : ''}</button>
       {onImportRepo && <button type="button" className="button" disabled={!!busy} onClick={onImportRepo}>이 저장소째 가져오기…</button>}
     </div>
+    {view && <WorktreeComparisonPanel key={root} root={root} entries={view.entries} compare={api.compare} open={open} busy={disabled} />}
     {readError && <div role="alert" className="worktree-error">{readError} <button type="button" className="button" disabled={!!busy} onClick={() => { setLoading(true); void refresh.current() }}>다시 읽기</button></div>}
     {error && <div role="alert" className="worktree-error">{error}</div>}
     <div role="status" className="worktree-meta">{busy === 'create' ? '워크트리 만드는 중… 패널을 닫아도 생성은 끝날 수 있어요.' : busy === 'clean' ? '고른 워크트리를 하나씩 다시 확인하고 정리하는 중… 패널을 닫아도 정리는 끝까지 진행돼요.' : busy === 'remove' ? '정리 결과를 확인하는 중…' : busy === 'open' ? '워크트리를 확인하는 중…' : loading ? '목록을 읽는 중…' : notice}</div>

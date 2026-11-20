@@ -9,6 +9,7 @@ import { validWorktreeJournal, type WorktreeJournalState } from '../shared/workt
 import { usedTaskPaths } from '../shared/worktree-cleanup'
 import { AtomicJournal } from './atomic-journal'
 import { WorktreeManagement } from './worktree-management'
+import { compareWorktrees } from './worktree-comparison'
 import { configured } from './development-tools'
 import { buildImportPreview, ImportRoots, taskFolders } from './repo-import'
 import type { AgentSessionList } from '../shared/agent-sessions'
@@ -35,6 +36,7 @@ export function installWorktreeIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
   })
   // 62단계: 만든 것이 확인됐고 그 일감 폴더에 환경 설정이 있으면 답에 실어, 패널이 환경 준비 미리보기로 잇는다
   ipcMain.handle(IPC.worktreesCreate,async(event,dir,input)=>{const authorized=root(event,dir),result=await service.create(authorized,input);return result.state==='created'&&await configured(authorized)?{...result,environment:true}:result})
+  ipcMain.handle(IPC.worktreesCompare,(event,dir,input)=>compareWorktrees(root(event,dir),input))
   ipcMain.handle(IPC.worktreesTargets,(event,dir)=>service.targets(root(event,dir)))
   ipcMain.handle(IPC.worktreesOpen,async(event,dir,target)=>{
     const result=await service.open(root(event,dir),target)

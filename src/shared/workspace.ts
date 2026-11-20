@@ -29,6 +29,7 @@ export interface BrowserBounds {
   height: number
 }
 export interface BrowserCapture {
+  conditions?: import("./browser-capture-comparison").CaptureConditions
   text: string
   dataUrl?: string
 }

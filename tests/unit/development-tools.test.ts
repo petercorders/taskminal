@@ -200,3 +200,19 @@ test('a copy inside a linked folder is refused before anything is made',async()=
  const f=linked({copies:['shared/value.txt'],links:['shared'],commands:[]});await expect(f.service.preview(f.root,f.target)).rejects.toThrow('겹쳐요')
  f.configure({copies:['.env'],links:['shared'],commands:[]});expect((await f.service.preview(f.root,f.target)).links).toHaveLength(1)
 })
+
+test('preview distinguishes missing paths and a broken existing worktree link',async()=>{
+ const f=linked({copies:[],links:['shared'],requiredPaths:['.gitignore','local.env','shared'],commands:[]})
+ symlinkSync(join(dir,'gone'),join(f.target,'shared'))
+ const plan=await f.service.preview(f.root,f.target)
+ expect(plan.links).toEqual([{path:'shared',exists:true,state:'broken'}])
+ expect(plan.readiness?.paths).toEqual([
+  {path:'.gitignore',state:'present'},{path:'local.env',state:'missing'},{path:'shared',state:'broken'},
+ ])
+ expect(readlinkSync(join(f.target,'shared'))).toBe(join(dir,'gone'))
+})
+
+test('rejects a required path outside the selected worktree',async()=>{
+ const f=linked({copies:[],requiredPaths:['../outside'],commands:[]})
+ await expect(f.service.preview(f.root,f.target)).rejects.toThrow('상대 경로')
+})

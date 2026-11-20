@@ -20,6 +20,8 @@ import { resumeCommand, type AgentSessionOpen } from '../shared/agent-sessions'
 import { openTextEditor } from './text-editor'
 import { WorkspaceEditor } from './workspace-editor'
 import { WorkspaceSearch } from './workspace-search'
+import { makeWorktreeGit } from './worktree-management'
+import { isWorktreeOid } from '../shared/worktree-management'
 
 export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean, state: () => AppState | null) {
   const secretOptions = () => {
@@ -149,10 +151,24 @@ export function installWorkspaceIpc(trusted: (e: IpcMainInvokeEvent) => boolean,
     if (!['back', 'forward', 'reload', 'stop', 'close', 'zoomIn', 'zoomOut', 'focus'].includes(a)) throw new Error('잘못된 동작')
     browser.action(win(e), task(e, id), a,browserTab(tab))
   })
-  ipcMain.handle(IPC.browserCapture, (e, id, element,tab) => {
+  const runCaptureGit = makeWorktreeGit()
+  const captureHead = async (cwd: string) => {
+    const output = await runCaptureGit(cwd, ['rev-parse', '--verify', 'HEAD'])
+    const sha = output.stdout.trim()
+    return output.code === 0 && isWorktreeOid(sha) ? sha : null
+  }
+  ipcMain.handle(IPC.browserCapture, async (e, id, element, tab) => {
     if (typeof element !== 'boolean') throw new Error('잘못된 캡처')
-    return browser.capture(win(e), task(e, id), element,browserTab(tab))
+    const owner = win(e), taskId = task(e, id), selected = browserTab(tab)
+    const localFolder = () => state()?.tasks.find(t => t.id === taskId && !t.host && t.archivedAt === undefined)?.cwd
+    const cwd = element ? undefined : localFolder()
+    const before = cwd ? await captureHead(expand(cwd)) : null
+    const value = await browser.capture(owner, task(e, id), element, selected)
+    if (!value.conditions || !before || !cwd || cwd !== localFolder()) return value
+    const after = await captureHead(expand(cwd))
+    return { ...value, conditions: { ...value.conditions, head: cwd === localFolder() && before === after ? after : null } }
   })
+  ipcMain.handle(IPC.gitWorkflowDependencies, (e, dir, links) => git.dependencies(root(e, dir), links))
   ipcMain.handle(IPC.gitWorkflowView, (e, dir, options) => {
     if (options !== undefined && !validWorkflowOptions(options)) throw new Error('잘못된 원격 설정')
     return git.view(root(e, dir), options)

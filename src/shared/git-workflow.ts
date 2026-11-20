@@ -51,6 +51,7 @@ export interface GitWorkflowApi {
   push(dir: string, target: GitTarget): Promise<GitWorkflowResult>
   create(dir: string, request: CreatePullRequest): Promise<GitWorkflowResult>
   merge(dir: string, request: MergePullRequest): Promise<GitWorkflowResult>
+  dependencies(dir: string, links: string[]): Promise<import('./pr-dependencies').PrDependency[]>
   feedback(dir: string, request: PrFeedbackRequest): Promise<import('./ci-feedback').PrFeedbackResult>
 }
 export function validWorkflowOptions(value: unknown): value is WorkflowOptions {

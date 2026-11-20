@@ -1,6 +1,10 @@
 /** links(62단계): 복사하지 않고 원본을 가리키는 링크로 만들 경로 — exists 면 건드리지 않는다(state: 같은 원본을 가리키는 링크 linked · 다른 것 kept).
  *  unignored: 대상 워크트리에서 Git 이 그 경로를 무시하지 않는다(링크가 커밋에 섞일 수 있다) */
-export interface EnvironmentPlan {root:string;target:string;signature:string;copies:Array<{path:string;size:number;exists:boolean}>;links:Array<{path:string;exists:boolean;state?:'linked'|'kept';unignored?:boolean}>;commands:Array<{file:string;args:string[]}>}
+export interface EnvironmentPlan {root:string;target:string;signature:string;copies:Array<{path:string;size:number;exists:boolean}>;links:Array<{path:string;exists:boolean;state?:'linked'|'kept'|'broken';unignored?:boolean}>;commands:Array<{file:string;args:string[]}>;readiness?:EnvironmentReadiness}
+export interface EnvironmentReadiness {
+ paths: Array<{path:string;state:'present'|'missing'|'broken'|'unknown'}>
+ ports: Array<{port:number;state:'listening'|'not-observed'|'unknown'}>
+}
 export interface Preparation {id:string;root:string;target:string;signature:string;state:'running'|'done'|'failed'|'unknown'|'stopped';log:string}
 export interface ExtensionManifest {id:string;name:string;version:string;panels:Array<{id:string;title:string;body:string}>;commands:Array<{id:string;title:string;url:string}>}
 export interface InstalledExtension {manifest:ExtensionManifest;signature:string;enabled:boolean}
@@ -36,5 +40,6 @@ export function linkLine(link: EnvironmentPlan['links'][number]): string {
   // unignored: 이 워크트리에서 Git 이 링크를 무시하지 않는다 — `git add -A` 에 섞인다(.gitignore 의 `이름/` 은 폴더만 무시한다)
   const warn = link.unignored ? ' · ⚠ 이 워크트리에서 Git 이 무시하지 않아요 — .gitignore 에 끝의 / 없이 적어요' : ''
   if (!link.exists) return `${link.path} · 원본에 연결 · 원본과 함께 바뀌어요${warn}`
+  if (link.state === 'broken') return `${link.path} · 끊긴 링크 · 기존 링크 보존`
   return link.state === 'linked' ? `${link.path} · 이미 연결됨 · 원본과 함께 바뀌어요${warn}` : `${link.path} · 기존 것 보존`
 }
