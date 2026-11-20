@@ -55,6 +55,7 @@ interface Props {
     onOpenLogin(paneId: Id): void
     onRewound(paneId: Id, forkAt: string | null, sessionId?: string): void
     onBranch(paneId: Id, index: number, at: number): void
+    onClaudeHandoff(paneId: Id, cwd: string, text: string): boolean
     onToast(text: string, sub?: string): void
     /** 도구 줄의 'diff 열기' — 그 일감의 변경 pane 에서 그 파일 (23단계) */
     onOpenDiff(paneId: Id, path: string): void
@@ -187,6 +188,7 @@ export function SplitView({ tab, panes, visible, focusSignal, term, activity, on
                 onOpenLogin={() => chat.onOpenLogin(pane.id)}
                 onRewound={(forkAt, sid) => chat.onRewound(pane.id, forkAt, sid)}
                 onBranch={(index, at) => chat.onBranch(pane.id, index, at)}
+                onClaudeHandoff={(cwd, text) => chat.onClaudeHandoff(pane.id, cwd, text)}
                 onToast={chat.onToast}
                 onActivity={(ev) => onActivity(pane.id, ev)}
                 onOpenDiff={(path) => chat.onOpenDiff(pane.id, path)}

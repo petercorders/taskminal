@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ChatManager, type Sink } from '../../src/main/chat/chat-manager'
 import { AgentBinFinder } from '../../src/main/chat/find-bin'
 import type { ChildLike } from '../../src/main/chat/claude-adapter'
@@ -19,7 +19,7 @@ class FakeChild extends EventEmitter implements ChildLike {
   }
 }
 
-function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' = 'ask', agentGuide?: () => boolean) {
+function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' = 'ask', agentGuide?: () => boolean, readLive = false) {
   const sent: unknown[][] = []
   const stored: ChatEvent[] = []
   const children: FakeChild[] = []
@@ -32,7 +32,7 @@ function setup(found = true, saved: ChatEvent[] = [], permission: 'ask'|'auto' =
   const m = new ChatManager({
     store: {
       append: async (_p, ev) => void stored.push(...ev),
-      read: async () => [...saved],
+      read: async () => readLive ? [...saved, ...stored] : [...saved],
       remove: async () => void stored.splice(0),
       replace: async (p, ev) => void replaced.push({ p, ev: [...ev] }),
       saveImage: async () => '/img',
@@ -359,5 +359,92 @@ describe('에이전트에게 Taskminal 명령 알려 주기 (58b)', () => {
     t.release()
     expect(await t.m.send(t.sink, 'p1', 'a', '/tmp', { agent: 'codex' })).toBe('ok')
     expect(t.args[0]).toEqual(['app-server'])
+  })
+})
+
+describe('ChatManager — 수동 휴면', () => {
+  const done: ChatEvent[] = [
+    { t: 'session', id: 'same-session' },
+    { t: 'user', text: 'a', at: 1 },
+    { t: 'turn_end', ok: true, ms: 1, reason: 'completed' },
+  ]
+  const chat = { agent: 'claude' as const, sessionId: 'same-session' }
+
+  it('완료된 프로세스 종료를 기다리고 해제 후 동일한 세션에서 이어 보낸다', async () => {
+    const t = setup(true, [], 'ask', undefined, true)
+    t.release()
+    expect(await t.m.send(t.sink, 'p1', 'a', '/tmp', chat)).toBe('ok')
+    const child = t.children[0]!
+    child.stdout.emit('data', JSON.stringify({ type: 'system', subtype: 'init', session_id: 'same-session' }) + '\n')
+    child.stdout.emit('data', JSON.stringify({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1 }) + '\n')
+    child.kill = () => { queueMicrotask(() => child.emit('exit', null, 'SIGTERM')); return true }
+    expect(await t.m.setHibernated(t.sink, 'p1', chat, true)).toBe('ok')
+    expect(t.m.size).toBe(0)
+    expect(t.stored.at(-1)).toEqual({ t: 'hibernation', sessionId: 'same-session', sleeping: true })
+    expect(await t.m.send(t.sink, 'p1', '중간 보내기', '/tmp', chat)).toBe('busy')
+    expect(await t.m.setHibernated(t.sink, 'p1', chat, false)).toBe('ok')
+    expect(t.children).toHaveLength(1)
+    expect(await t.m.send(t.sink, 'p1', '다른 세션', '/tmp', { ...chat, sessionId: 'wrong' })).toBe('busy')
+    expect(await t.m.send(t.sink, 'p1', '이어 보내기', '/tmp', chat)).toBe('ok')
+    expect(t.args[1]).toEqual(expect.arrayContaining(['--resume', 'same-session']))
+  })
+
+  it('종료가 확인되지 않으면 같은 대화를 새로 띄우지 않는다', async () => {
+    vi.useFakeTimers()
+    try {
+      const t = setup(true, [], 'ask', undefined, true)
+      t.release()
+      await t.m.send(t.sink, 'p1', 'a', '/tmp', chat)
+      const child = t.children[0]!
+      child.stdout.emit('data', JSON.stringify({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1 }) + '\n')
+      const sleep = t.m.setHibernated(t.sink, 'p1', chat, true)
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(await sleep).toBe('busy')
+      expect(await t.m.send(t.sink, 'p1', '다음 글', '/tmp', chat)).toBe('busy')
+      expect(t.stored.some((event) => event.t === 'hibernation')).toBe(false)
+      child.emit('exit', null, 'SIGTERM')
+      expect(await t.m.setHibernated(t.sink, 'p1', chat, true)).toBe('ok')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('Codex는 해제 뒤 새로운 스레드를 만들지 않고 기존 ID를 재개한다', async () => {
+    const codex = { ...chat, agent: 'codex' as const }
+    const t = setup(true, [...done, { t: 'hibernation', sessionId: 'same-session', sleeping: true }], 'ask', undefined, true)
+    t.release()
+    expect(await t.m.setHibernated(t.sink, 'p1', codex, false)).toBe('ok')
+    expect(await t.m.send(t.sink, 'p1', '이어 보내기', '/tmp', codex)).toBe('ok')
+    const child = t.children[0]!
+    const reply = async (method: string, result: object) => {
+      const request = child.written.map((line) => JSON.parse(line)).find((value) => value.method === method)
+      expect(request).toBeDefined()
+      child.stdout.emit('data', JSON.stringify({ id: request.id, result }) + '\n')
+      await new Promise<void>((resolve) => setImmediate(resolve))
+    }
+    await reply('initialize', {})
+    await reply('account/read', { account: { type: 'test' } })
+    expect(child.written.map((line) => JSON.parse(line)).at(-1)).toMatchObject({ method: 'thread/resume', params: { threadId: 'same-session' } })
+    await reply('thread/resume', { thread: { id: 'same-session' } })
+    await reply('turn/start', { turn: { id: 'turn-1' } })
+  })
+
+  it('재시작 뒤에도 휴면을 지키며 다른 세션으로는 해제할 수 없다', async () => {
+    const t = setup(true, [...done, { t: 'hibernation', sessionId: 'same-session', sleeping: true }], 'ask', undefined, true)
+    t.release()
+    expect(await t.m.send(t.sink, 'p1', 'b', '/tmp', chat)).toBe('busy')
+    expect(await t.m.setHibernated(t.sink, 'p1', { ...chat, sessionId: 'other' }, false)).toBe('unavailable')
+    expect(t.children).toHaveLength(0)
+  })
+
+  it('진행 중, 하위 작업 실행 중, 갈라질 예정인 대화의 휴면을 거절한다', async () => {
+    const open = setup(true, [...done, { t: 'tool', id: 'still-active', name: 'Agent', summary: '백그라운드' }, { t: 'agent', id: 'still-active', phase: 'start' }], 'ask', undefined, true)
+    expect(await open.m.setHibernated(open.sink, 'p1', chat, true)).toBe('unavailable')
+    const t = setup(true, [], 'ask', undefined, true)
+    t.release()
+    await t.m.send(t.sink, 'p1', 'a', '/tmp', chat)
+    expect(await t.m.setHibernated(t.sink, 'p1', chat, true)).toBe('busy')
+    expect(await t.m.setHibernated(t.sink, 'p1', { ...chat, forkAt: 'old-anchor' }, true)).toBe('unavailable')
+    expect(t.m.size).toBe(1)
   })
 })

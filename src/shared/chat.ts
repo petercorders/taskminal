@@ -66,9 +66,10 @@ export type ChatEvent =
   /** anchor: 이 턴 끝에서 갈라질 자리 — Claude 는 마지막 assistant 줄의 uuid, Codex 는 turn id (22단계 되감기 · 나누기) */
   | { t: 'turn_end'; ok: boolean; ms: number; reason: string; ctxPct?: number; anchor?: string }
   | { t: 'stopped' }
+  | { t: 'hibernation'; sessionId: string; sleeping: boolean }
   | { t: 'error'; kind: ErrorKind; message: string; code?: number; resetsAt?: number; uncertain?: boolean }
 
-const EVENT_TYPES = new Set(['user', 'session', 'text', 'tool', 'tool_end', 'agent', 'permission', 'question', 'answered', 'turn_end', 'stopped', 'error'])
+const EVENT_TYPES = new Set(['user', 'session', 'text', 'tool', 'tool_end', 'agent', 'permission', 'question', 'answered', 'turn_end', 'stopped', 'hibernation', 'error'])
 const optional = (v: unknown, type: 'string' | 'number' | 'boolean') => v === undefined || typeof v === type
 /** 디스크 · IPC 에서 읽은 값 — 종류와 그 종류의 글 칸만 본다(화면은 모르는 칸을 쓰지 않는다) */
 export function isChatEvent(v: unknown): v is ChatEvent {
@@ -98,6 +99,8 @@ export function isChatEvent(v: unknown): v is ChatEvent {
     case 'answered':
     case 'session':
       return typeof v['id'] === 'string'
+    case 'hibernation':
+      return typeof v['sessionId'] === 'string' && /^[\w-]{1,100}$/.test(v['sessionId']) && typeof v['sleeping'] === 'boolean'
     case 'turn_end':
       return typeof v['ms'] === 'number'
     case 'error':
@@ -602,6 +605,15 @@ export function turnStop(ev: ChatEvent): TurnStop | null {
     default:
       return null
   }
+}
+
+export function chatHibernation(events: readonly ChatEvent[]): Extract<ChatEvent, { t: 'hibernation' }> | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]
+    if (event?.t === 'hibernation') return event
+    if (event?.t === 'user') break // 해제 뒤 실제로 이어 보낸 다음에는 그 표지를 쓸 일이 없다.
+  }
+  return undefined
 }
 
 export interface ChatStatus {

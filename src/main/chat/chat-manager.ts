@@ -1,7 +1,7 @@
 // 대화 pane 들의 주인 (main) — paneId 마다 Claude 프로세스 하나. 이벤트를 가려서 창 · 디스크로 보낸다.
 import { homedir } from 'node:os'
 import { expandHome } from '../../shared/cwd'
-import { chatStatus, openAgents, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
+import { chatHibernation, chatStatus, openAgents, redactEvent, rewindPlan, type ChatAgent, type ChatEvent, type ChatImage, type ChatPermission } from '../../shared/chat'
 import { shellEnv } from '../../shared/pty'
 import type { SecretOptions } from '../../shared/redact'
 import { agentLaunch, type AgentBin } from './find-bin'
@@ -58,11 +58,14 @@ export interface RewindResult {
 }
 
 export type SendResult = 'ok' | 'busy' | 'missing'
+export type HibernationResult = 'ok' | 'busy' | 'unavailable'
 
 interface Entry {
   s: AgentSession
   agent: ChatAgent
   sink: Sink
+  sessionId?: string
+  onStopped?: () => void
   /** close 뒤 — 늦게 오는 exit 의 '멈춤' 등을 기록하지 않는다(지운 대화 파일을 다시 만들지 않게) */
   closed?: boolean
 }
@@ -100,15 +103,23 @@ export class ChatManager {
     return () => void this.listeners.delete(fn)
   }
 
-  /** 번호를 매겨 디스크에 덧붙인다 (가리기는 ChatStore) */
-  private record(paneId: string, ev: ChatEvent): number {
+  private nextEventNumber(paneId: string): number {
     const n = (this.counts.get(paneId) ?? 0) + 1
     this.counts.set(paneId, n)
+    return n
+  }
+
+  private notify(paneId: string, ev: ChatEvent) {
+    if (this.listeners.size === 0) return
+    const shown = redactEvent(ev, this.d.redactOptions())
+    for (const fn of this.listeners) fn(paneId, shown)
+  }
+
+  /** 번호를 매겨 디스크에 덧붙인다 (가리기는 ChatStore) */
+  private record(paneId: string, ev: ChatEvent): number {
+    const n = this.nextEventNumber(paneId)
     void this.d.store.append(paneId, [ev]).catch(() => {})
-    if (this.listeners.size > 0) {
-      const shown = redactEvent(ev, this.d.redactOptions())
-      for (const fn of this.listeners) fn(paneId, shown)
-    }
+    this.notify(paneId, ev)
     return n
   }
 
@@ -120,7 +131,7 @@ export class ChatManager {
   async send(sink: Sink, paneId: string, text: string, cwd: string, chat: ChatRef, images: readonly ChatImage[] = [], workflow=false): Promise<SendResult> {
     if(!workflow&&(this.managed.has(paneId)||this.d.reserved?.(paneId)))return 'busy'
     const have = this.panes.get(paneId)
-    if (this.starting.has(paneId) || have?.s.busy) return 'busy'
+    if (this.starting.has(paneId) || have?.s.busy || have?.closed) return 'busy'
     const now = this.d.now ?? Date.now
     const user: ChatEvent = { t: 'user', text, at: now(), ...(images.length ? { images: images.map((i) => i.name) } : {}) }
     // 사용자 글은 실제로 보낸 뒤 기록한다 — 못 보냈는데 기록하면 턴이 열린 채 남아 다시 보낼 수 없다.
@@ -134,14 +145,17 @@ export class ChatManager {
     this.starting.add(paneId)
     this.cancelled.delete(paneId)
     try {
+      const hibernation = chatHibernation(await this.d.store.read(paneId))
+      if (hibernation && (hibernation.sleeping || chat.sessionId !== hibernation.sessionId || chat.forkAt)) return 'busy'
+      if (this.cancelled.has(paneId) || sink.isDestroyed()) return 'busy'
       const found = await this.d.findBin(chat.agent)
-      if (this.cancelled.delete(paneId)) return 'busy' // 찾는 사이 pane 이 닫혔다
+      if (this.cancelled.has(paneId) || sink.isDestroyed()) return 'busy' // 찾는 사이 pane 이 닫혔다
       if (!found) {
         this.emit(paneId, sink, user)
         this.emit(paneId, sink, { t: 'error', kind: 'missing', message: `${chat.agent} 명령을 찾지 못했어요` })
         return 'missing'
       }
-      const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession }
+      const entry: Entry = { sink, agent: chat.agent, s: null as unknown as AgentSession, ...(chat.sessionId ? { sessionId: chat.sessionId } : {}) }
       const initialEnv = { ...agentEnv(process.env, found.path), ...(this.d.extraEnv?.(paneId, found.path, chat) ?? {}) }
       const sessionEnv = this.d.sessionEnv?.(initialEnv, paneId, chat) ?? initialEnv
       const common = {
@@ -158,9 +172,14 @@ export class ChatManager {
           return this.d.spawn(launch.bin, launch.args, { cwd: opts.cwd, env: launch.env as Record<string, string> })
         },
         onEvent: (ev: ChatEvent) => {
-          if (!entry.closed) this.emit(paneId, entry.sink, ev)
+          if (entry.closed) return
+          if (ev.t === 'session') entry.sessionId = ev.id
+          this.emit(paneId, entry.sink, ev)
         },
-        onExit: () => {},
+        onExit: () => {
+          if (entry.closed && this.panes.get(paneId) === entry) this.panes.delete(paneId)
+          entry.onStopped?.()
+        },
       }
       entry.s =
         chat.agent === 'codex'
@@ -172,7 +191,64 @@ export class ChatManager {
       return 'ok'
     } finally {
       this.starting.delete(paneId)
+      this.cancelled.delete(paneId)
     }
+  }
+
+  async setHibernated(sink: Sink, paneId: string, chat: ChatRef, sleeping: boolean): Promise<HibernationResult> {
+    const sessionId = chat.sessionId
+    if (!sessionId || chat.forkAt || this.managed.has(paneId) || this.d.reserved?.(paneId)) return 'unavailable'
+    const entry = this.panes.get(paneId)
+    if (this.starting.has(paneId) || entry?.s.busy || entry?.closed) return 'busy'
+    this.starting.add(paneId)
+    this.cancelled.delete(paneId)
+    try {
+      const events = await this.d.store.read(paneId)
+      const previous = chatHibernation(events)
+      const knownSession = entry?.sessionId ?? events.findLast((event) => event.t === 'session')?.id
+      if (this.cancelled.has(paneId) || sink.isDestroyed() ||
+          (entry && entry.agent !== chat.agent) || (knownSession && knownSession !== sessionId) ||
+          (previous?.sleeping && previous.sessionId !== sessionId)) return 'unavailable'
+      if (!sleeping && !previous?.sleeping) return 'unavailable'
+      if (sleeping) {
+        if (chatStatus(events).state !== 'done' || openAgents(events).length > 0) return 'unavailable'
+        if (previous?.sleeping) return 'ok'
+        if (entry && !await this.stopForHibernation(paneId, entry)) return 'busy'
+        if (this.cancelled.has(paneId) || sink.isDestroyed()) return 'unavailable'
+      }
+      const event: ChatEvent = { t: 'hibernation', sessionId, sleeping }
+      // history()가 저장 큐를 읽기 전에 번호를 받되, 휴면은 디스크에 반영된 뒤에만 알린다.
+      const n = this.nextEventNumber(paneId)
+      await this.d.store.append(paneId, [event])
+      if (this.cancelled.has(paneId) || sink.isDestroyed()) return 'unavailable'
+      this.notify(paneId, event)
+      sink.send(this.d.channel, paneId, event, n)
+      return 'ok'
+    } finally {
+      this.starting.delete(paneId)
+      this.cancelled.delete(paneId)
+    }
+  }
+
+  private stopForHibernation(paneId: string, entry: Entry): Promise<boolean> {
+    if (!entry.s.running) {
+      this.panes.delete(paneId)
+      return Promise.resolve(true)
+    }
+    entry.closed = true
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        // 종료가 확인될 때까지 이 프로세스와 같은 세션을 다시 띄울 수 없다.
+        delete entry.onStopped
+        resolve(false)
+      }, 3_000)
+      entry.onStopped = () => {
+        clearTimeout(timeout)
+        delete entry.onStopped
+        resolve(true)
+      }
+      entry.s.kill()
+    })
   }
 
   /**
@@ -180,26 +256,36 @@ export class ChatManager {
    * index · at 으로 같은 메시지인지 다시 본다 — 확인 띠가 열린 사이 기록이 바뀌었으면 null(버림). 도는 중이면 null.
    */
   async rewind(paneId: string, index: number, at: number, chat: ChatRef): Promise<RewindResult | null> {
-    const busy = () => this.starting.has(paneId) || this.panes.get(paneId)?.s.busy === true
+    const busy = () => {
+      const entry = this.panes.get(paneId)
+      return this.starting.has(paneId) || entry?.s.busy || entry?.closed
+    }
     if (busy()) return null
     const events = await this.d.store.read(paneId)
     // 읽는 사이 보내기가 시작됐으면 그 턴을 잘라 내지 않게 다시 본다
-    if (busy()) return null
+    if (busy() || chatHibernation(events)?.sleeping) return null
     const i = userIndex(events, index, at)
     if (i < 0) return null
     const plan = rewindPlan(events, i, 'rewind')
     if (!plan) return null
     const kept = events.slice(0, plan.keep)
-    await this.d.store.replace(paneId, kept)
-    const sessionId = plan.forkAt ? (plan.sessionId ?? chat.sessionId) : undefined
-    this.panes.get(paneId)?.s.fork(sessionId, plan.forkAt)
-    // 68: 떼어 낸 프로세스의 하위 작업은 함께 끝났고, 남긴 기록에서 끝 알림이 잘렸을 수도 있다 — 남긴 기록 기준으로 닫아 화면에도 돌려준다
-    for (const id of openAgents(kept)) {
-      const ev: ChatEvent = { t: 'agent', id, phase: 'end', status: 'stopped' }
-      kept.push(ev)
-      this.record(paneId, ev)
+    this.starting.add(paneId)
+    try {
+      await this.d.store.replace(paneId, kept)
+      if (this.cancelled.has(paneId)) return null
+      const sessionId = plan.forkAt ? (plan.sessionId ?? chat.sessionId) : undefined
+      this.panes.get(paneId)?.s.fork(sessionId, plan.forkAt)
+      // 68: 떼어 낸 프로세스의 하위 작업은 함께 끝났고, 남긴 기록에서 끝 알림이 잘렸을 수도 있다 — 남긴 기록 기준으로 닫아 화면에도 돌려준다
+      for (const id of openAgents(kept)) {
+        const ev: ChatEvent = { t: 'agent', id, phase: 'end', status: 'stopped' }
+        kept.push(ev)
+        this.record(paneId, ev)
+      }
+      return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, ...(sessionId ? { sessionId } : {}), refill: plan.refill, masked: plan.masked === true }
+    } finally {
+      this.starting.delete(paneId)
+      this.cancelled.delete(paneId)
     }
-    return { events: kept, upTo: this.counts.get(paneId) ?? 0, forkAt: plan.forkAt, ...(sessionId ? { sessionId } : {}), refill: plan.refill, masked: plan.masked === true }
   }
 
   /** 나누기 (22단계): 그 메시지의 턴 끝까지를 새 pane 의 기록으로. 갈라질 자리(anchor)를 돌려준다 · 자리가 맞지 않으면 null */

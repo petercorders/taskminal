@@ -1581,6 +1581,18 @@ export function App() {
     onOpenLogin: chatLogin,
     onRewound: (paneId: string, forkAt: string | null, sessionId?: string) => dispatch({ type: 'chat/rewound', paneId, forkAt, ...(sessionId ? { sessionId } : {}) }),
     onBranch: (paneId: string, index: number, at: number) => void chatBranch(paneId, index, at),
+    onClaudeHandoff: (sourceId: string, cwd: string, text: string) => {
+      const current = stateRef.current
+      const task = current.tasks.find((item) => item.id === findPaneTask(current, sourceId))
+      const source = task?.panes[sourceId]
+      if (!task || task.archivedAt !== undefined || task.host || source?.kind !== 'chat' ||
+          source.workflowRunId || source.chat?.agent !== 'claude' || source.cwd !== cwd || !text.trim()) return false
+      const paneId = newId()
+      dispatch({ type: 'chat/add-tab', taskId: task.id, tabId: newId(), paneId, agent: 'codex', cwd })
+      setChatDraft({ paneId, text: text.trim(), n: Date.now() })
+      refocus()
+      return true
+    },
     onToast: (text: string, sub?: string) => showToast({ text, ...(sub ? { sub } : {}) }),
     onOpenDiff: (paneId: string, path: string) => {
       const taskId = findPaneTask(stateRef.current, paneId)

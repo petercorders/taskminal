@@ -4,6 +4,7 @@ import type { ChatDecision, ChatImage, ChatPermission } from '../../shared/chat'
 export interface AgentSession {
   /** 턴이 열려 있다 (보냈고 끝 · 멈춤을 아직 못 받음) */
   readonly busy: boolean
+  readonly running: boolean
   /** 새 턴을 보낸다. 턴이 열려 있으면 false (한 번에 하나) */
   send(text: string, images?: readonly ChatImage[]): boolean
   /** 허락 · 질문 답. 같은 요청에 두 번 · 그 사이 끝났으면 false */
