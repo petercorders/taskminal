@@ -128,3 +128,19 @@ test('late preparation of a stopped attempt cannot claim retry panes or dispatch
  expect(new Set(f.sent.map(s=>s.pane)).size).toBe(2)
  expect(f.runner.view().runs[0]!.steps.map(s=>s.attempt)).toEqual([2,2])
 })
+
+test('reviewed accounts are verified before pinning and a replay keeps its original run', () => {
+ let allowed = false
+ const verifyAccounts = vi.fn(() => { if (!allowed) throw Error('계정 변경') })
+ const {runner,pins} = fixture({verifyAccounts})
+ const input = { requestId:'preview', taskId:'task', workflowId:'wf', expectedAccounts:{ claude:'work-claude', codex:'default-codex' } }
+ expect(() => runner.start(input)).toThrow('계정 변경')
+ expect(pins).toHaveLength(0)
+ expect(runner.view().runs).toHaveLength(0)
+ allowed = true
+ const id = runner.start(input)
+ expect(pins).toHaveLength(2)
+ allowed = false
+ expect(runner.start(input)).toBe(id)
+ expect(verifyAccounts).toHaveBeenCalledTimes(2)
+})

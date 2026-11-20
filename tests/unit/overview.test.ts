@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTask, emptyState, splitActivePaneChat } from '../../src/shared/model'
 import type { AppState } from '../../src/shared/types'
-import { inboxRows, overviewSections, overviewTarget } from '../../src/renderer/overview-model'
+import { activeInboxRows, chatInboxSignal, inboxRows, overviewSections, overviewTarget } from '../../src/renderer/overview-model'
 
 function fixture(): AppState {
   const s = emptyState()
@@ -90,5 +90,54 @@ describe('전체 보기', () => {
       ['지운 일감', null],
       ['화면', null],
     ])
+  })
+})
+
+describe('현재 행동', () => {
+  it('다른 질문에 답해도 아직 열려 있는 질문으로 이동한다', () => {
+    const s = fixture()
+    const task = s.tasks[0] = splitActivePaneChat(s.tasks[0]!, 'right', () => 'chat', 'claude')
+    const first = chatInboxSignal(undefined, { t: 'question', id: 'one', questions: [] })
+    const second = chatInboxSignal(first, { t: 'question', id: 'two', questions: [] })
+    const pending = chatInboxSignal(second, { t: 'answered', id: 'one', how: 'allow' })
+    expect(activeInboxRows(s, {}, { chat: pending }, {})).toMatchObject([
+      { kind: 'answer', taskId: task.id, target: { paneId: 'chat', tabId: task.tabs[0]!.id } },
+    ])
+    const settled = chatInboxSignal(pending, { t: 'answered', id: 'two', how: 'allow' })
+    expect(activeInboxRows(s, {}, { chat: settled }, {})).toEqual([])
+  })
+
+  it('실패가 지나갔거나 보관한 일감과 닫힌 pane은 제외하고 최신 대상만 보여 준다', () => {
+    const s = fixture()
+    const [task, archived] = s.tasks as [AppState['tasks'][number], AppState['tasks'][number]]
+    archived.archivedAt = 1
+    const pane = task.tabs[0]!.activePaneId
+    const failure = { state: 'failed', busy: false, attention: true } as const
+    const activities = { [pane]: failure, [archived.tabs[0]!.activePaneId]: failure, gone: failure }
+    expect(activeInboxRows(s, activities, {}, {})).toMatchObject([{ kind: 'investigate', taskId: task.id, target: { paneId: pane } }])
+    expect(activeInboxRows(s, { [pane]: { ...failure, attention: false } }, {}, {})).toEqual([])
+    delete task.panes[pane]
+    expect(activeInboxRows(s, activities, {}, {})).toEqual([])
+  })
+
+  it('현재 완료된 대화와 로컬 Git 작업으로만 결과 검토를 제안하고 새 턴이 시작하면 없앤다', () => {
+    const s = fixture()
+    const task = s.tasks[0] = splitActivePaneChat(s.tasks[0]!, 'right', () => 'chat', 'codex')
+    const completed = chatInboxSignal(undefined, { t: 'turn_end', ok: true, ms: 1, reason: 'done' })
+    expect(activeInboxRows(s, {}, { chat: completed }, {})).toEqual([])
+    const branches = { [task.cwd]: 'topic' }
+    expect(activeInboxRows(s, {}, { chat: completed }, branches)).toMatchObject([{ kind: 'review', taskId: task.id }])
+    const running = chatInboxSignal(completed, { t: 'user', text: '다시', at: 2 })
+    expect(activeInboxRows(s, {}, { chat: running }, branches)).toEqual([])
+  })
+
+  it('리뷰 상태를 떠난 일감은 검토 후보에서 내려간다', () => {
+    const s = fixture()
+    const task = s.tasks[0]!
+    s.settings.statuses.splice(1, 0, { id: 'review', name: '리뷰 예정', color: '#aaaaaa' })
+    task.statusId = 'review'
+    expect(activeInboxRows(s, {}, {}, { [task.cwd]: 'topic' })).toMatchObject([{ kind: 'review', taskId: task.id }])
+    task.statusId = 'done'
+    expect(activeInboxRows(s, {}, {}, { [task.cwd]: 'topic' })).toEqual([])
   })
 })

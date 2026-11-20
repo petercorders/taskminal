@@ -44,6 +44,7 @@ import { DEADLINE_MS, withDeadline, type AgentSession, type ResumeHow } from '..
 import { paneIds as layoutPaneIds } from '../shared/layout'
 import { Overview } from './Overview'
 import { inboxModel, useInboxUnread } from './inbox'
+import { activeInboxRows, chatInboxSignal, overviewTarget, reviewStatusFor, type ChatInboxSignal, type InboxAction } from './overview-model'
 import { INBOX_TITLE } from '../shared/inbox'
 import { AccountsPanel } from './AccountsPanel'
 import { DevelopmentPanel } from './DevelopmentPanel'
@@ -417,6 +418,26 @@ export function App() {
   }
   const stateRef = useRef(state)
   stateRef.current = state
+  const [chatInbox, setChatInbox] = useState<Readonly<Record<string, ChatInboxSignal | undefined>>>({})
+  const chatInboxRef = useRef(chatInbox)
+  const updateChatInbox = (paneId: string, signal: ChatInboxSignal | undefined) => {
+    if (signal === chatInboxRef.current[paneId]) return
+    const next = { ...chatInboxRef.current }
+    if (signal) next[paneId] = signal
+    else delete next[paneId]
+    chatInboxRef.current = next
+    setChatInbox(next)
+  }
+  useEffect(() => {
+    const current = Object.entries(chatInboxRef.current)
+    if (!current.length) return
+    const live = new Set(state.tasks.filter((task) => task.archivedAt === undefined).flatMap((task) => Object.keys(task.panes)))
+    const kept = current.filter(([paneId]) => live.has(paneId))
+    if (kept.length < current.length) {
+      chatInboxRef.current = Object.fromEntries(kept)
+      setChatInbox(chatInboxRef.current)
+    }
+  }, [state.tasks])
 
   /** 설정의 '알림 · 활동': macOS 알림 · 소리. 보고 있는 pane 이면(설정) 알리지 않는다. 누르면 그 pane 으로 */
   const deliver = (kind: NotifyKind, paneId: string, act: PaneActivity | undefined) => {
@@ -1339,13 +1360,18 @@ export function App() {
     () =>
       window.taskminal.chat.onEvent((paneId, ev) => {
         if (typeof paneId !== 'string' || typeof ev !== 'object' || ev === null) return
-        // 69단계: 맡긴 일감(부모가 기록된 일감)의 턴이 멈추면 부모에 — CLI notify 와 같은 길(확인 필요 · 알림 · 받은편지함).
-        // 부모 · 맡긴 pane 은 알릴 때마다 지금 상태에서 다시 찾는다. 부모가 지워졌거나 보관됐으면 조용히.
-        // 표에는 맡긴 일감의 pane 만 넣는다 — 다른 대화마다 칸이 쌓이지 않게(69 리뷰)
-        if (isChatEvent(ev) && isDelegatedPane(stateRef.current, paneId)) {
-          const stop = delegateSignal(delegateTurns.current, paneId, ev)
-          const notice = stop ? parentNotice(stateRef.current, paneId, stop) : null
-          if (notice) updateActivityRef.current(notice.paneId, { type: 'notify', text: notice.text })
+        if (isChatEvent(ev)) {
+          const previous = chatInboxRef.current[paneId]
+          const next = chatInboxSignal(previous, ev)
+          if (next !== previous && stateRef.current.tasks.some((task) => task.archivedAt === undefined && task.panes[paneId]?.kind === 'chat')) {
+            updateChatInbox(paneId, next)
+          }
+          // 맡긴 일감의 턴이 멈추면 지금 존재하는 부모 일감에 알린다.
+          if (isDelegatedPane(stateRef.current, paneId)) {
+            const stop = delegateSignal(delegateTurns.current, paneId, ev)
+            const notice = stop ? parentNotice(stateRef.current, paneId, stop) : null
+            if (notice) updateActivityRef.current(notice.paneId, { type: 'notify', text: notice.text })
+          }
         }
         const e = ev as { t?: unknown; id?: unknown; text?: unknown }
         if (e.t === 'session' && typeof e.id === 'string') dispatch({ type: 'chat/session', paneId, sessionId: e.id })
@@ -1518,6 +1544,35 @@ export function App() {
     dispatch({ type: 'task/select', id: taskId })
     dispatch({ type: 'review/open', taskId, ids })
     setReviewReq({ paneId: found.paneId, req: { mode, ...(file ? { file } : {}), n: Date.now() } })
+    for (const paneId of Object.keys(task.panes)) {
+      if (chatInboxRef.current[paneId]?.outcome === 'done') updateChatInbox(paneId, undefined)
+    }
+  }
+  const openInboxPane = (taskId: string, tabId: string, paneId: string) => {
+    if (!overviewTarget(stateRef.current, { taskId, tabId, paneId })) return false
+    const chatSignal = chatInboxRef.current[paneId]
+    if (chatSignal?.outcome === 'failed' && !chatSignal.pending.size) updateChatInbox(paneId, undefined)
+    if (activityRef.current[paneId]?.state === 'failed') updateActivityRef.current(paneId, { type: 'viewed' })
+    dispatch({ type: 'task/select', id: taskId })
+    dispatch({ type: 'pane/focus', taskId, paneId })
+    setOverviewOpen(false)
+    refocus()
+    return true
+  }
+  const openInboxAction = (chosen: InboxAction) => {
+    const current = activeInboxRows(stateRef.current, activityRef.current, chatInboxRef.current, branches)
+    if (!current.some((action) => action.kind === chosen.kind && action.taskId === chosen.taskId
+      && (action.kind === 'review' || chosen.kind !== 'review' && action.target.tabId === chosen.target.tabId && action.target.paneId === chosen.target.paneId))) {
+      showToast({ text: '이미 처리됐거나 화면이 닫혔어요.' })
+      return
+    }
+    if (chosen.kind === 'review') {
+      openReview(chosen.taskId, 'diff')
+      setOverviewOpen(false)
+      refocus()
+    } else {
+      openInboxPane(chosen.taskId, chosen.target.tabId, chosen.target.paneId)
+    }
   }
   /** '대화에 묻기' · '고쳐 달라고 하기' — 그 일감의 대화 pane 입력칸에(보이는 탭 것 먼저), 없으면 대화로 오른쪽 나누기 */
   const askChat = (taskId: string, text: string, images?: ChatImage[]) => {
@@ -1545,7 +1600,7 @@ export function App() {
     else dispatch({ type: 'pane/split', taskId, dir: 'right', paneId: newId(), spec: { cwd: task.cwd, command, insert: true } })
     refocus()
   }
-  const reviewStatus = state.settings.statuses.find((x) => x.name.includes('리뷰')) ?? null
+  const reviewStatus = reviewStatusFor(state)
   const reviewProps = (taskId: string) => ({
     request: reviewReq,
     toReview: reviewStatus ? { name: reviewStatus.name, run: () => dispatch({ type: 'task/edit', id: taskId, patch: { statusId: reviewStatus.id } }) } : null,
@@ -2208,7 +2263,7 @@ export function App() {
             </div>
           </nav>
           {toolMenu&&<PopupMenu label={toolMenu.kind==='task'?'일감 도구':'찾기'} heading={toolMenu.kind==='task'?toolBlocked(WORK_TOOLS[0]!,activeTask)??undefined:undefined} items={toolMenuItems(toolMenu.kind)} x={toolMenu.x} y={toolMenu.y} onClose={picked=>{setToolMenu(null);if(!picked)toolMenuTrigger.current?.focus()}}/>}
-          {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} mergeOf={(t) => t.host ? null : shownBadge(worktreeMerge[t.id], branches[t.cwd])} unread={unread} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={(taskId,tabId,paneId)=>{const t=stateRef.current.tasks.find(t=>t.id===taskId);if(!t?.tabs.some(tab=>tab.id===tabId)||!t.panes[paneId])return;dispatch({type:'task/select',id:taskId});dispatch({type:'pane/focus',taskId,paneId});setOverviewOpen(false);refocus()}}/>}
+          {overviewOpen && <Overview state={viewState} activity={shownActivity} branches={branches} mergeOf={(t) => t.host ? null : shownBadge(worktreeMerge[t.id], branches[t.cwd])} unread={unread} chatInbox={chatInbox} onAction={openInboxAction} onClose={()=>{setOverviewOpen(false);refocus()}} onOpen={openInboxPane}/>}
           {workTool && workToolShown && <aside ref={workToolPanel} tabIndex={-1} className="work-tool-panel" aria-label="작업 보조 화면" onKeyDown={onWorkToolKey}>
             <header className="work-tools-row"><strong>{commandLabel(toolByKind(workTool.kind)!.command)}</strong><button className="button" aria-label="작업 보조 화면 닫기" onClick={()=>{setWorkTool(null);refocus()}}>닫기</button></header>
             {workTool.kind==='remote'?<RemotePanel api={window.taskminal.remote}/>:workTool.kind==='accounts'?<AccountsPanel/>:activeTask?.host?<p>원격 일감에서는 이 Mac의 파일·저장소·브라우저를 연결하지 않아요.</p>:activeTask&&<>

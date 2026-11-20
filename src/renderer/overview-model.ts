@@ -1,6 +1,6 @@
 // 전체 보기는 사이드바와 같은 흐름을 쓰되, 실제 탭에 속한 pane만 대상으로 삼는다.
 import type { PaneActivity } from '../shared/activity'
-import { AGENT_NAME, type ChatAgent } from '../shared/chat'
+import { AGENT_NAME, type ChatAgent, type ChatEvent } from '../shared/chat'
 import type { Branches } from '../shared/git'
 import { paneIds } from '../shared/layout'
 import type { AppState, Id, Task } from '../shared/types'
@@ -86,4 +86,71 @@ export function inboxRows(state: AppState, entries: readonly InboxEntry[]): Inbo
     const target = task && tab ? overviewTarget(state, { taskId: task.id, tabId: tab.id, paneId: entry.paneId }) : null
     return { entry, taskName: task?.name ?? '지운 일감', target }
   })
+}
+
+export interface ChatInboxSignal {
+  pending: ReadonlySet<Id>
+  outcome: 'failed' | 'done' | null
+}
+
+export function chatInboxSignal(previous: ChatInboxSignal | undefined, event: ChatEvent): ChatInboxSignal | undefined {
+  switch (event.t) {
+    case 'permission':
+    case 'question':
+      return { pending: new Set([...(previous?.pending ?? []), event.id]), outcome: null }
+    case 'answered': {
+      if (!previous?.pending.has(event.id)) return previous
+      const pending = new Set(previous.pending)
+      pending.delete(event.id)
+      return pending.size ? { ...previous, pending } : undefined
+    }
+    case 'user':
+    case 'stopped':
+      return undefined
+    case 'turn_end':
+      return { pending: new Set(), outcome: event.ok ? 'done' : 'failed' }
+    case 'error':
+      return {
+        pending: event.kind === 'crash' || event.kind === 'missing' ? new Set() : (previous?.pending ?? new Set()),
+        outcome: 'failed',
+      }
+    default:
+      return previous
+  }
+}
+
+export const reviewStatusFor = (state: AppState) => state.settings.statuses.find((status) => status.name.includes('리뷰'))
+
+export type InboxAction =
+  | { kind: 'answer' | 'investigate'; taskId: Id; taskName: string; target: PaneTarget }
+  | { kind: 'review'; taskId: Id; taskName: string }
+
+export function activeInboxRows(
+  state: AppState,
+  activity: Readonly<Record<Id, PaneActivity>>,
+  chat: Readonly<Record<Id, ChatInboxSignal | undefined>>,
+  branches: Branches,
+): InboxAction[] {
+  const reviewStatus = reviewStatusFor(state)?.id
+  const actions: InboxAction[] = []
+  for (const task of state.tasks) {
+    if (task.archivedAt !== undefined) continue
+    let completed = false
+    for (const pane of targets(task, activity)) {
+      const current = chat[pane.paneId]
+      const waiting = pane.agent ? (current?.pending.size ?? 0) > 0 : pane.activity?.state === 'waiting' && (!!pane.activity.agent || pane.activity.attention)
+      const failed = pane.agent ? current?.outcome === 'failed' : pane.activity?.state === 'failed' && pane.activity.attention
+      const target: PaneTarget = { taskId: pane.taskId, tabId: pane.tabId, paneId: pane.paneId }
+      if (waiting) actions.push({ kind: 'answer', taskId: task.id, taskName: task.name, target })
+      else if (failed) actions.push({ kind: 'investigate', taskId: task.id, taskName: task.name, target })
+      if (current?.outcome === 'done') completed = true
+    }
+    const explicitlyReady = task.statusId === reviewStatus
+    const closed = state.settings.statuses.length > 1 && task.statusId === state.settings.statuses.at(-1)?.id && !explicitlyReady
+    if (!task.host && branches[task.cwd] && !closed && (explicitlyReady || completed)) {
+      actions.push({ kind: 'review', taskId: task.id, taskName: task.name })
+    }
+  }
+  const order = { answer: 0, investigate: 1, review: 2 }
+  return actions.sort((a, b) => order[a.kind] - order[b.kind])
 }
