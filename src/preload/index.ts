@@ -179,6 +179,7 @@ const api: TaskminalApi = {
   },
   chat: {
     send: (paneId, text, cwd, chat, images) => ipcRenderer.invoke(IPC.chatSend, paneId, text, cwd, chat, images) as Promise<'ok' | 'busy' | 'missing'>,
+    setHibernated: (paneId, sessionId, sleeping) => ipcRenderer.invoke(IPC.chatHibernation, paneId, sessionId, sleeping) as ReturnType<ChatApiT['setHibernated']>,
     rewind: (paneId, index, at, chat) => ipcRenderer.invoke(IPC.chatRewind, paneId, index, at, chat) as ReturnType<ChatApiT['rewind']>,
     branch: (from, to, index, at) => ipcRenderer.invoke(IPC.chatBranch, from, to, index, at) as ReturnType<ChatApiT['branch']>,
     pickImages: () => ipcRenderer.invoke(IPC.chatPickImages) as ReturnType<ChatApiT['pickImages']>,

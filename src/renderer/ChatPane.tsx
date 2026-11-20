@@ -9,7 +9,9 @@ import {
   IMAGE_MAX_COUNT,
   IMAGE_MIMES,
   agentCard,
+  chatHibernation,
   chatStatus,
+  openAgents,
   foldBlocks,
   isChatEvent,
   rewindPlan,
@@ -24,6 +26,7 @@ import {
 import { conversationMessage } from '../shared/conversation-search'
 import { Icon } from './icons'
 import { AgentIcon } from './AgentIcon'
+import { ClaudeHandoffDialog } from './ClaudeHandoffDialog'
 
 interface Props {
   paneId: string
@@ -50,6 +53,7 @@ interface Props {
   onRewound(forkAt: string | null, sessionId?: string): void
   /** ⑂ 여기서 새 대화로 나누기 */
   onBranch(index: number, at: number): void
+  onClaudeHandoff(cwd: string, text: string): boolean
   onToast(text: string, sub?: string): void
   /** 파일을 고친 도구 줄의 'diff 열기 →' — 변경 pane 에서 그 파일 (23단계) */
   onOpenDiff(path: string): void
@@ -111,6 +115,14 @@ function clock(ms: number): string {
 export function ChatPane(p: Props) {
   const [events, setEvents] = useState<ChatEvent[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [handoff, setHandoff] = useState<{ cwd: string; events: ChatEvent[] } | null>(null)
+  const handoffButton = useRef<HTMLButtonElement>(null)
+  const [changingHibernation, setChangingHibernation] = useState(false)
+  const hibernationLock = useRef(false)
+  const hibernationButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!p.visible) setHandoff(null)
+  }, [p.visible])
   const [text, setText] = useState('')
   const [hint, setHint] = useState<string | null>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({})
@@ -191,6 +203,31 @@ export function ChatPane(p: Props) {
   }, [p.paneId])
 
   const status = useMemo(() => chatStatus(events), [events])
+  const hibernation = useMemo(() => chatHibernation(events), [events])
+  const hasOpenAgents = useMemo(() => openAgents(events).length > 0, [events])
+  const sleeping = hibernation?.sleeping === true
+  const canHibernate = !p.chat.forkAt && !!p.chat.sessionId && status.state === 'done' && !hasOpenAgents
+  const changeHibernation = async (sleep: boolean) => {
+    const sessionId = p.chat.sessionId
+    if (!sessionId || p.workflowRunId || hibernationLock.current ||
+        (sleep && (!canHibernate || text.trim() || images.length || queue.length || confirm))) return
+    hibernationLock.current = true
+    setChangingHibernation(true)
+    try {
+      const result = await window.taskminal.chat.setHibernated(p.paneId, sessionId, sleep)
+      if (result === 'ok') {
+        if (cb.current.visible) requestAnimationFrame(() => (sleep ? hibernationButton.current : inputRef.current)?.focus())
+      } else p.onToast(
+        sleep ? '대화를 휴면으로 전환하지 못했어요.' : '대화의 휴면을 풀지 못했어요.',
+        result === 'busy' ? '프로세스 상태가 바뀌는 중이에요. 잠시 뒤 다시 시도해 주세요.' : '현재 세션과 실행 상태를 확인해 주세요.',
+      )
+    } catch {
+      p.onToast('대화 상태를 확인하지 못했어요.', '잠시 뒤 다시 시도해 주세요.')
+    } finally {
+      hibernationLock.current = false
+      setChangingHibernation(false)
+    }
+  }
   const blocks = useMemo(() => foldBlocks(events), [events])
   const consumedJump=useRef<number|null>(null)
   const shownEvents=useRef(events)
@@ -239,7 +276,7 @@ export function ChatPane(p: Props) {
 
   /** 실제로 보낸다 — 실행 중이면(main 이 busy) 대기열 맨 앞으로 되돌린다 */
   const dispatchSend = async (item: Queued) => {
-    if (cb.current.workflowRunId) return
+    if (cb.current.workflowRunId || sleeping || hibernationLock.current) return
     lastSent.current = item
     setHint(null)
     cb.current.onActivity({ type: 'command', text: item.text.split('\n')[0]!.slice(0, 200) })
@@ -297,7 +334,7 @@ export function ChatPane(p: Props) {
     return item
   }
   const send = (raw?: string) => {
-    if (p.workflowRunId) return
+    if (p.workflowRunId || sleeping || hibernationLock.current) return
     const item = raw !== undefined ? { text: raw.trim(), images: [] } : takeInput()
     if (!item || !item.text) return
     if (running || queue.length > 0) {
@@ -310,7 +347,7 @@ export function ChatPane(p: Props) {
   }
   /** ⌘↩ 지금 보내기 — 입력창 글을 대기열 맨 앞에 두고, 도는 중이면 멈춘 뒤 보낸다 */
   const sendNowKey = () => {
-    if (p.workflowRunId) return
+    if (p.workflowRunId || sleeping || hibernationLock.current) return
     const item = takeInput()
     if (!running) {
       const q = item ? [item, ...queue] : queue
@@ -421,13 +458,13 @@ export function ChatPane(p: Props) {
   // ─── 되감기 · 나누기 (22단계) ───
   const askRewind = (b: Extract<ChatBlock, { kind: 'user' }>) => {
     const plan = rewindPlan(events, b.index, 'rewind')
-    if (!plan || running || p.workflowRunId) return
+    if (!plan || running || sleeping || hibernationLock.current || p.workflowRunId) return
     setConfirm({ index: b.index, at: b.at, removed: plan.removed })
   }
   const doRewind = async () => {
     const c = confirm
     setConfirm(null)
-    if (!c || p.workflowRunId) return
+    if (!c || sleeping || hibernationLock.current || p.workflowRunId) return
     const r = await window.taskminal.chat.rewind(p.paneId, c.index, c.at, cb.current.chat).catch(() => null)
     if (!r) return cb.current.onToast('되감지 못했어요.', '그 사이 대화가 바뀌었거나 아직 도는 중이에요.')
     handledEnd.current = r.events.length - 1
@@ -502,6 +539,7 @@ export function ChatPane(p: Props) {
   }
 
   const statusChip = (() => {
+    if (sleeping) return { text: '휴면 중', cls: 'dim' }
     switch (status.state) {
       case 'new':
         return { text: '○ 새 대화', cls: 'dim' }
@@ -776,6 +814,19 @@ export function ChatPane(p: Props) {
           TUI 로 ⇧⌘J
         </button>}
       </header>
+      {!p.workflowRunId && (agent === 'claude' && loaded && events.length > 0 || canHibernate || sleeping) &&
+        <div className="chat-continuity">
+          {agent === 'claude' && loaded && events.length > 0 &&
+            <button ref={handoffButton} type="button" className="chat-switch" onClick={() => setHandoff({ cwd: p.cwd, events })}>Codex로 인계…</button>}
+          {sleeping ?
+            <button ref={hibernationButton} type="button" className="chat-switch" disabled={changingHibernation} onClick={() => void changeHibernation(false)}>휴면 풀기</button> :
+            canHibernate && <button ref={hibernationButton} type="button" className="chat-switch" disabled={changingHibernation || !!text.trim() || images.length > 0 || queue.length > 0 || !!confirm}
+              title="완료된 대화의 프로세스를 종료하고 기록을 보존해요." onClick={() => void changeHibernation(true)}>대화 휴면</button>}
+          {sleeping && <span className="dim" role="status">휴면을 풀고 메시지를 보내면 같은 세션에서 이어집니다.</span>}
+        </div>}
+      {p.visible && handoff && <ClaudeHandoffDialog cwd={handoff.cwd} events={handoff.events}
+        onCancel={() => { setHandoff(null); handoffButton.current?.focus() }}
+        onHandoff={(cwd, text) => { if (!p.onClaudeHandoff(cwd, text)) return false; setHandoff(null); return true }} />}
       <div className="chat-list" ref={listRef}>
         {loaded && events.length === 0 && !p.workflowRunId && (
           <div className="chat-empty" data-testid="chat-empty">
@@ -892,7 +943,7 @@ export function ChatPane(p: Props) {
           aria-label="대화 입력"
           rows={2}
           value={text}
-          readOnly={!!p.workflowRunId && !pending}
+          readOnly={(!!p.workflowRunId && !pending) || changingHibernation}
           placeholder={pending ? (pending.kind === 'question' ? '카드에서 고르거나 직접 써도 돼요' : '허락하거나, 다른 방법을 말해 주세요') : p.workflowRunId ? '작업 흐름에서 지시를 보냅니다.' : running ? '돌고 있는 동안 쓰면 대기열에 들어가요 (↩) · ⌘↩ 지금 보내기' : '무엇을 할까요?'}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
@@ -939,7 +990,7 @@ export function ChatPane(p: Props) {
               멈춤 ⌘.
             </button>
           ) : (
-            <button type="button" className="chat-send" data-testid="chat-send" disabled={!text.trim()} onClick={() => send()}>
+            <button type="button" className="chat-send" data-testid="chat-send" disabled={!text.trim() || sleeping || changingHibernation} onClick={() => send()}>
               보내기 ↩
             </button>
           ))}

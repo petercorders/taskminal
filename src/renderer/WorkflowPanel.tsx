@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Workflow, WorkflowRun, WorkflowStep, WorkflowView } from '../shared/workflows'
 import { ConfirmDialog } from './ConfirmDialog'
 import { WorkflowSupervision } from './WorkflowSupervision'
+import { WorkflowAccountPreview, useWorkflowAccountPreview } from './WorkflowAccountPreview'
 import './workflow-panel.css'
 
 interface Props { taskId: string; initialRunId?: string | undefined; onOpenPane(paneId: string): void }
@@ -33,6 +34,8 @@ function useWorkflowDraft(taskId: string) {
 export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
   const [view, setView] = useState<WorkflowView>(emptyView)
   const [selected, setSelected] = useState('')
+  const selectedWorkflow = view.templates.find((item) => item.id === selected)
+  const accountPreview = useWorkflowAccountPreview(taskId, selectedWorkflow)
   const [draft, setDraft, dirty, origin] = useWorkflowDraft(taskId)
   const currentTask = useRef(taskId)
   currentTask.current = taskId
@@ -129,7 +132,10 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
     const key = JSON.stringify([taskId, selected])
     const requestId = requests.current.get(key) ?? crypto.randomUUID()
     requests.current.set(key, requestId)
-    void write(() => window.taskminal.workflows.start({ requestId, taskId, workflowId: selected }), () => { requests.current.delete(key) })
+    const expected = accountPreview.selection
+    void write(() => window.taskminal.workflows.start({
+      requestId, taskId, workflowId: selected, ...(expected ? { expectedAccounts: expected } : {}),
+    }), () => { requests.current.delete(key) })
   }
   const accept = () => {
     const target = confirm
@@ -166,6 +172,7 @@ export function WorkflowPanel({ taskId, initialRunId, onOpenPane }: Props) {
       <button type="button" className="button danger" disabled={busy || !view.templates.some((item) => item.id === selected)} onClick={() => setConfirm({ kind: 'remove', id: selected })}>삭제</button>
       <button type="button" className="button primary" disabled={busy || !view.templates.some((item) => item.id === selected)} onClick={start}>저장된 흐름 실행</button>
     </div>
+    {selectedWorkflow && <WorkflowAccountPreview workflow={selectedWorkflow} preview={accountPreview} />}
     {draft && <div className="workflow-meta">작성 중인 초안은 메모리에만 보존합니다. 패널을 닫거나 일감을 바꿔도 남지만, 앱 종료·화면 새로고침 시 사라집니다. 저장 전에는 실행에 사용하지 않습니다.</div>}
     {draft && <form className="workflow-editor" onSubmit={(e) => {
       e.preventDefault()

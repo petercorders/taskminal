@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { paneIds } from '../shared/layout'
 import { IPC } from '../shared/ipc'
-import { validWorkflowView, type WorkflowView } from '../shared/workflows'
+import { validWorkflowView, workflowAccountSelectionMatches, type WorkflowView } from '../shared/workflows'
 import type { AppState } from '../shared/types'
 import type { UiReply, UiRequest } from '../shared/cli'
 import type { ChatManager, Sink } from './chat/chat-manager'
@@ -22,6 +22,9 @@ export function installWorkflowIpc(trusted:(event:IpcMainInvokeEvent)=>boolean,d
   id:randomUUID,now:Date.now,redact:d.redact,
   validTask:id=>!!task(id),
   validPane:(id,pane)=>{const t=task(id);return !!t?.panes[pane]?.workflowRunId&&t.tabs.some(tab=>paneIds(tab.layout).includes(pane))},
+  verifyAccounts:(workflow,expected)=>{
+   if(!workflowAccountSelectionMatches(workflow,expected,d.accounts.list()))throw Error('선택 계정이 바뀌었어요. 실행 전 한도를 다시 확인해 주세요.')
+  },
   pin:(run,step,previous)=>{
    const spec=run.workflow.steps.find(s=>s.id===step.id)!
    if(previous)d.accounts.copyBinding(previous,step.paneId,spec.agent,true)

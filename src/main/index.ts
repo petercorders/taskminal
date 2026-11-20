@@ -1065,6 +1065,14 @@ if (!app.requestSingleInstanceLock()) {
     if (!isChatImages(imgs)) throw new Error('붙일 수 없는 그림')
     return chats().send(event.sender, paneId, text, cwd, ref, imgs)
   })
+  ipcMain.handle(IPC.chatHibernation, (event, paneId: unknown, sessionId: unknown, sleeping: unknown) => {
+    if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')
+    if (!isPaneId(paneId) || !okSid(sessionId) || typeof sleeping !== 'boolean') return 'unavailable'
+    const task = lastState?.tasks.find((item) => !!item.panes[paneId])
+    const pane = task?.panes[paneId]
+    if (!task || task.host || task.archivedAt !== undefined || pane?.kind !== 'chat' || pane.workflowRunId || pane.chat?.sessionId !== sessionId) return 'unavailable'
+    return chats().setHibernated(event.sender, paneId, pane.chat, sleeping)
+  })
   const isIndex = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) < 1_000_000
   ipcMain.handle(IPC.chatRewind, async (event, paneId: unknown, index: unknown, at: unknown, chat: unknown) => {
     if (!fromOurWindow(event)) throw new Error('알 수 없는 프레임의 요청')

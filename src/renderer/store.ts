@@ -267,9 +267,16 @@ export function reducer(state: AppState, action: Action): AppState {
       const ids = [action.tabId, action.paneId]
       return updateTask(state, action.taskId, (t) => {
         const next=addChatTab(t, () => ids.shift()!, action.agent)
-        if(action.workflowRunId&&next.panes[action.paneId]){
-          next.panes[action.paneId]={...next.panes[action.paneId]!,workflowRunId:action.workflowRunId,...(action.cwd?{cwd:action.cwd}:{})}
-          next.tabs=next.tabs.map(tab=>tab.id===action.tabId?{...tab,title:action.label??'작업 흐름'}:tab)
+        const pane = next.panes[action.paneId]
+        if (pane && (action.cwd || action.workflowRunId)) {
+          next.panes[action.paneId] = {
+            ...pane,
+            ...(action.cwd ? { cwd: action.cwd } : {}),
+            ...(action.workflowRunId ? { workflowRunId: action.workflowRunId } : {}),
+          }
+          if (action.workflowRunId) {
+            next.tabs = next.tabs.map((tab) => tab.id === action.tabId ? { ...tab, title: action.label ?? '작업 흐름' } : tab)
+          }
         }
         return next
       })
