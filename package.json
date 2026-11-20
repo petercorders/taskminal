@@ -16,6 +16,7 @@
     "test": "vitest run",
     "e2e": "electron-vite build && playwright test",
     "check": "npm run typecheck && npm test",
+    "verify:pr": "node scripts/pr-verification.mjs",
     "icon": "bash scripts/build-icon.sh",
     "package": "node scripts/platform-package.mjs",
     "package:platform": "node scripts/platform-package.mjs",
