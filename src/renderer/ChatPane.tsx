@@ -605,28 +605,28 @@ export function ChatPane(p: Props) {
         const sub = b.item.sub
         const isOpen = !!open[b.key]
         return (
-          <div key={b.key} className="chat-agent" data-testid="chat-block" data-kind="agent" data-state={c.tone}>
-            <div className="chat-agent-head">
+          <div key={b.key} className="chat-subagent" data-testid="chat-block" data-kind="agent" data-state={c.tone}>
+            <div className="chat-subagent-head">
               <span className="chat-tool-name">{b.item.name}</span>
-              <span className="chat-agent-desc" title={b.item.summary}>
+              <span className="chat-subagent-desc" title={b.item.summary}>
                 {b.item.summary}
               </span>
-              {b.item.agent?.bg && <span className="chat-agent-bg">백그라운드</span>}
+              {b.item.agent?.bg && <span className="chat-subagent-bg">백그라운드</span>}
               <span className={`chat-tools-state ${c.tone}`}>{c.label}</span>
             </div>
             {c.progress && (
-              <div className="chat-agent-progress" data-testid="chat-agent-progress">
+              <div className="chat-subagent-progress" data-testid="chat-agent-progress">
                 {c.progress}
               </div>
             )}
             {c.summary && (
-              <div className="chat-agent-summary" data-testid="chat-agent-summary">
+              <div className="chat-subagent-summary" data-testid="chat-agent-summary">
                 {c.summary}
               </div>
             )}
             {c.detail && <pre className="chat-tool-tail">{c.detail}</pre>}
             {sub.length > 0 && (
-              <button type="button" className="chat-agent-toggle" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [b.key]: !isOpen }))}>
+              <button type="button" className="chat-subagent-toggle" aria-expanded={isOpen} onClick={() => setOpen((o) => ({ ...o, [b.key]: !isOpen }))}>
                 <span aria-hidden>{isOpen ? '▾' : '▸'}</span>
                 하위 도구 {sub.length}개
               </button>

@@ -75,13 +75,16 @@ export function WorkspaceFiles({ root, onAttach, openFile }: { root: string; onA
         (rows) => {
           if (generation.current !== n) return
           setEntries(rows)
+          // 열 파일 기억은 그 파일의 폴더 목록이 왔을 때만 쓴다 — 옮기기 전 폴더(처음 열 때의 루트)의 답이 다시 그리기 전에 먼저 와도 지우지 않는다
           const want = pendingOpen.current
-          pendingOpen.current = null
-          if (want && dirOf(want.path) === path) void readFile(want.path, want.line)
+          if (want && dirOf(want.path) === path) {
+            pendingOpen.current = null
+            void readFile(want.path, want.line)
+          }
         },
         () => {
           if (generation.current !== n) return
-          pendingOpen.current = null
+          if (pendingOpen.current && dirOf(pendingOpen.current.path) === path) pendingOpen.current = null
           setError('폴더를 읽지 못했어요. 권한과 경로를 확인해 주세요.')
         },
       )
@@ -94,6 +97,7 @@ export function WorkspaceFiles({ root, onAttach, openFile }: { root: string; onA
   }, [root, path, retry])
   const open = async (entry: WorkspaceEntry) => {
     setEditing(false)
+    pendingOpen.current = null // 사용자가 직접 옮기면 앞서 고른 파일은 열지 않는다
     if (entry.directory) {
       setPath(entry.path)
       return
@@ -174,7 +178,14 @@ export function WorkspaceFiles({ root, onAttach, openFile }: { root: string; onA
   return (
     <div className="workspace-files" data-testid="workspace-files">
       <nav className="work-tools-row" aria-label="파일 경로">
-        <button className="button" disabled={!path} onClick={() => setPath(path.split('/').slice(0, -1).join('/'))}>
+        <button
+          className="button"
+          disabled={!path}
+          onClick={() => {
+            pendingOpen.current = null
+            setPath(path.split('/').slice(0, -1).join('/'))
+          }}
+        >
           상위 폴더
         </button>
         <span className="work-path">{path || root}</span>
